@@ -44,6 +44,10 @@ jobs:
         working-directory: life-os
         run: npm run typecheck
 
+      - name: Test
+        working-directory: life-os
+        run: npm test
+
       - name: Production build
         working-directory: life-os
         run: npm run build
