@@ -40,6 +40,10 @@ jobs:
         working-directory: life-os
         run: npm install --no-audit --no-fund
 
+      - name: Typecheck
+        working-directory: life-os
+        run: npm run typecheck
+
       - name: Production build
         working-directory: life-os
         run: npm run build
