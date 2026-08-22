@@ -1,0 +1,332 @@
+name: LIFE OS CI
+
+
+# ============================================================
+# 1. TRIGGERS
+# ============================================================
+
+on:
+  push:
+    branches:
+      - main
+
+  pull_request:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+
+# ============================================================
+# 2. MINIMUM GITHUB TOKEN PERMISSIONS
+# ============================================================
+
+permissions:
+  contents: read
+
+
+# ============================================================
+# 3. CONCURRENCY
+# ============================================================
+
+concurrency:
+  group: life-os-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+
+# ============================================================
+# 4. DEFAULT APPLICATION DIRECTORY
+# ============================================================
+
+defaults:
+  run:
+    working-directory: life-os
+
+
+# ============================================================
+# 5. JOBS
+# ============================================================
+
+jobs:
+  validate:
+    name: Validate V1
+    runs-on: ubuntu-latest
+
+    timeout-minutes: 20
+
+
+    # ========================================================
+    # 6. SAFE SYNTHETIC BUILD ENVIRONMENT
+    # ========================================================
+
+    env:
+      CI: "true"
+
+      NEXT_TELEMETRY_DISABLED: "1"
+
+      NEXT_PUBLIC_SUPABASE_URL: "https://life-os-ci.supabase.co"
+
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "sb_publishable_life_os_ci_synthetic_only"
+
+      OPENAI_API_KEY: "sk-life-os-ci-synthetic-not-a-real-key"
+
+
+    # ========================================================
+    # 7. STEPS
+    # ========================================================
+
+    steps:
+
+      # ------------------------------------------------------
+      # Checkout
+      # ------------------------------------------------------
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+
+      # ------------------------------------------------------
+      # Node.js 24
+      # ------------------------------------------------------
+
+      - name: Setup Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24.x"
+
+
+      # ------------------------------------------------------
+      # Runtime confirmation
+      # ------------------------------------------------------
+
+      - name: Show runtime versions
+        run: |
+          node --version
+          npm --version
+
+
+      # ------------------------------------------------------
+      # Dependency installation
+      #
+      # V1 currently has no committed package-lock.json.
+      #
+      # When package-lock.json is committed later, this step
+      # should be changed back to:
+      #
+      # npm ci
+      # ------------------------------------------------------
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+
+      # ------------------------------------------------------
+      # ESLint
+      # ------------------------------------------------------
+
+      - name: Lint
+        run: npm run lint
+
+
+      # ------------------------------------------------------
+      # TypeScript
+      # ------------------------------------------------------
+
+      - name: Typecheck
+        run: npm run typecheck
+
+
+      # ------------------------------------------------------
+      # Core + Security tests
+      # ------------------------------------------------------
+
+      - name: Test
+        run: npm test
+
+
+      # ------------------------------------------------------
+      # Production compilation
+      # ------------------------------------------------------
+
+      - name: Production build
+        run: npm run build
+
+
+# ============================================================
+# 8. CI SECURITY MODEL
+# ============================================================
+#
+# GitHub Actions receives only synthetic build values.
+#
+# It does NOT receive:
+#
+# production Supabase credentials
+# service-role keys
+# database passwords
+# real OpenAI credentials
+# real LIFE OS personal data
+#
+# ============================================================
+
+
+# ============================================================
+# 9. APPLICATION LOCATION
+# ============================================================
+#
+# Repository root:
+#
+# .github/workflows/ci.yml
+#
+#
+# Application:
+#
+# life-os/
+#
+#
+# All shell commands therefore run with:
+#
+# working-directory: life-os
+#
+# ============================================================
+
+
+# ============================================================
+# 10. DEPENDENCY RULE
+# ============================================================
+#
+# Current V1 repository does not contain package-lock.json.
+#
+# Therefore CI currently uses:
+#
+# npm install --no-audit --no-fund
+#
+#
+# Once a verified package-lock.json is committed:
+#
+# npm install
+#
+# should be replaced with:
+#
+# npm ci
+#
+# ============================================================
+
+
+# ============================================================
+# 11. VALIDATION ORDER
+# ============================================================
+#
+# install
+#    ↓
+# lint
+#    ↓
+# typecheck
+#    ↓
+# tests
+#    ↓
+# production build
+#
+# ============================================================
+
+
+# ============================================================
+# 12. NO DEPLOYMENT
+# ============================================================
+#
+# CI validates LIFE OS only.
+#
+# It does NOT:
+#
+# deploy to Vercel
+# run Supabase migrations
+# modify production data
+# create users
+# rotate secrets
+# invoke live AI workflows
+#
+# ============================================================
+
+
+# ============================================================
+# 13. NO LIVE AI
+# ============================================================
+#
+# The synthetic OPENAI_API_KEY must never be capable of making
+# a successful provider request.
+#
+# Automated tests must not depend on live AI behavior.
+#
+# ============================================================
+
+
+# ============================================================
+# 14. NO LIVE DATABASE
+# ============================================================
+#
+# CI does not connect to the production LIFE OS database.
+#
+# Production integration checks happen separately.
+#
+# ============================================================
+
+
+# ============================================================
+# 15. FAIL-CLOSED RULE
+# ============================================================
+#
+# Any failure in:
+#
+# dependency installation
+# lint
+# TypeScript
+# tests
+# production build
+#
+# makes this workflow FAIL.
+#
+# There is intentionally no:
+#
+# continue-on-error: true
+#
+# ============================================================
+
+
+# ============================================================
+# 16. MINIMUM PERMISSIONS
+# ============================================================
+#
+# The workflow requests only:
+#
+# contents: read
+#
+# ============================================================
+
+
+# ============================================================
+# 17. FINAL CI RULE
+# ============================================================
+#
+# Code
+#   ↓
+# GitHub
+#   ↓
+# LIFE OS CI
+#   ↓
+# Lint
+#   ↓
+# Typecheck
+#   ↓
+# Core + Security Tests
+#   ↓
+# Production Build
+#   ↓
+# PASS / FAIL
+#
+#
+# No production secrets.
+# No deployment side effects.
+# No silent failure.
+#
+# Simple outside.
+# Intelligent underneath.
+# ============================================================
