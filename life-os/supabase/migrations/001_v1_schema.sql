@@ -9,6 +9,7 @@
 -- - RLS policies are NOT defined here.
 -- - RLS is implemented in 002_v1_rls.sql.
 -- - No real personal data belongs in this file.
+-- - Direct application privileges remain locked until 002.
 -- =========================================================
 
 
@@ -19,13 +20,21 @@
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
-set search_path = ''
+set search_path = pg_catalog
 as $$
 begin
   new.updated_at = now();
   return new;
 end;
 $$;
+
+
+-- The trigger function is infrastructure.
+-- Browser-facing roles must never invoke it directly.
+
+revoke all privileges
+on function public.set_updated_at()
+from public, anon, authenticated;
 
 
 -- =========================================================
@@ -1128,7 +1137,11 @@ create table public.ai_recommendations (
       )
       or
       (
-        status in ('reviewed', 'accepted', 'dismissed')
+        status in (
+          'reviewed',
+          'accepted',
+          'dismissed'
+        )
         and reviewed_at is not null
       )
     )
@@ -1178,7 +1191,91 @@ create table public.audit_logs (
 
 
 -- =========================================================
--- 16. INDEXES — FINANCE
+-- 16. PRE-RLS PRIVILEGE LOCKDOWN
+-- =========================================================
+--
+-- Supabase projects may define default privileges for newly
+-- created public tables.
+--
+-- This migration therefore closes direct browser-role access
+-- immediately, before the RLS migration is applied.
+--
+-- 002_v1_rls.sql will later grant only the minimum required
+-- privileges after RLS + AAL2 policies are installed.
+-- =========================================================
+
+revoke all privileges
+on table public.profiles
+from public, anon, authenticated;
+
+
+revoke all privileges
+on table public.income_sources
+from public, anon, authenticated;
+
+
+revoke all privileges
+on table public.budget_items
+from public, anon, authenticated;
+
+
+revoke all privileges
+on table public.monthly_snapshots
+from public, anon, authenticated;
+
+
+revoke all privileges
+on table public.investment_assets
+from public, anon, authenticated;
+
+
+revoke all privileges
+on table public.investment_transactions
+from public, anon, authenticated;
+
+
+revoke all privileges
+on table public.goals
+from public, anon, authenticated;
+
+
+revoke all privileges
+on table public.projects
+from public, anon, authenticated;
+
+
+revoke all privileges
+on table public.tasks
+from public, anon, authenticated;
+
+
+revoke all privileges
+on table public.learning_items
+from public, anon, authenticated;
+
+
+revoke all privileges
+on table public.career_items
+from public, anon, authenticated;
+
+
+revoke all privileges
+on table public.memory_items
+from public, anon, authenticated;
+
+
+revoke all privileges
+on table public.ai_recommendations
+from public, anon, authenticated;
+
+
+revoke all privileges
+on table public.audit_logs
+from public, anon, authenticated;
+
+
+-- =========================================================
+-- 17. INDEXES — FINANCE
 -- =========================================================
 
 create index income_sources_user_active_idx
@@ -1210,7 +1307,7 @@ create index monthly_snapshots_user_month_idx
 
 
 -- =========================================================
--- 17. INDEXES — INVESTMENTS
+-- 18. INDEXES — INVESTMENTS
 -- =========================================================
 
 create index investment_assets_user_active_idx
@@ -1243,7 +1340,7 @@ create index investment_transactions_user_date_idx
 
 
 -- =========================================================
--- 18. INDEXES — GOALS / PROJECTS / TASKS
+-- 19. INDEXES — GOALS / PROJECTS / TASKS
 -- =========================================================
 
 create index goals_user_status_priority_idx
@@ -1320,7 +1417,7 @@ create index tasks_user_project_idx
 
 
 -- =========================================================
--- 19. INDEXES — LEARNING / CAREER
+-- 20. INDEXES — LEARNING / CAREER
 -- =========================================================
 
 create index learning_items_user_status_priority_idx
@@ -1375,7 +1472,7 @@ create index career_items_user_goal_idx
 
 
 -- =========================================================
--- 20. INDEXES — MEMORY / AI / AUDIT
+-- 21. INDEXES — MEMORY / AI / AUDIT
 -- =========================================================
 
 create index memory_items_user_active_importance_idx
@@ -1430,7 +1527,7 @@ create index audit_logs_user_action_idx
 
 
 -- =========================================================
--- 21. UPDATED_AT TRIGGERS
+-- 22. UPDATED_AT TRIGGERS
 -- =========================================================
 
 create trigger profiles_set_updated_at
@@ -1512,7 +1609,7 @@ execute function public.set_updated_at();
 
 
 -- =========================================================
--- 22. SCHEMA COMMENTS
+-- 23. SCHEMA COMMENTS
 -- =========================================================
 
 comment on table public.profiles is
@@ -1572,7 +1669,7 @@ comment on table public.audit_logs is
 
 
 -- =========================================================
--- 23. MIGRATION COMPLETION
+-- 24. MIGRATION COMPLETION
 -- =========================================================
 
 -- LIFE OS V1 schema:
@@ -1584,6 +1681,7 @@ comment on table public.audit_logs is
 -- investment precision
 -- indexes for expected V1 query patterns
 -- automatic updated_at handling
+-- immediate browser-role privilege lockdown
 --
 -- SECURITY POLICIES ARE DEFINED SEPARATELY IN:
 --
