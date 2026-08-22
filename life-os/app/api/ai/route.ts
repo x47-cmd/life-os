@@ -48,7 +48,7 @@ const MAX_DECISION_TITLE_LENGTH =
   200;
 
 const MAX_DECISION_DESCRIPTION_LENGTH =
-  2_500;
+  1_000;
 
 const MAX_MONEY_VALUE =
   1_000_000_000;
@@ -473,7 +473,8 @@ function normalizeChiefResult(
     readString(
       value,
       "situation",
-    );
+    ) ??
+    "تم تحليل الوضع الحالي.";
 
   const recommendation =
     readString(
@@ -485,12 +486,11 @@ function normalizeChiefResult(
     readString(
       value,
       "next_action",
-    );
+    ) ??
+    "راجع التوصية وحدد الخطوة التالية.";
 
   if (
-    !situation ||
-    !recommendation ||
-    !nextAction
+    !recommendation
   ) {
     throw new Error(
       "INVALID_AI_OUTPUT",
@@ -626,6 +626,10 @@ function normalizeScenario(
   const affordable =
     readBoolean(
       value,
+      "affordability",
+    ) ??
+    readBoolean(
+      value,
       "affordable",
     );
 
@@ -689,6 +693,10 @@ function normalizeDecisionResult(
   const summary =
     readString(
       value,
+      "main_tradeoff",
+    ) ??
+    readString(
+      value,
       "summary",
     ) ??
     "تمت مقارنة السيناريوهات.";
@@ -697,12 +705,20 @@ function normalizeDecisionResult(
   const recommendation =
     readString(
       value,
+      "next_action",
+    ) ??
+    readString(
+      value,
       "recommendation",
     ) ??
     "راجع السيناريوهات قبل اتخاذ القرار.";
 
 
   const bestScenarioId =
+    readString(
+      value,
+      "recommended_scenario_id",
+    ) ??
     readString(
       value,
       "best_scenario_id",
@@ -813,7 +829,21 @@ async function handleDecision(
    */
   const result =
     await simulateDecision({
-      decision,
+      decision:
+        decision.title,
+
+      notes:
+        decision.description,
+
+      proposed_one_time_cost:
+        decision.proposed_one_time_cost,
+
+      proposed_monthly_cost:
+        decision.proposed_monthly_cost,
+
+      proposed_monthly_investment_change:
+        decision
+          .proposed_monthly_investment_change,
     });
 
 
