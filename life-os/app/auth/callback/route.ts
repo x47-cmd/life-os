@@ -86,7 +86,7 @@ function safeRedirect(
 
 
 /* =========================================================
- * 4. LOGIN REDIRECT HELPERS
+ * 4. REDIRECT HELPERS
  * ======================================================= */
 
 function redirectToLogin(
@@ -95,26 +95,6 @@ function redirectToLogin(
   return safeRedirect(
     request,
     LOGIN_ROUTE,
-  );
-}
-
-
-function redirectToEnrollment(
-  request: Request,
-) {
-  return safeRedirect(
-    request,
-    `${LOGIN_ROUTE}?step=enroll`,
-  );
-}
-
-
-function redirectToMfa(
-  request: Request,
-) {
-  return safeRedirect(
-    request,
-    `${LOGIN_ROUTE}?step=mfa`,
   );
 }
 
@@ -293,11 +273,6 @@ export async function GET(
     const auth =
       await getAuthenticationState();
 
-
-    /* -----------------------------------------------------
-     * Session could not be verified
-     * -------------------------------------------------- */
-
     if (
       !auth.authenticated ||
       !auth.identity
@@ -307,54 +282,15 @@ export async function GET(
       );
     }
 
-
-    /* -----------------------------------------------------
-     * Full AAL2
-     * -------------------------------------------------- */
-
-    if (
-      auth.current_level ===
-      "aal2"
-    ) {
-      return redirectToDashboard(
-        request,
-      );
-    }
-
-
-    /* -----------------------------------------------------
-     * AAL1 requiring first TOTP enrollment
-     * -------------------------------------------------- */
-
-    if (
-      auth.mfa_action ===
-      "enroll"
-    ) {
-      return redirectToEnrollment(
-        request,
-      );
-    }
-
-
-    /* -----------------------------------------------------
-     * AAL1 requiring existing TOTP verification
-     * -------------------------------------------------- */
-
-    if (
-      auth.mfa_action ===
-      "verify"
-    ) {
-      return redirectToMfa(
-        request,
-      );
-    }
-
-
-    /* -----------------------------------------------------
-     * Fail closed
-     * -------------------------------------------------- */
-
-    return redirectToLogin(
+    /**
+     * LIFE OS V1 uses password-only authentication.
+     *
+     * A verified Supabase authenticated session is sufficient
+     * to enter the private workspace.
+     *
+     * PostgreSQL RLS continues to enforce row ownership.
+     */
+    return redirectToDashboard(
       request,
     );
   } catch {
@@ -434,8 +370,6 @@ export async function GET(
  * Allowed destinations are only:
  *
  * /login
- * /login?step=enroll
- * /login?step=mfa
  * authenticated dashboard
  *
  *
@@ -448,24 +382,27 @@ export async function GET(
 
 
 /* =========================================================
- * 11. MFA RULE
+ * 11. AUTHENTICATION RULE
  * ======================================================= */
 
 /**
- * Successful PKCE exchange does NOT automatically mean the
- * user may access private LIFE OS data.
+ * Successful PKCE exchange establishes the Supabase session.
  *
  * Session
  *      ↓
- * Authentication State
+ * Verified Authentication State
  *      ↓
- * AAL1?
- *      ↓
- * TOTP enrollment / verification
- *      ↓
- * AAL2
+ * Authenticated User
  *      ↓
  * Dashboard
+ *
+ *
+ * LIFE OS V1 does not require:
+ *
+ * - MFA enrollment
+ * - TOTP verification
+ * - QR setup
+ * - AAL2
  */
 
 
@@ -529,8 +466,8 @@ export async function GET(
  * No AI workflow is reachable from the authentication
  * callback.
  *
- * Authentication codes, sessions and MFA state must never
- * become AI context.
+ * Authentication codes and sessions must never become AI
+ * context.
  */
 
 
@@ -549,7 +486,9 @@ export async function GET(
  *      ↓
  * Verified Authentication State
  *      ↓
- * MFA / AAL2
+ * Server Authorization
+ *      ↓
+ * PostgreSQL RLS
  *      ↓
  * Private LIFE OS
  */
@@ -562,12 +501,14 @@ export async function GET(
 /**
  * Callback has one responsibility:
  *
- * Establish the session safely and send the user to the
- * correct authentication stage.
+ * Establish the session safely and send the authenticated
+ * user to LIFE OS.
  *
  *
  * No private data.
  * No arbitrary redirects.
+ * No MFA requirement.
+ * No QR enrollment.
  * No AI.
  * No execution.
  * No leaked authentication errors.
