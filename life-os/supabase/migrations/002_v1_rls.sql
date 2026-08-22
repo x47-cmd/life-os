@@ -342,10 +342,10 @@ as restrictive
 for all
 to authenticated
 using (
-  (select auth.jwt()->>'aal') = 'aal2'
+  ((select auth.jwt()) ->> 'aal') = 'aal2'
 )
 with check (
-  (select auth.jwt()->>'aal') = 'aal2'
+  ((select auth.jwt()) ->> 'aal') = 'aal2'
 );
 
 
@@ -402,10 +402,10 @@ as restrictive
 for all
 to authenticated
 using (
-  (select auth.jwt()->>'aal') = 'aal2'
+  ((select auth.jwt()) ->> 'aal') = 'aal2'
 )
 with check (
-  (select auth.jwt()->>'aal') = 'aal2'
+  ((select auth.jwt()) ->> 'aal') = 'aal2'
 );
 
 
@@ -462,10 +462,10 @@ as restrictive
 for all
 to authenticated
 using (
-  (select auth.jwt()->>'aal') = 'aal2'
+  ((select auth.jwt()) ->> 'aal') = 'aal2'
 )
 with check (
-  (select auth.jwt()->>'aal') = 'aal2'
+  ((select auth.jwt()) ->> 'aal') = 'aal2'
 );
 
 
@@ -522,10 +522,10 @@ as restrictive
 for all
 to authenticated
 using (
-  (select auth.jwt()->>'aal') = 'aal2'
+  ((select auth.jwt()) ->> 'aal') = 'aal2'
 )
 with check (
-  (select auth.jwt()->>'aal') = 'aal2'
+  ((select auth.jwt()) ->> 'aal') = 'aal2'
 );
 
 
@@ -582,10 +582,10 @@ as restrictive
 for all
 to authenticated
 using (
-  (select auth.jwt()->>'aal') = 'aal2'
+  ((select auth.jwt()) ->> 'aal') = 'aal2'
 )
 with check (
-  (select auth.jwt()->>'aal') = 'aal2'
+  ((select auth.jwt()) ->> 'aal') = 'aal2'
 );
 
 
@@ -642,10 +642,10 @@ as restrictive
 for all
 to authenticated
 using (
-  (select auth.jwt()->>'aal') = 'aal2'
+  ((select auth.jwt()) ->> 'aal') = 'aal2'
 )
 with check (
-  (select auth.jwt()->>'aal') = 'aal2'
+  ((select auth.jwt()) ->> 'aal') = 'aal2'
 );
 
 
@@ -702,10 +702,10 @@ as restrictive
 for all
 to authenticated
 using (
-  (select auth.jwt()->>'aal') = 'aal2'
+  ((select auth.jwt()) ->> 'aal') = 'aal2'
 )
 with check (
-  (select auth.jwt()->>'aal') = 'aal2'
+  ((select auth.jwt()) ->> 'aal') = 'aal2'
 );
 
 
@@ -762,10 +762,10 @@ as restrictive
 for all
 to authenticated
 using (
-  (select auth.jwt()->>'aal') = 'aal2'
+  ((select auth.jwt()) ->> 'aal') = 'aal2'
 )
 with check (
-  (select auth.jwt()->>'aal') = 'aal2'
+  ((select auth.jwt()) ->> 'aal') = 'aal2'
 );
 
 
@@ -822,10 +822,10 @@ as restrictive
 for all
 to authenticated
 using (
-  (select auth.jwt()->>'aal') = 'aal2'
+  ((select auth.jwt()) ->> 'aal') = 'aal2'
 )
 with check (
-  (select auth.jwt()->>'aal') = 'aal2'
+  ((select auth.jwt()) ->> 'aal') = 'aal2'
 );
 
 
@@ -882,10 +882,10 @@ as restrictive
 for all
 to authenticated
 using (
-  (select auth.jwt()->>'aal') = 'aal2'
+  ((select auth.jwt()) ->> 'aal') = 'aal2'
 )
 with check (
-  (select auth.jwt()->>'aal') = 'aal2'
+  ((select auth.jwt()) ->> 'aal') = 'aal2'
 );
 
 
@@ -942,10 +942,10 @@ as restrictive
 for all
 to authenticated
 using (
-  (select auth.jwt()->>'aal') = 'aal2'
+  ((select auth.jwt()) ->> 'aal') = 'aal2'
 )
 with check (
-  (select auth.jwt()->>'aal') = 'aal2'
+  ((select auth.jwt()) ->> 'aal') = 'aal2'
 );
 
 
@@ -1002,10 +1002,10 @@ as restrictive
 for all
 to authenticated
 using (
-  (select auth.jwt()->>'aal') = 'aal2'
+  ((select auth.jwt()) ->> 'aal') = 'aal2'
 )
 with check (
-  (select auth.jwt()->>'aal') = 'aal2'
+  ((select auth.jwt()) ->> 'aal') = 'aal2'
 );
 
 
@@ -1062,10 +1062,10 @@ as restrictive
 for all
 to authenticated
 using (
-  (select auth.jwt()->>'aal') = 'aal2'
+  ((select auth.jwt()) ->> 'aal') = 'aal2'
 )
 with check (
-  (select auth.jwt()->>'aal') = 'aal2'
+  ((select auth.jwt()) ->> 'aal') = 'aal2'
 );
 
 
@@ -1122,10 +1122,10 @@ as restrictive
 for all
 to authenticated
 using (
-  (select auth.jwt()->>'aal') = 'aal2'
+  ((select auth.jwt()) ->> 'aal') = 'aal2'
 )
 with check (
-  (select auth.jwt()->>'aal') = 'aal2'
+  ((select auth.jwt()) ->> 'aal') = 'aal2'
 );
 
 
