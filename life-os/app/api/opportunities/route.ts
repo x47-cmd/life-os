@@ -34,7 +34,7 @@ const MAX_REQUEST_BYTES =
   12_000;
 
 const MAX_QUERY_LENGTH =
-  1_000;
+  500;
 
 const MAX_RESPONSE_RESULTS =
   10;
@@ -519,27 +519,42 @@ function normalizeOpportunity(
     );
 
 
-  const recommendation =
+  const rawRecommendation =
     readString(
       value,
       "recommendation",
-    ) ??
-    readString(
-      value,
-      "recommendation_label",
-    ) ??
-    (
-      safeScore >=
-      85
-        ? "مطابقة قوية"
-        : safeScore >=
-            70
-          ? "تستحق الدراسة"
-          : safeScore >=
-              45
-            ? "أولوية منخفضة"
-            : "تجاوزها"
     );
+
+
+  const recommendation =
+    rawRecommendation ===
+      "strong_match"
+      ? "مطابقة قوية"
+      : rawRecommendation ===
+          "consider"
+        ? "تستحق الدراسة"
+        : rawRecommendation ===
+            "low_priority"
+          ? "أولوية منخفضة"
+          : rawRecommendation ===
+              "skip"
+            ? "تجاوزها"
+            : readString(
+                value,
+                "recommendation_label",
+              ) ??
+              (
+                safeScore >=
+                85
+                  ? "مطابقة قوية"
+                  : safeScore >=
+                      70
+                    ? "تستحق الدراسة"
+                    : safeScore >=
+                        45
+                      ? "أولوية منخفضة"
+                      : "تجاوزها"
+              );
 
 
   return {
