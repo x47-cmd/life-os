@@ -47,60 +47,11 @@ Promise<never> {
 
 
   /* -------------------------------------------------------
-   * Fully authenticated with MFA / AAL2
+   * Verified authenticated session
    * ---------------------------------------------------- */
 
-  if (
-    auth.current_level ===
-    "aal2"
-  ) {
-    redirect(
-      DEFAULT_AUTHENTICATED_ROUTE,
-    );
-  }
-
-
-  /* -------------------------------------------------------
-   * MFA enrollment required
-   * ---------------------------------------------------- */
-
-  if (
-    auth.mfa_action ===
-    "enroll"
-  ) {
-    redirect(
-      `${LOGIN_ROUTE}?step=enroll`,
-    );
-  }
-
-
-  /* -------------------------------------------------------
-   * MFA verification required
-   * ---------------------------------------------------- */
-
-  if (
-    auth.mfa_action ===
-    "verify"
-  ) {
-    redirect(
-      `${LOGIN_ROUTE}?step=mfa`,
-    );
-  }
-
-
-  /* -------------------------------------------------------
-   * Fail closed
-   * ---------------------------------------------------- */
-
-  /**
-   * If Supabase cannot determine the MFA transition state,
-   * LIFE OS does not grant access to the private workspace.
-   *
-   * The login page may safely recover or ask the user to
-   * authenticate again.
-   */
   redirect(
-    LOGIN_ROUTE,
+    DEFAULT_AUTHENTICATED_ROUTE,
   );
 }
 
@@ -160,30 +111,28 @@ Promise<never> {
 
 
 /* =========================================================
- * 5. MFA FLOW
+ * 5. AUTHENTICATION FLOW
  * ======================================================= */
 
 /**
  * Possible states:
  *
- * No session
+ * No valid session
  *      ↓
  * /login
  *
  *
- * Authenticated AAL1 + no enrolled factor
+ * Verified Supabase session
  *      ↓
- * /login?step=enroll
+ * /dashboard
  *
  *
- * Authenticated AAL1 + enrolled factor
- *      ↓
- * /login?step=mfa
+ * LIFE OS V1 does not require:
  *
- *
- * Authenticated AAL2
- *      ↓
- * Dashboard
+ * - MFA enrollment
+ * - TOTP verification
+ * - QR setup
+ * - AAL2
  */
 
 
@@ -194,17 +143,19 @@ Promise<never> {
 /**
  * This redirect is UX routing.
  *
- * It is NOT the final authorization boundary.
+ * It is NOT the final database authorization boundary.
  *
  * Protected LIFE OS data still requires:
  *
  * verified Supabase JWT
  *      ↓
- * AAL2
+ * authenticated user identity
  *      ↓
  * server authorization
  *      ↓
  * PostgreSQL RLS
+ *      ↓
+ * row ownership
  */
 
 
