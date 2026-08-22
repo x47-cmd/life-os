@@ -126,71 +126,75 @@ alter table public.audit_logs
 -- =========================================================
 -- 2. REMOVE DEFAULT TABLE ACCESS
 -- =========================================================
---
--- Start from explicit least privilege.
---
--- Anonymous:
---   no LIFE OS table access.
---
--- Authenticated:
---   receives only explicitly required operations below.
--- =========================================================
 
 revoke all privileges
 on table public.profiles
-from anon, authenticated;
+from public, anon, authenticated;
+
 
 revoke all privileges
 on table public.income_sources
-from anon, authenticated;
+from public, anon, authenticated;
+
 
 revoke all privileges
 on table public.budget_items
-from anon, authenticated;
+from public, anon, authenticated;
+
 
 revoke all privileges
 on table public.monthly_snapshots
-from anon, authenticated;
+from public, anon, authenticated;
+
 
 revoke all privileges
 on table public.investment_assets
-from anon, authenticated;
+from public, anon, authenticated;
+
 
 revoke all privileges
 on table public.investment_transactions
-from anon, authenticated;
+from public, anon, authenticated;
+
 
 revoke all privileges
 on table public.goals
-from anon, authenticated;
+from public, anon, authenticated;
+
 
 revoke all privileges
 on table public.projects
-from anon, authenticated;
+from public, anon, authenticated;
+
 
 revoke all privileges
 on table public.tasks
-from anon, authenticated;
+from public, anon, authenticated;
+
 
 revoke all privileges
 on table public.learning_items
-from anon, authenticated;
+from public, anon, authenticated;
+
 
 revoke all privileges
 on table public.career_items
-from anon, authenticated;
+from public, anon, authenticated;
+
 
 revoke all privileges
 on table public.memory_items
-from anon, authenticated;
+from public, anon, authenticated;
+
 
 revoke all privileges
 on table public.ai_recommendations
-from anon, authenticated;
+from public, anon, authenticated;
+
 
 revoke all privileges
 on table public.audit_logs
-from anon, authenticated;
+from public, anon, authenticated;
 
 
 -- =========================================================
@@ -316,15 +320,10 @@ to authenticated;
 
 -- Audit history is append-oriented.
 --
--- Normal authenticated application access receives:
+-- Authenticated application access receives only:
 --
 -- SELECT
 -- INSERT
---
--- It does NOT receive:
---
--- UPDATE
--- DELETE
 
 grant
   select,
@@ -1133,16 +1132,6 @@ with check (
 -- =========================================================
 -- 31. AUDIT LOGS — OWNERSHIP POLICIES
 -- =========================================================
---
--- Deliberately:
---
--- SELECT = allowed for owner
--- INSERT = allowed for owner
--- UPDATE = no privilege + no policy
--- DELETE = no privilege + no policy
---
--- This makes normal audit history append-oriented.
--- =========================================================
 
 create policy "audit_logs_select_own"
 on public.audit_logs
@@ -1164,10 +1153,6 @@ with check (
 
 -- =========================================================
 -- 32. SECURITY VERIFICATION — RLS
--- =========================================================
---
--- Migration must fail if any expected LIFE OS table does
--- not have RLS enabled and forced.
 -- =========================================================
 
 do $$
@@ -1217,10 +1202,6 @@ $$;
 -- =========================================================
 -- 33. SECURITY VERIFICATION — AAL2 POLICIES
 -- =========================================================
---
--- LIFE OS expects exactly one restrictive AAL2 policy on
--- each of the 14 primary V1 tables.
--- =========================================================
 
 do $$
 declare
@@ -1260,10 +1241,6 @@ $$;
 
 -- =========================================================
 -- 34. SECURITY VERIFICATION — ANONYMOUS ACCESS
--- =========================================================
---
--- Migration must fail if anon retains direct standard
--- privileges on any LIFE OS table.
 -- =========================================================
 
 do $$
@@ -1313,6 +1290,24 @@ begin
       'anon',
       format('public.%I', expected.table_name),
       'DELETE'
+    )
+    or
+    has_table_privilege(
+      'anon',
+      format('public.%I', expected.table_name),
+      'TRUNCATE'
+    )
+    or
+    has_table_privilege(
+      'anon',
+      format('public.%I', expected.table_name),
+      'REFERENCES'
+    )
+    or
+    has_table_privilege(
+      'anon',
+      format('public.%I', expected.table_name),
+      'TRIGGER'
     );
 
   if unsafe_table_count <> 0 then
@@ -1326,7 +1321,70 @@ $$;
 
 
 -- =========================================================
--- 35. SECURITY VERIFICATION — AUDIT IMMUTABILITY
+-- 35. SECURITY VERIFICATION — AUTHENTICATED EXCESS ACCESS
+-- =========================================================
+--
+-- Authenticated application users need DML only.
+--
+-- They must never retain infrastructure-level table
+-- privileges such as TRUNCATE, REFERENCES or TRIGGER.
+-- =========================================================
+
+do $$
+declare
+  unsafe_table_count integer;
+begin
+
+  select count(*)
+  into unsafe_table_count
+  from (
+    values
+      ('profiles'),
+      ('income_sources'),
+      ('budget_items'),
+      ('monthly_snapshots'),
+      ('investment_assets'),
+      ('investment_transactions'),
+      ('goals'),
+      ('projects'),
+      ('tasks'),
+      ('learning_items'),
+      ('career_items'),
+      ('memory_items'),
+      ('ai_recommendations'),
+      ('audit_logs')
+  ) as expected(table_name)
+  where
+    has_table_privilege(
+      'authenticated',
+      format('public.%I', expected.table_name),
+      'TRUNCATE'
+    )
+    or
+    has_table_privilege(
+      'authenticated',
+      format('public.%I', expected.table_name),
+      'REFERENCES'
+    )
+    or
+    has_table_privilege(
+      'authenticated',
+      format('public.%I', expected.table_name),
+      'TRIGGER'
+    );
+
+  if unsafe_table_count <> 0 then
+    raise exception
+      'LIFE OS security verification failed: authenticated retains excess privileges on % table(s).',
+      unsafe_table_count;
+  end if;
+
+end;
+$$;
+
+
+-- =========================================================
+-- 36. SECURITY VERIFICATION — AUDIT IMMUTABILITY
 -- =========================================================
 
 do $$
@@ -1356,7 +1414,7 @@ $$;
 
 
 -- =========================================================
--- 36. SECURITY COMMENTS
+-- 37. SECURITY COMMENTS
 -- =========================================================
 
 comment on table public.profiles is
@@ -1416,23 +1474,30 @@ comment on table public.audit_logs is
 
 
 -- =========================================================
--- 37. FINAL SECURITY MODEL
+-- 38. FINAL SECURITY MODEL
 -- =========================================================
 --
 -- Anonymous user:
 --
---   NO TABLE PRIVILEGES
+--   NO LIFE OS TABLE PRIVILEGES
 --
 --
 -- Authenticated AAL1 user:
 --
---   TABLE PRIVILEGES EXIST
---   BUT RESTRICTIVE RLS BLOCKS DATA ACCESS
+--   MINIMUM TABLE DML PRIVILEGES EXIST
+--   BUT RESTRICTIVE RLS BLOCKS ROW ACCESS
 --
 --
 -- Authenticated AAL2 owner:
 --
 --   OWN ROWS ONLY
+--
+--
+-- Authenticated role does NOT receive:
+--
+--   TRUNCATE
+--   REFERENCES
+--   TRIGGER
 --
 --
 -- Audit log:
@@ -1448,7 +1513,7 @@ comment on table public.audit_logs is
 --        ↓
 --   MFA / AAL2
 --        ↓
---   Table Privileges
+--   Minimum Table Privileges
 --        ↓
 --   Row Level Security
 --        ↓
