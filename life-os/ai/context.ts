@@ -1,628 +1,1687 @@
-import type { User } from "@supabase/supabase-js";
-import { redirect } from "next/navigation";
-
 import {
-  DEFAULT_AUTHENTICATED_ROUTE,
-  LOGIN_ROUTE,
-  REQUIRED_AUTHENTICATION_LEVEL,
+  AI_MAX_CONTEXT_ITEMS_PER_CATEGORY,
+  DEFAULT_CURRENCY,
 } from "@/lib/constants";
 
 import {
-  createClient,
-  type ServerSupabaseClient,
-} from "@/lib/supabase/server";
+  getActiveMemoryItems,
+  getCareerSnapshot,
+  getDashboardSnapshot,
+} from "@/lib/data";
 
 import type {
-  UUID,
+  AIRequest,
+  CareerItem,
+  DashboardSnapshot,
+  JsonObject,
+  JsonValue,
+  MemoryItem,
 } from "@/lib/types";
 
-import {
-  uuidSchema,
-} from "@/lib/validation";
+
+/* =========================================================
+ * 1. CONTEXT SCOPES
+ * ======================================================= */
+
+export type AIContextScope =
+  | "dashboard"
+  | "finance"
+  | "investments"
+  | "goals"
+  | "projects"
+  | "tasks"
+  | "learning"
+  | "career";
 
 
 /* =========================================================
- * 1. AUTH TYPES
+ * 2. CONTEXT ERROR
  * ======================================================= */
 
-export type AuthenticatorAssuranceLevel =
-  | "aal1"
-  | "aal2";
+export type AIContextErrorCode =
+  | "DECISION_CONTEXT_REQUIRED"
+  | "CONTEXT_BUILD_FAILED";
 
 
-export interface VerifiedAuthIdentity {
-  id: UUID;
-  email: string | null;
-  aal: AuthenticatorAssuranceLevel;
-}
-
-
-export type MfaAction =
-  | "none"
-  | "verify"
-  | "enroll"
-  | "unknown";
-
-
-export interface AuthenticationState {
-  authenticated: boolean;
-
-  identity: VerifiedAuthIdentity | null;
-
-  current_level:
-    | AuthenticatorAssuranceLevel
-    | null;
-
-  next_level:
-    | AuthenticatorAssuranceLevel
-    | null;
-
-  mfa_action: MfaAction;
-}
-
-
-/* =========================================================
- * 2. AUTHENTICATION ERROR
- * ======================================================= */
-
-export type AuthenticationErrorCode =
-  | "UNAUTHENTICATED"
-  | "MFA_REQUIRED";
-
-
-export class AuthenticationError extends Error {
-  readonly code: AuthenticationErrorCode;
+export class AIContextError extends Error {
+  readonly code: AIContextErrorCode;
 
   constructor(
-    code: AuthenticationErrorCode,
+    code: AIContextErrorCode,
   ) {
+    const messages:
+      Record<
+        AIContextErrorCode,
+        string
+      > = {
+        DECISION_CONTEXT_REQUIRED:
+          "Decision requests must use the dedicated decision context.",
+
+        CONTEXT_BUILD_FAILED:
+          "LIFE OS could not prepare AI context.",
+      };
+
     super(
-      code === "UNAUTHENTICATED"
-        ? "Authentication required."
-        : "AAL2 authentication required.",
+      messages[code],
     );
 
     this.name =
-      "AuthenticationError";
+      "AIContextError";
 
-    this.code = code;
+    this.code =
+      code;
   }
 }
 
 
 /* =========================================================
- * 3. CLAIM HELPERS
+ * 3. KEYWORD GROUPS
  * ======================================================= */
 
-function getClaimString(
-  claims: Record<string, unknown>,
-  key: string,
-): string | null {
-  const value = claims[key];
+const FINANCE_KEYWORDS = [
+  "finance",
+  "financial",
+  "money",
+  "salary",
+  "income",
+  "budget",
+  "saving",
+  "savings",
+  "expense",
+  "expenses",
+  "debt",
+  "loan",
+  "cash",
+  "emergency fund",
+  "travel saving",
 
-  return typeof value === "string"
-    ? value
-    : null;
-}
+  "مالي",
+  "المالية",
+  "فلوس",
+  "راتب",
+  "الراتب",
+  "دخل",
+  "الدخل",
+  "ميزانية",
+  "الميزانية",
+  "توفير",
+  "ادخار",
+  "مصروف",
+  "مصاريف",
+  "قرض",
+  "القرض",
+  "دين",
+  "كاش",
+  "طوارئ",
+] as const;
 
 
-function normalizeAal(
-  value: unknown,
-): AuthenticatorAssuranceLevel | null {
-  if (value === "aal2") {
-    return "aal2";
-  }
+const INVESTMENT_KEYWORDS = [
+  "investment",
+  "investments",
+  "portfolio",
+  "stock",
+  "stocks",
+  "share",
+  "shares",
+  "etf",
+  "fund",
+  "sukuk",
+  "dividend",
+  "dividends",
+  "market",
 
-  if (value === "aal1") {
-    return "aal1";
-  }
+  "استثمار",
+  "استثمارات",
+  "الاستثمار",
+  "الاستثمارات",
+  "محفظة",
+  "المحفظة",
+  "سهم",
+  "أسهم",
+  "اسهم",
+  "صندوق",
+  "صناديق",
+  "صكوك",
+  "توزيعات",
+  "السوق",
+] as const;
 
-  return null;
-}
+
+const GOAL_KEYWORDS = [
+  "goal",
+  "goals",
+  "target",
+  "targets",
+  "objective",
+  "objectives",
+
+  "هدف",
+  "أهداف",
+  "اهداف",
+  "الأهداف",
+  "الاهداف",
+  "مستهدف",
+] as const;
+
+
+const PROJECT_KEYWORDS = [
+  "project",
+  "projects",
+  "initiative",
+  "initiatives",
+
+  "مشروع",
+  "مشاريع",
+  "المشروع",
+  "المشاريع",
+  "مبادرة",
+] as const;
+
+
+const TASK_KEYWORDS = [
+  "task",
+  "tasks",
+  "todo",
+  "to-do",
+  "deadline",
+  "due",
+  "overdue",
+
+  "مهمة",
+  "مهام",
+  "المهام",
+  "موعد",
+  "ديدلاين",
+  "متأخر",
+  "متأخرة",
+] as const;
+
+
+const LEARNING_KEYWORDS = [
+  "learning",
+  "course",
+  "courses",
+  "certification",
+  "certifications",
+  "education",
+  "study",
+  "masters",
+  "master",
+  "university",
+  "certificate",
+
+  "تعلم",
+  "التعلم",
+  "دورة",
+  "دورات",
+  "شهادة",
+  "شهادات",
+  "تعليم",
+  "التعليم",
+  "دراسة",
+  "الدراسة",
+  "ماجستير",
+  "جامعة",
+  "الجامعة",
+] as const;
+
+
+const CAREER_KEYWORDS = [
+  "career",
+  "job",
+  "jobs",
+  "role",
+  "promotion",
+  "salary increase",
+  "skill",
+  "skills",
+  "cv",
+  "resume",
+  "achievement",
+  "achievements",
+
+  "وظيفة",
+  "وظيفي",
+  "وظيفية",
+  "مسار مهني",
+  "ترقية",
+  "مهارة",
+  "مهارات",
+  "سيفي",
+  "السيفي",
+  "إنجاز",
+  "انجاز",
+  "إنجازات",
+  "انجازات",
+] as const;
 
 
 /* =========================================================
- * 4. VERIFIED IDENTITY
+ * 4. TEXT MATCHING
  * ======================================================= */
 
-/**
- * Verifies the current access token using Supabase getClaims().
- *
- * IMPORTANT:
- *
- * This intentionally does NOT use getSession() as proof of
- * identity.
- *
- * getSession() may be useful when raw session tokens are
- * required, but its stored user object is not trusted here
- * for authorization.
- */
-async function getVerifiedIdentityFromClient(
-  supabase: ServerSupabaseClient,
-): Promise<VerifiedAuthIdentity | null> {
-  const {
-    data,
-    error,
-  } = await supabase.auth.getClaims();
-
-  if (
-    error ||
-    !data?.claims
-  ) {
-    return null;
-  }
-
-  const claims =
-    data.claims as Record<string, unknown>;
-
-  const subject =
-    getClaimString(
-      claims,
-      "sub",
-    );
-
-  if (!subject) {
-    return null;
-  }
-
-  const parsedUserId =
-    uuidSchema.safeParse(subject);
-
-  if (!parsedUserId.success) {
-    return null;
-  }
-
-  const role =
-    getClaimString(
-      claims,
-      "role",
-    );
-
-  if (
-    role !== null &&
-    role !== "authenticated"
-  ) {
-    return null;
-  }
-
-  /**
-   * Supabase treats JWTs without an AAL claim as AAL1.
-   *
-   * Therefore anything that is not explicitly AAL2 falls
-   * back to the weaker AAL1 state.
-   */
-  const aal =
-    normalizeAal(
-      claims["aal"],
-    ) ?? "aal1";
-
-  const email =
-    getClaimString(
-      claims,
-      "email",
-    );
-
-  return {
-    id: parsedUserId.data,
-    email,
-    aal,
-  };
+function normalizeText(
+  value: string,
+): string {
+  return value
+    .trim()
+    .toLowerCase();
 }
 
 
-/* =========================================================
- * 5. OPTIONAL VERIFIED IDENTITY
- * ======================================================= */
+function containsAnyKeyword(
+  message: string,
+  keywords: readonly string[],
+): boolean {
+  const normalized =
+    normalizeText(message);
 
-/**
- * Returns the verified authenticated identity when one
- * exists.
- *
- * Returns null for:
- *
- * - no session
- * - invalid token
- * - expired/unverifiable token
- * - invalid subject
- *
- * No redirect occurs.
- */
-export async function getVerifiedAuthIdentity():
-Promise<VerifiedAuthIdentity | null> {
-  const supabase =
-    await createClient();
-
-  return getVerifiedIdentityFromClient(
-    supabase,
+  return keywords.some(
+    (keyword) =>
+      normalized.includes(
+        normalizeText(keyword),
+      ),
   );
 }
 
 
 /* =========================================================
- * 6. AUTHENTICATION STATE
+ * 5. DETECT REQUIRED SCOPES
  * ======================================================= */
 
 /**
- * Provides enough information for the login/MFA UI to decide
- * whether the user needs:
+ * Context selection is deterministic.
  *
- * - conventional login
- * - MFA enrollment
- * - MFA verification
- * - no further authentication
- *
- * Authorization itself still relies on the verified JWT AAL.
+ * We do NOT call AI to decide which private data AI should
+ * receive.
  */
-export async function getAuthenticationState():
-Promise<AuthenticationState> {
-  const supabase =
-    await createClient();
+export function detectContextScopes(
+  message: string,
+): AIContextScope[] {
+  const scopes =
+    new Set<AIContextScope>();
 
-  const identity =
-    await getVerifiedIdentityFromClient(
-      supabase,
+  scopes.add(
+    "dashboard",
+  );
+
+  if (
+    containsAnyKeyword(
+      message,
+      FINANCE_KEYWORDS,
+    )
+  ) {
+    scopes.add(
+      "finance",
     );
-
-  if (!identity) {
-    return {
-      authenticated: false,
-      identity: null,
-      current_level: null,
-      next_level: null,
-      mfa_action: "none",
-    };
   }
 
   if (
-    identity.aal ===
-    REQUIRED_AUTHENTICATION_LEVEL
+    containsAnyKeyword(
+      message,
+      INVESTMENT_KEYWORDS,
+    )
   ) {
-    return {
-      authenticated: true,
-      identity,
-      current_level: "aal2",
-      next_level: "aal2",
-      mfa_action: "none",
-    };
+    scopes.add(
+      "investments",
+    );
   }
 
-  const {
-    data,
-    error,
-  } =
-    await supabase.auth.mfa
-      .getAuthenticatorAssuranceLevel();
-
-  if (error || !data) {
-    return {
-      authenticated: true,
-      identity,
-      current_level: "aal1",
-      next_level: null,
-      mfa_action: "unknown",
-    };
+  if (
+    containsAnyKeyword(
+      message,
+      GOAL_KEYWORDS,
+    )
+  ) {
+    scopes.add(
+      "goals",
+    );
   }
 
-  const nextLevel =
-    normalizeAal(
-      data.nextLevel,
+  if (
+    containsAnyKeyword(
+      message,
+      PROJECT_KEYWORDS,
+    )
+  ) {
+    scopes.add(
+      "projects",
+    );
+  }
+
+  if (
+    containsAnyKeyword(
+      message,
+      TASK_KEYWORDS,
+    )
+  ) {
+    scopes.add(
+      "tasks",
+    );
+  }
+
+  if (
+    containsAnyKeyword(
+      message,
+      LEARNING_KEYWORDS,
+    )
+  ) {
+    scopes.add(
+      "learning",
+    );
+  }
+
+  if (
+    containsAnyKeyword(
+      message,
+      CAREER_KEYWORDS,
+    )
+  ) {
+    scopes.add(
+      "career",
+    );
+  }
+
+  return Array.from(
+    scopes,
+  );
+}
+
+
+/* =========================================================
+ * 6. MEMORY SAFETY FILTER
+ * ======================================================= */
+
+const SENSITIVE_MEMORY_PATTERNS = [
+  "password",
+  "passcode",
+  "api key",
+  "apikey",
+  "access token",
+  "refresh token",
+  "service role",
+  "secret key",
+  "totp secret",
+  "recovery code",
+
+  "كلمة المرور",
+  "رمز المرور",
+  "مفتاح api",
+  "مفتاح سري",
+  "توكن",
+  "رمز الاسترداد",
+] as const;
+
+
+function isPotentiallySensitiveMemory(
+  item: MemoryItem,
+): boolean {
+  const combined =
+    normalizeText(
+      `${item.title} ${item.content}`,
     );
 
-  if (nextLevel === "aal2") {
-    return {
-      authenticated: true,
-      identity,
-      current_level: "aal1",
-      next_level: "aal2",
-      mfa_action: "verify",
-    };
+  return SENSITIVE_MEMORY_PATTERNS.some(
+    (pattern) =>
+      combined.includes(
+        normalizeText(pattern),
+      ),
+  );
+}
+
+
+/* =========================================================
+ * 7. MEMORY RELEVANCE
+ * ======================================================= */
+
+const MEMORY_IMPORTANCE_WEIGHT = {
+  high: 3,
+  medium: 2,
+  low: 1,
+} as const;
+
+
+function isMemoryRelevantToScopes(
+  item: MemoryItem,
+  scopes: AIContextScope[],
+): boolean {
+  /**
+   * Stable personal preferences and constraints may affect
+   * almost any recommendation.
+   */
+  if (
+    item.category === "preference" ||
+    item.category === "constraint"
+  ) {
+    return true;
   }
 
-  if (nextLevel === "aal1") {
-    return {
-      authenticated: true,
-      identity,
-      current_level: "aal1",
-      next_level: "aal1",
-      mfa_action: "enroll",
-    };
+  if (
+    item.category === "decision" &&
+    item.importance === "high"
+  ) {
+    return true;
   }
 
+  if (
+    scopes.includes("finance") &&
+    item.category === "finance"
+  ) {
+    return true;
+  }
+
+  if (
+    scopes.includes("investments") &&
+    item.category === "investments"
+  ) {
+    return true;
+  }
+
+  if (
+    scopes.includes("career") &&
+    item.category === "career"
+  ) {
+    return true;
+  }
+
+  if (
+    scopes.includes("learning") &&
+    (
+      item.category === "learning" ||
+      item.category === "education"
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    scopes.includes("projects") &&
+    item.category === "projects"
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+
+function selectRelevantMemory(
+  items: MemoryItem[],
+  scopes: AIContextScope[],
+): MemoryItem[] {
+  return items
+    .filter(
+      (item) =>
+        item.is_active,
+    )
+    .filter(
+      (item) =>
+        !isPotentiallySensitiveMemory(
+          item,
+        ),
+    )
+    .filter(
+      (item) =>
+        isMemoryRelevantToScopes(
+          item,
+          scopes,
+        ),
+    )
+    .sort(
+      (
+        a,
+        b,
+      ) => {
+        const importanceDifference =
+          MEMORY_IMPORTANCE_WEIGHT[
+            b.importance
+          ] -
+          MEMORY_IMPORTANCE_WEIGHT[
+            a.importance
+          ];
+
+        if (
+          importanceDifference !== 0
+        ) {
+          return importanceDifference;
+        }
+
+        return b.updated_at.localeCompare(
+          a.updated_at,
+        );
+      },
+    )
+    .slice(
+      0,
+      AI_MAX_CONTEXT_ITEMS_PER_CATEGORY,
+    );
+}
+
+
+/* =========================================================
+ * 8. MINIMAL MEMORY OUTPUT
+ * ======================================================= */
+
+function buildMemoryContext(
+  items: MemoryItem[],
+): JsonValue[] {
+  return items.map(
+    (item) => ({
+      category:
+        item.category,
+
+      title:
+        item.title,
+
+      content:
+        item.content,
+
+      importance:
+        item.importance,
+    }),
+  );
+}
+
+
+/* =========================================================
+ * 9. DASHBOARD CORE CONTEXT
+ * ======================================================= */
+
+function buildDashboardCoreContext(
+  dashboard: DashboardSnapshot,
+): JsonObject {
   return {
-    authenticated: true,
-    identity,
-    current_level: "aal1",
-    next_level: null,
-    mfa_action: "unknown",
+    month:
+      dashboard.month,
+
+    top_priorities:
+      dashboard.top_priorities
+        .slice(
+          0,
+          3,
+        )
+        .map(
+          (item) => ({
+            source:
+              item.source,
+
+            title:
+              item.title,
+
+            priority:
+              item.priority,
+
+            next_action:
+              item.next_action,
+
+            target_date:
+              item.target_date,
+          }),
+        ),
+
+    finance_summary: {
+      currency:
+        dashboard.finance.currency,
+
+      monthly_income:
+        dashboard.finance.monthly_income,
+
+      monthly_allocations:
+        dashboard.finance.monthly_allocations,
+
+      available_amount:
+        dashboard.finance.available_amount,
+
+      emergency_fund_balance:
+        dashboard.finance
+          .emergency_fund_balance,
+
+      travel_savings_balance:
+        dashboard.finance
+          .travel_savings_balance,
+    },
+
+    investment_summary: {
+      currency:
+        dashboard.investments.currency,
+
+      active_asset_count:
+        dashboard.investments
+          .active_asset_count,
+
+      total_cost_basis:
+        dashboard.investments
+          .total_cost_basis,
+
+      total_estimated_value:
+        dashboard.investments
+          .total_estimated_value,
+
+      total_estimated_gain_loss:
+        dashboard.investments
+          .total_estimated_gain_loss,
+
+      total_monthly_contribution_target:
+        dashboard.investments
+          .total_monthly_contribution_target,
+    },
+
+    goal_summary: {
+      active:
+        dashboard.goals.active_count,
+
+      planned:
+        dashboard.goals.planned_count,
+
+      paused:
+        dashboard.goals.paused_count,
+
+      completed:
+        dashboard.goals.completed_count,
+    },
+
+    project_summary: {
+      active:
+        dashboard.projects.active_count,
+
+      blocked:
+        dashboard.projects.blocked_count,
+
+      planned:
+        dashboard.projects.planned_count,
+
+      completed:
+        dashboard.projects.completed_count,
+    },
+
+    task_summary: {
+      pending:
+        dashboard.tasks.pending_count,
+
+      active:
+        dashboard.tasks.active_count,
+
+      overdue:
+        dashboard.tasks.overdue_count,
+    },
+
+    learning_summary: {
+      active:
+        dashboard.learning.active_count,
+
+      planned:
+        dashboard.learning.planned_count,
+
+      completed:
+        dashboard.learning.completed_count,
+    },
   };
 }
 
 
 /* =========================================================
- * 7. ASSERT AUTHENTICATED
+ * 10. FINANCE CONTEXT
  * ======================================================= */
 
-/**
- * Server/API-friendly authentication assertion.
- *
- * Unlike the page helpers below, this throws instead of
- * redirecting.
- */
-export async function assertAuthenticatedIdentity():
-Promise<VerifiedAuthIdentity> {
-  const identity =
-    await getVerifiedAuthIdentity();
+function buildFinanceContext(
+  dashboard: DashboardSnapshot,
+): JsonObject {
+  const finance =
+    dashboard.finance;
 
-  if (!identity) {
-    throw new AuthenticationError(
-      "UNAUTHENTICATED",
+  return {
+    currency:
+      finance.currency,
+
+    monthly_income:
+      finance.monthly_income,
+
+    monthly_expenses:
+      finance.monthly_expenses,
+
+    monthly_savings:
+      finance.monthly_savings,
+
+    monthly_investments:
+      finance.monthly_investments,
+
+    monthly_debt_payments:
+      finance.monthly_debt_payments,
+
+    monthly_allocations:
+      finance.monthly_allocations,
+
+    available_amount:
+      finance.available_amount,
+
+    emergency_fund_balance:
+      finance.emergency_fund_balance,
+
+    travel_savings_balance:
+      finance.travel_savings_balance,
+
+    active_income_sources:
+      finance.income_sources
+        .filter(
+          (item) =>
+            item.is_active,
+        )
+        .slice(
+          0,
+          AI_MAX_CONTEXT_ITEMS_PER_CATEGORY,
+        )
+        .map(
+          (item) => ({
+            name:
+              item.name,
+
+            amount:
+              item.amount,
+
+            frequency:
+              item.frequency,
+          }),
+        ),
+
+    active_budget_items:
+      finance.budget_items
+        .filter(
+          (item) =>
+            item.is_active,
+        )
+        .slice(
+          0,
+          AI_MAX_CONTEXT_ITEMS_PER_CATEGORY,
+        )
+        .map(
+          (item) => ({
+            name:
+              item.name,
+
+            category:
+              item.category,
+
+            item_type:
+              item.item_type,
+
+            amount:
+              item.amount,
+
+            frequency:
+              item.frequency,
+          }),
+        ),
+  };
+}
+
+
+/* =========================================================
+ * 11. INVESTMENT CONTEXT
+ * ======================================================= */
+
+function buildInvestmentContext(
+  dashboard: DashboardSnapshot,
+): JsonObject {
+  const investments =
+    dashboard.investments;
+
+  return {
+    currency:
+      investments.currency,
+
+    total_cost_basis:
+      investments.total_cost_basis,
+
+    total_estimated_value:
+      investments.total_estimated_value,
+
+    total_estimated_gain_loss:
+      investments.total_estimated_gain_loss,
+
+    total_monthly_contribution_target:
+      investments
+        .total_monthly_contribution_target,
+
+    active_asset_count:
+      investments.active_asset_count,
+
+    positions:
+      investments.positions
+        .slice(
+          0,
+          AI_MAX_CONTEXT_ITEMS_PER_CATEGORY,
+        )
+        .map(
+          (position) => ({
+            ticker:
+              position.asset.ticker,
+
+            name:
+              position.asset.name,
+
+            market:
+              position.asset.market,
+
+            asset_type:
+              position.asset.asset_type,
+
+            currency:
+              position.asset.currency,
+
+            quantity:
+              position.asset.quantity,
+
+            average_cost:
+              position.asset.average_cost,
+
+            reference_price:
+              position.asset.reference_price,
+
+            monthly_contribution_target:
+              position.asset
+                .monthly_contribution_target,
+
+            target_quantity:
+              position.asset.target_quantity,
+
+            cost_basis:
+              position.cost_basis,
+
+            estimated_value:
+              position.estimated_value,
+
+            estimated_gain_loss:
+              position.estimated_gain_loss,
+
+            estimated_gain_loss_percent:
+              position
+                .estimated_gain_loss_percent,
+
+            allocation_percent:
+              position.allocation_percent,
+
+            target_progress_percent:
+              position
+                .target_progress_percent,
+          }),
+        ),
+  };
+}
+
+
+/* =========================================================
+ * 12. GOALS CONTEXT
+ * ======================================================= */
+
+function buildGoalsContext(
+  dashboard: DashboardSnapshot,
+): JsonObject {
+  return {
+    active_count:
+      dashboard.goals.active_count,
+
+    planned_count:
+      dashboard.goals.planned_count,
+
+    paused_count:
+      dashboard.goals.paused_count,
+
+    completed_count:
+      dashboard.goals.completed_count,
+
+    active_goals:
+      dashboard.goals.active_goals
+        .slice(
+          0,
+          AI_MAX_CONTEXT_ITEMS_PER_CATEGORY,
+        )
+        .map(
+          (goal) => ({
+            title:
+              goal.title,
+
+            category:
+              goal.category,
+
+            status:
+              goal.status,
+
+            priority:
+              goal.priority,
+
+            progress_percent:
+              goal.progress_percent,
+
+            target_date:
+              goal.target_date,
+
+            next_action:
+              goal.next_action,
+          }),
+        ),
+  };
+}
+
+
+/* =========================================================
+ * 13. PROJECT CONTEXT
+ * ======================================================= */
+
+function buildProjectsContext(
+  dashboard: DashboardSnapshot,
+): JsonObject {
+  return {
+    active_count:
+      dashboard.projects.active_count,
+
+    blocked_count:
+      dashboard.projects.blocked_count,
+
+    planned_count:
+      dashboard.projects.planned_count,
+
+    completed_count:
+      dashboard.projects.completed_count,
+
+    high_priority_projects:
+      dashboard.projects
+        .high_priority_projects
+        .slice(
+          0,
+          AI_MAX_CONTEXT_ITEMS_PER_CATEGORY,
+        )
+        .map(
+          (project) => ({
+            title:
+              project.title,
+
+            category:
+              project.category,
+
+            status:
+              project.status,
+
+            priority:
+              project.priority,
+
+            progress_percent:
+              project.progress_percent,
+
+            target_date:
+              project.target_date,
+
+            next_action:
+              project.next_action,
+          }),
+        ),
+
+    blocked_projects:
+      dashboard.projects
+        .blocked_projects
+        .slice(
+          0,
+          AI_MAX_CONTEXT_ITEMS_PER_CATEGORY,
+        )
+        .map(
+          (project) => ({
+            title:
+              project.title,
+
+            priority:
+              project.priority,
+
+            target_date:
+              project.target_date,
+
+            next_action:
+              project.next_action,
+          }),
+        ),
+  };
+}
+
+
+/* =========================================================
+ * 14. TASK CONTEXT
+ * ======================================================= */
+
+function buildTasksContext(
+  dashboard: DashboardSnapshot,
+): JsonObject {
+  return {
+    pending_count:
+      dashboard.tasks.pending_count,
+
+    active_count:
+      dashboard.tasks.active_count,
+
+    completed_count:
+      dashboard.tasks.completed_count,
+
+    overdue_count:
+      dashboard.tasks.overdue_count,
+
+    urgent_tasks:
+      dashboard.tasks.urgent_tasks
+        .slice(
+          0,
+          AI_MAX_CONTEXT_ITEMS_PER_CATEGORY,
+        )
+        .map(
+          (task) => ({
+            title:
+              task.title,
+
+            priority:
+              task.priority,
+
+            status:
+              task.status,
+
+            due_date:
+              task.due_date,
+          }),
+        ),
+  };
+}
+
+
+/* =========================================================
+ * 15. LEARNING CONTEXT
+ * ======================================================= */
+
+function buildLearningContext(
+  dashboard: DashboardSnapshot,
+): JsonObject {
+  return {
+    active_count:
+      dashboard.learning.active_count,
+
+    planned_count:
+      dashboard.learning.planned_count,
+
+    completed_count:
+      dashboard.learning.completed_count,
+
+    paused_count:
+      dashboard.learning.paused_count,
+
+    active_items:
+      dashboard.learning.active_items
+        .slice(
+          0,
+          AI_MAX_CONTEXT_ITEMS_PER_CATEGORY,
+        )
+        .map(
+          (item) => ({
+            title:
+              item.title,
+
+            provider:
+              item.provider,
+
+            item_type:
+              item.item_type,
+
+            status:
+              item.status,
+
+            priority:
+              item.priority,
+
+            progress_percent:
+              item.progress_percent,
+
+            target_date:
+              item.target_date,
+          }),
+        ),
+
+    high_priority_items:
+      dashboard.learning
+        .high_priority_items
+        .slice(
+          0,
+          AI_MAX_CONTEXT_ITEMS_PER_CATEGORY,
+        )
+        .map(
+          (item) => ({
+            title:
+              item.title,
+
+            provider:
+              item.provider,
+
+            item_type:
+              item.item_type,
+
+            status:
+              item.status,
+
+            progress_percent:
+              item.progress_percent,
+
+            target_date:
+              item.target_date,
+          }),
+        ),
+  };
+}
+
+
+/* =========================================================
+ * 16. CAREER CONTEXT
+ * ======================================================= */
+
+function buildMinimalCareerItems(
+  items: CareerItem[],
+): JsonValue[] {
+  return items
+    .slice(
+      0,
+      AI_MAX_CONTEXT_ITEMS_PER_CATEGORY,
+    )
+    .map(
+      (item) => ({
+        item_type:
+          item.item_type,
+
+        title:
+          item.title,
+
+        description:
+          item.description,
+
+        status:
+          item.status,
+
+        priority:
+          item.priority,
+
+        rating:
+          item.rating,
+
+        event_date:
+          item.event_date,
+
+        target_date:
+          item.target_date,
+      }),
+    );
+}
+
+
+async function buildCareerContext():
+Promise<JsonObject> {
+  const career =
+    await getCareerSnapshot();
+
+  return {
+    current_roles:
+      buildMinimalCareerItems(
+        career.current_roles,
+      ),
+
+    target_roles:
+      buildMinimalCareerItems(
+        career.target_roles,
+      ),
+
+    skills:
+      buildMinimalCareerItems(
+        career.skills,
+      ),
+
+    achievements:
+      buildMinimalCareerItems(
+        career.achievements,
+      ),
+
+    milestones:
+      buildMinimalCareerItems(
+        career.milestones,
+      ),
+
+    gaps:
+      buildMinimalCareerItems(
+        career.gaps,
+      ),
+  };
+}
+
+
+/* =========================================================
+ * 17. BUILD CHIEF OF STAFF CONTEXT
+ * ======================================================= */
+
+export async function buildChiefOfStaffContext(
+  request: AIRequest,
+): Promise<JsonObject> {
+  if (
+    request.mode ===
+    "decision"
+  ) {
+    throw new AIContextError(
+      "DECISION_CONTEXT_REQUIRED",
     );
   }
 
-  return identity;
-}
+  try {
+    const scopes =
+      detectContextScopes(
+        request.message,
+      );
 
+    const needsCareer =
+      scopes.includes(
+        "career",
+      );
 
-/* =========================================================
- * 8. ASSERT AAL2
- * ======================================================= */
+    const [
+      dashboard,
+      memories,
+      career,
+    ] =
+      await Promise.all([
+        getDashboardSnapshot(),
 
-/**
- * Primary server-side LIFE OS data authorization gate.
- *
- * Authenticated AAL1 is intentionally insufficient for
- * private LIFE OS data.
- */
-export async function assertAAL2Identity():
-Promise<VerifiedAuthIdentity> {
-  const identity =
-    await assertAuthenticatedIdentity();
+        getActiveMemoryItems(),
 
-  if (
-    identity.aal !==
-    REQUIRED_AUTHENTICATION_LEVEL
-  ) {
-    throw new AuthenticationError(
-      "MFA_REQUIRED",
+        needsCareer
+          ? buildCareerContext()
+          : Promise.resolve(
+              null,
+            ),
+      ]);
+
+    const relevantMemory =
+      selectRelevantMemory(
+        memories,
+        scopes,
+      );
+
+    const context:
+      JsonObject = {
+        generated_at:
+          dashboard.generated_at,
+
+        request_scope:
+          scopes,
+
+        dashboard:
+          buildDashboardCoreContext(
+            dashboard,
+          ),
+
+        relevant_memory:
+          buildMemoryContext(
+            relevantMemory,
+          ),
+      };
+
+    if (
+      scopes.includes(
+        "finance",
+      )
+    ) {
+      context.finance =
+        buildFinanceContext(
+          dashboard,
+        );
+    }
+
+    if (
+      scopes.includes(
+        "investments",
+      )
+    ) {
+      context.investments =
+        buildInvestmentContext(
+          dashboard,
+        );
+    }
+
+    if (
+      scopes.includes(
+        "goals",
+      )
+    ) {
+      context.goals =
+        buildGoalsContext(
+          dashboard,
+        );
+    }
+
+    if (
+      scopes.includes(
+        "projects",
+      )
+    ) {
+      context.projects =
+        buildProjectsContext(
+          dashboard,
+        );
+    }
+
+    if (
+      scopes.includes(
+        "tasks",
+      )
+    ) {
+      context.tasks =
+        buildTasksContext(
+          dashboard,
+        );
+    }
+
+    if (
+      scopes.includes(
+        "learning",
+      )
+    ) {
+      context.learning =
+        buildLearningContext(
+          dashboard,
+        );
+    }
+
+    if (
+      career !== null
+    ) {
+      context.career =
+        career;
+    }
+
+    return context;
+  } catch (error) {
+    if (
+      error instanceof
+      AIContextError
+    ) {
+      throw error;
+    }
+
+    throw new AIContextError(
+      "CONTEXT_BUILD_FAILED",
     );
   }
-
-  return identity;
 }
 
 
 /* =========================================================
- * 9. GET AAL2 IDENTITY WITHOUT THROWING
- * ======================================================= */
-
-export async function getAAL2Identity():
-Promise<VerifiedAuthIdentity | null> {
-  const identity =
-    await getVerifiedAuthIdentity();
-
-  if (
-    !identity ||
-    identity.aal !==
-      REQUIRED_AUTHENTICATION_LEVEL
-  ) {
-    return null;
-  }
-
-  return identity;
-}
-
-
-/* =========================================================
- * 10. PAGE GUARD — AUTHENTICATED
+ * 18. DECISION CONTEXT
  * ======================================================= */
 
 /**
- * Server Component page guard.
+ * Decision Simulator receives a broader but still controlled
+ * snapshot because decisions may affect multiple life areas.
  *
- * Allows AAL1 because the login/MFA flow itself may need to
- * operate after the first authentication factor.
+ * Audit logs, credentials and unrelated raw records remain
+ * excluded.
  */
-export async function requireAuthenticatedIdentity():
-Promise<VerifiedAuthIdentity> {
-  const identity =
-    await getVerifiedAuthIdentity();
+export async function buildDecisionContext():
+Promise<JsonObject> {
+  try {
+    const [
+      dashboard,
+      memories,
+      career,
+    ] =
+      await Promise.all([
+        getDashboardSnapshot(),
 
-  if (!identity) {
-    redirect(LOGIN_ROUTE);
-  }
+        getActiveMemoryItems(),
 
-  return identity;
-}
+        buildCareerContext(),
+      ]);
 
+    const decisionScopes:
+      AIContextScope[] = [
+        "dashboard",
+        "finance",
+        "investments",
+        "goals",
+        "projects",
+        "tasks",
+        "learning",
+        "career",
+      ];
 
-/* =========================================================
- * 11. PAGE GUARD — AAL2
- * ======================================================= */
+    const relevantMemory =
+      selectRelevantMemory(
+        memories,
+        decisionScopes,
+      );
 
-/**
- * Main protected-page guard.
- *
- * User without a valid session:
- *
- *   → /login
- *
- * User with AAL1:
- *
- *   → /login?step=mfa
- *
- * User with AAL2:
- *
- *   → protected LIFE OS page
- *
- * The redirect target is fixed by application code and never
- * accepts a user-controlled destination.
- */
-export async function requireAAL2Identity():
-Promise<VerifiedAuthIdentity> {
-  const identity =
-    await getVerifiedAuthIdentity();
+    return {
+      generated_at:
+        dashboard.generated_at,
 
-  if (!identity) {
-    redirect(LOGIN_ROUTE);
-  }
+      currency:
+        dashboard.finance.currency ??
+        DEFAULT_CURRENCY,
 
-  if (
-    identity.aal !==
-    REQUIRED_AUTHENTICATION_LEVEL
-  ) {
-    redirect(
-      `${LOGIN_ROUTE}?step=mfa`,
-    );
-  }
+      dashboard:
+        buildDashboardCoreContext(
+          dashboard,
+        ),
 
-  return identity;
-}
+      finance:
+        buildFinanceContext(
+          dashboard,
+        ),
 
+      investments:
+        buildInvestmentContext(
+          dashboard,
+        ),
 
-/* =========================================================
- * 12. LOGIN PAGE REDIRECT
- * ======================================================= */
+      goals:
+        buildGoalsContext(
+          dashboard,
+        ),
 
-/**
- * Prevents a fully authenticated AAL2 user from unnecessarily
- * remaining on the login page.
- */
-export async function redirectIfFullyAuthenticated():
-Promise<void> {
-  const identity =
-    await getVerifiedAuthIdentity();
+      projects:
+        buildProjectsContext(
+          dashboard,
+        ),
 
-  if (
-    identity?.aal ===
-    REQUIRED_AUTHENTICATION_LEVEL
-  ) {
-    redirect(
-      DEFAULT_AUTHENTICATED_ROUTE,
+      tasks:
+        buildTasksContext(
+          dashboard,
+        ),
+
+      learning:
+        buildLearningContext(
+          dashboard,
+        ),
+
+      career,
+
+      relevant_memory:
+        buildMemoryContext(
+          relevantMemory,
+        ),
+    };
+  } catch {
+    throw new AIContextError(
+      "CONTEXT_BUILD_FAILED",
     );
   }
 }
 
 
 /* =========================================================
- * 13. FRESH USER RECORD
+ * 19. OPPORTUNITY CONTEXT
  * ======================================================= */
 
 /**
- * Use only when current Auth-server user metadata is actually
- * needed.
+ * Opportunity Search primarily needs:
  *
- * getClaims() remains the normal identity verification path.
+ * - active goals
+ * - learning direction
+ * - career direction
+ * - relevant preferences / constraints
  *
- * getUser() performs an Auth server request and gives us the
- * current user record.
+ * It intentionally does NOT receive detailed financial or
+ * investment positions.
  */
-export async function getFreshAuthenticatedUser():
-Promise<User | null> {
-  const supabase =
-    await createClient();
+export async function buildOpportunityContext():
+Promise<JsonObject> {
+  try {
+    const [
+      dashboard,
+      memories,
+      career,
+    ] =
+      await Promise.all([
+        getDashboardSnapshot(),
 
-  const identity =
-    await getVerifiedIdentityFromClient(
-      supabase,
+        getActiveMemoryItems(),
+
+        buildCareerContext(),
+      ]);
+
+    const opportunityScopes:
+      AIContextScope[] = [
+        "goals",
+        "learning",
+        "career",
+      ];
+
+    const relevantMemory =
+      selectRelevantMemory(
+        memories,
+        opportunityScopes,
+      );
+
+    return {
+      generated_at:
+        dashboard.generated_at,
+
+      goals:
+        buildGoalsContext(
+          dashboard,
+        ),
+
+      learning:
+        buildLearningContext(
+          dashboard,
+        ),
+
+      career,
+
+      relevant_memory:
+        buildMemoryContext(
+          relevantMemory,
+        ),
+    };
+  } catch {
+    throw new AIContextError(
+      "CONTEXT_BUILD_FAILED",
     );
-
-  if (!identity) {
-    return null;
   }
-
-  const {
-    data,
-    error,
-  } =
-    await supabase.auth.getUser();
-
-  if (
-    error ||
-    !data.user ||
-    data.user.id !== identity.id
-  ) {
-    return null;
-  }
-
-  return data.user;
 }
 
 
 /* =========================================================
- * 14. REQUIRE FRESH USER
- * ======================================================= */
-
-export async function requireFreshAuthenticatedUser():
-Promise<User> {
-  const user =
-    await getFreshAuthenticatedUser();
-
-  if (!user) {
-    redirect(LOGIN_ROUTE);
-  }
-
-  return user;
-}
-
-
-/* =========================================================
- * 15. USER ID CONVENIENCE
+ * 20. PRIVACY GUARANTEES
  * ======================================================= */
 
 /**
- * Safe convenience helper for server-side data functions.
+ * Context generated by this file intentionally excludes:
  *
- * user_id is always obtained from verified authentication,
- * never from browser input or AI arguments.
+ * - user_id
+ * - email
+ * - authentication tokens
+ * - cookies
+ * - MFA information
+ * - API keys
+ * - service-role credentials
+ * - audit history
+ * - created_at database metadata
+ * - unrelated personal records
+ *
+ * IDs are also generally excluded from AI context unless a
+ * later tool specifically requires a controlled identifier.
  */
-export async function requireAAL2UserId():
-Promise<UUID> {
-  const identity =
-    await assertAAL2Identity();
-
-  return identity.id;
-}
 
 
 /* =========================================================
- * 16. FINAL SECURITY RULE
+ * 21. CONTEXT AUTHORIZATION
  * ======================================================= */
 
 /**
- * LIFE OS Authentication Boundary
+ * This file does not independently accept a user identifier.
  *
- * Authentication:
+ * All underlying data functions:
  *
- * Supabase Auth
+ * getDashboardSnapshot()
+ * getCareerSnapshot()
+ * getActiveMemoryItems()
+ *
+ * already require:
+ *
+ * Verified Supabase authentication
  *      ↓
- * getClaims() verifies JWT
+ * AAL2
  *      ↓
- * user ID derived from verified `sub`
+ * authenticated user_id
  *      ↓
- * AAL2 required
- *      ↓
- * Server data layer
- *      ↓
- * PostgreSQL RLS verifies ownership again
- *
- *
- * NEVER:
- *
- * - trust user_id from request input
- * - trust user_id generated by AI
- * - use getSession() user data as authorization proof
- * - bypass MFA for convenience
- * - expose service_role
- * - weaken RLS because application auth exists
- *
- *
- * Defense in depth:
- *
- * Verified JWT
- * +
- * MFA / AAL2
- * +
- * Server authorization
- * +
  * PostgreSQL RLS
+ */
+
+
+/* =========================================================
+ * 22. PROMPT-INJECTION BOUNDARY
+ * ======================================================= */
+
+/**
+ * Personal data may contain arbitrary text.
+ *
+ * Examples:
+ *
+ * - goal descriptions
+ * - memory content
+ * - project titles
+ * - learning titles
+ *
+ * That text is DATA.
+ *
+ * It is never treated as trusted system instructions.
+ *
+ * ai/chief-of-staff.ts reinforces this rule in the model
+ * instructions.
+ */
+
+
+/* =========================================================
+ * 23. FINAL CONTEXT RULE
+ * ======================================================= */
+
+/**
+ * LIFE OS AI Context Boundary
+ *
+ * User asks a question
+ *      ↓
+ * Deterministic scope detection
+ *      ↓
+ * Authenticated LIFE OS data
+ *      ↓
+ * Data minimization
+ *      ↓
+ * Sensitive-memory filtering
+ *      ↓
+ * Remove ownership/security metadata
+ *      ↓
+ * Minimal JsonObject
+ *      ↓
+ * AI module
+ *
+ *
+ * Permanent rule:
+ *
+ * Give AI the minimum useful context,
+ * not the maximum available context.
  */
