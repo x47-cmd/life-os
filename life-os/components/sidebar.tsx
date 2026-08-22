@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+
 import {
   useEffect,
   useState,
@@ -58,27 +59,25 @@ export function Sidebar() {
   const pathname =
     usePathname();
 
+  /**
+   * Store the route on which the mobile menu was opened.
+   *
+   * This lets the menu automatically become closed after
+   * navigation without synchronously calling setState from
+   * an effect.
+   */
   const [
-    isMobileOpen,
-    setIsMobileOpen,
+    mobileMenuPath,
+    setMobileMenuPath,
   ] =
-    useState(false);
+    useState<string | null>(
+      null,
+    );
 
 
-  /* -------------------------------------------------------
-   * Close mobile menu after navigation
-   * ---------------------------------------------------- */
-
-  useEffect(
-    () => {
-      setIsMobileOpen(
-        false,
-      );
-    },
-    [
-      pathname,
-    ],
-  );
+  const isMobileOpen =
+    mobileMenuPath ===
+    pathname;
 
 
   /* -------------------------------------------------------
@@ -129,8 +128,8 @@ export function Sidebar() {
           event.key ===
           "Escape"
         ) {
-          setIsMobileOpen(
-            false,
+          setMobileMenuPath(
+            null,
           );
         }
       }
@@ -168,8 +167,8 @@ export function Sidebar() {
         }
         aria-controls="life-os-sidebar"
         onClick={() => {
-          setIsMobileOpen(
-            true,
+          setMobileMenuPath(
+            pathname,
           );
         }}
       >
@@ -192,8 +191,8 @@ export function Sidebar() {
           className="sidebar-backdrop"
           aria-label="إغلاق القائمة الرئيسية"
           onClick={() => {
-            setIsMobileOpen(
-              false,
+            setMobileMenuPath(
+              null,
             );
           }}
         />
@@ -247,8 +246,8 @@ export function Sidebar() {
               className="sidebar__mobile-close"
               aria-label="إغلاق القائمة الرئيسية"
               onClick={() => {
-                setIsMobileOpen(
-                  false,
+                setMobileMenuPath(
+                  null,
                 );
               }}
             >
@@ -302,6 +301,11 @@ export function Sidebar() {
                             ? "page"
                             : undefined
                         }
+                        onClick={() => {
+                          setMobileMenuPath(
+                            null,
+                          );
+                        }}
                       >
                         <span
                           className="sidebar__icon"
