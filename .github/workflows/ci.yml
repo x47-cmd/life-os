@@ -48,6 +48,10 @@ jobs:
         working-directory: life-os
         run: npm test
 
+      - name: Lint
+        working-directory: life-os
+        run: npm run lint
+
       - name: Production build
         working-directory: life-os
         run: npm run build
