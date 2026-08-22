@@ -258,37 +258,37 @@ describe(
 
 
         expect(
-          result.monthly_income,
+          result.total_income,
         ).toBe(
           12_000,
         );
 
         expect(
-          result.monthly_expenses,
+          result.total_expenses,
         ).toBe(
           4_000,
         );
 
         expect(
-          result.monthly_savings,
+          result.total_savings,
         ).toBe(
           2_000,
         );
 
         expect(
-          result.monthly_investments,
+          result.total_investments,
         ).toBe(
           1_500,
         );
 
         expect(
-          result.monthly_debt_payments,
+          result.total_debt_payments,
         ).toBe(
           2_500,
         );
 
         expect(
-          result.monthly_allocations,
+          result.total_allocations,
         ).toBe(
           10_000,
         );
@@ -333,13 +333,13 @@ describe(
 
 
         expect(
-          result.monthly_income,
+          result.total_income,
         ).toBe(
           10_000,
         );
 
         expect(
-          result.monthly_expenses,
+          result.total_expenses,
         ).toBe(
           1_000,
         );
@@ -400,13 +400,13 @@ describe(
 
 
         expect(
-          result.monthly_income,
+          result.total_income,
         ).toBe(
           10_000,
         );
 
         expect(
-          result.monthly_expenses,
+          result.total_expenses,
         ).toBe(
           2_000,
         );
@@ -467,13 +467,13 @@ describe(
 
 
         expect(
-          result.monthly_income,
+          result.total_income,
         ).toBe(
           10_000,
         );
 
         expect(
-          result.monthly_expenses,
+          result.total_expenses,
         ).toBe(
           2_000,
         );
