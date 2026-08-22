@@ -942,6 +942,8 @@ export const REQUIRED_AUTHENTICATION_LEVEL = "aal2";
 
 export const LOGIN_ROUTE = "/login";
 
+export const SETTINGS_ROUTE = "/settings";
+
 export const DEFAULT_AUTHENTICATED_ROUTE =
   "/dashboard";
 
