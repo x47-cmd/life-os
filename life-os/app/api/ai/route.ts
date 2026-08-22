@@ -812,9 +812,9 @@ async function handleDecision(
    * The route does not ask the model to calculate money.
    */
   const result =
-    await simulateDecision(
+    await simulateDecision({
       decision,
-    );
+    });
 
 
   return normalizeDecisionResult(
