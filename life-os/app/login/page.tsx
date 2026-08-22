@@ -25,7 +25,7 @@ import {
 } from "@/lib/supabase/client";
 
 import {
-  loginSchema,
+  loginInputSchema,
   mfaCodeSchema,
 } from "@/lib/validation";
 
@@ -434,7 +434,7 @@ export default function LoginPage() {
         .toLowerCase();
 
     const validation =
-      loginSchema.safeParse({
+      loginInputSchema.safeParse({
         email:
           normalizedEmail,
 
