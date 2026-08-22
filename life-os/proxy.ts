@@ -86,9 +86,17 @@ function copyAuthCookies(
   target:
     NextResponse,
 ): NextResponse {
-  target.cookies.setAll(
-    source.cookies.getAll(),
-  );
+  source.cookies
+    .getAll()
+    .forEach(
+      (
+        cookie,
+      ) => {
+        target.cookies.set(
+          cookie,
+        );
+      },
+    );
 
   return target;
 }
