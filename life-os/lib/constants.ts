@@ -938,7 +938,7 @@ export const FORBIDDEN_AUDIT_METADATA_KEYS = [
  * 34. AUTHENTICATION
  * ======================================================= */
 
-export const REQUIRED_AUTHENTICATION_LEVEL = "aal2";
+export const REQUIRED_AUTHENTICATION_LEVEL = "aal1";
 
 export const LOGIN_ROUTE = "/login";
 
