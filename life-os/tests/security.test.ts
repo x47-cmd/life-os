@@ -716,7 +716,7 @@ describe(
         expect(
           source,
         ).toContain(
-          "from anon, authenticated",
+          "from public, anon, authenticated",
         );
       },
     );
