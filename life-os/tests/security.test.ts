@@ -15,6 +15,7 @@ import {
 
 import {
   AI_TOOL_NAMES,
+  REQUIRED_AUTHENTICATION_LEVEL,
 } from "@/lib/constants";
 
 
@@ -97,7 +98,7 @@ const USER_OWNED_TABLES =
 
 
 /* =========================================================
- * 3. REGEX ESCAPE
+ * 3. REGEX HELPERS
  * ======================================================= */
 
 function escapeRegExp(
@@ -110,15 +111,9 @@ function escapeRegExp(
 }
 
 
-/* =========================================================
- * 4. RLS STATEMENT CHECKER
- * ======================================================= */
-
 function tableSecurityPattern(
-  table:
-    string,
-  command:
-    "enable" | "force",
+  table: string,
+  command: "enable" | "force",
 ): RegExp {
   const escapedTable =
     escapeRegExp(
@@ -142,7 +137,7 @@ function tableSecurityPattern(
 
 
 /* =========================================================
- * 5. ENVIRONMENT SECURITY
+ * 4. ENVIRONMENT SECURITY
  * ======================================================= */
 
 describe(
@@ -209,7 +204,7 @@ describe(
 
 
     it(
-      "does not expose a Supabase service-role key in the environment template",
+      "does not expose privileged Supabase credentials",
       () => {
         const source =
           normalizeSource(
@@ -217,7 +212,6 @@ describe(
               ".env.example",
             ),
           );
-
 
         expect(
           source,
@@ -250,7 +244,6 @@ describe(
             ),
           );
 
-
         expect(
           source,
         ).toMatch(
@@ -269,7 +262,7 @@ describe(
 
 
 /* =========================================================
- * 6. NO SERVICE ROLE IN RUNTIME
+ * 5. NO SERVICE ROLE IN RUNTIME
  * ======================================================= */
 
 describe(
@@ -298,7 +291,6 @@ describe(
               ),
             );
 
-
           expect(
             source,
           ).not.toContain(
@@ -318,20 +310,19 @@ describe(
 
 
 /* =========================================================
- * 7. VERIFIED AUTHENTICATION
+ * 6. VERIFIED AUTHENTICATION
  * ======================================================= */
 
 describe(
   "verified authentication",
   () => {
     it(
-      "uses verified claims in the central auth module",
+      "uses verified JWT claims",
       () => {
         const source =
           readRepositoryFile(
             "lib/auth.ts",
           );
-
 
         expect(
           source,
@@ -343,13 +334,12 @@ describe(
 
 
     it(
-      "does not use getSession as the identity-verification authority",
+      "does not use getSession as identity authority",
       () => {
         const source =
           readRepositoryFile(
             "lib/auth.ts",
           );
-
 
         expect(
           source,
@@ -361,26 +351,156 @@ describe(
 
 
     it(
-      "contains an explicit AAL2 authorization boundary",
+      "uses AAL1 as the password-only V1 authentication level",
+      () => {
+        expect(
+          REQUIRED_AUTHENTICATION_LEVEL,
+        ).toBe(
+          "aal1",
+        );
+      },
+    );
+
+
+    it(
+      "does not perform MFA operations in the central auth module",
       () => {
         const source =
-          normalizeSource(
-            readRepositoryFile(
-              "lib/auth.ts",
-            ),
+          readRepositoryFile(
+            "lib/auth.ts",
           );
 
+        expect(
+          source,
+        ).not.toMatch(
+          /auth\.mfa/,
+        );
+      },
+    );
+
+
+    it(
+      "retains the legacy AAL2 assertion name as an authenticated alias",
+      () => {
+        const source =
+          readRepositoryFile(
+            "lib/auth.ts",
+          );
 
         expect(
           source,
         ).toContain(
-          "aal2",
+          "assertAAL2Identity",
         );
 
         expect(
           source,
         ).toContain(
-          "assertaal2",
+          "return assertAuthenticatedIdentity();",
+        );
+      },
+    );
+
+
+    it(
+      "retains the legacy AAL2 page guard name as an authenticated alias",
+      () => {
+        const source =
+          readRepositoryFile(
+            "lib/auth.ts",
+          );
+
+        expect(
+          source,
+        ).toContain(
+          "requireAAL2Identity",
+        );
+
+        expect(
+          source,
+        ).toContain(
+          "return requireAuthenticatedIdentity();",
+        );
+      },
+    );
+  },
+);
+
+
+/* =========================================================
+ * 7. PASSWORD-ONLY LOGIN
+ * ======================================================= */
+
+describe(
+  "password-only login",
+  () => {
+    const source =
+      readRepositoryFile(
+        "app/login/page.tsx",
+      );
+
+
+    it(
+      "uses password authentication",
+      () => {
+        expect(
+          source,
+        ).toContain(
+          "signInWithPassword",
+        );
+      },
+    );
+
+
+    it(
+      "does not contain MFA API calls",
+      () => {
+        expect(
+          source,
+        ).not.toMatch(
+          /auth\.mfa/,
+        );
+      },
+    );
+
+
+    it(
+      "does not use the MFA code schema",
+      () => {
+        expect(
+          source,
+        ).not.toContain(
+          "mfaCodeSchema",
+        );
+      },
+    );
+
+
+    it(
+      "does not challenge or verify TOTP",
+      () => {
+        expect(
+          source,
+        ).not.toContain(
+          "challengeAndVerify",
+        );
+
+        expect(
+          source,
+        ).not.toContain(
+          "factorType",
+        );
+      },
+    );
+
+
+    it(
+      "redirects authenticated users to the normal private route",
+      () => {
+        expect(
+          source,
+        ).toContain(
+          "DEFAULT_AUTHENTICATED_ROUTE",
         );
       },
     );
@@ -396,7 +516,7 @@ describe(
   "Next.js authentication proxy",
   () => {
     it(
-      "uses proxy.ts instead of the deprecated middleware convention",
+      "uses proxy.ts instead of middleware.ts",
       () => {
         expect(
           existsSync(
@@ -407,7 +527,6 @@ describe(
         ).toBe(
           true,
         );
-
 
         expect(
           existsSync(
@@ -423,13 +542,12 @@ describe(
 
 
     it(
-      "exports the Next.js proxy function",
+      "exports the proxy function",
       () => {
         const source =
           readRepositoryFile(
             "proxy.ts",
           );
-
 
         expect(
           source,
@@ -441,13 +559,12 @@ describe(
 
 
     it(
-      "uses verified claims during early route protection",
+      "uses verified claims",
       () => {
         const source =
           readRepositoryFile(
             "proxy.ts",
           );
-
 
         expect(
           source,
@@ -561,17 +678,17 @@ describe(
 describe(
   "RLS ownership policies",
   () => {
+    const source =
+      normalizeSource(
+        readRepositoryFile(
+          "supabase/migrations/002_v1_rls.sql",
+        ),
+      );
+
+
     it(
-      "uses authenticated user identity in RLS policy logic",
+      "uses authenticated user identity",
       () => {
-        const source =
-          normalizeSource(
-            readRepositoryFile(
-              "supabase/migrations/002_v1_rls.sql",
-            ),
-          );
-
-
         expect(
           source,
         ).toContain(
@@ -582,20 +699,24 @@ describe(
 
 
     it(
-      "contains the AAL2 requirement in the RLS migration",
+      "grants normal table access only to authenticated users",
       () => {
-        const source =
-          normalizeSource(
-            readRepositoryFile(
-              "supabase/migrations/002_v1_rls.sql",
-            ),
-          );
-
-
         expect(
           source,
         ).toContain(
-          "aal2",
+          "to authenticated",
+        );
+      },
+    );
+
+
+    it(
+      "explicitly revokes default anonymous access",
+      () => {
+        expect(
+          source,
+        ).toContain(
+          "from anon, authenticated",
         );
       },
     );
@@ -615,7 +736,6 @@ describe(
         "supabase/migrations/002_v1_rls.sql",
       );
 
-
     const policyStatements =
       rlsMigration
         .split(
@@ -633,7 +753,7 @@ describe(
 
 
     it(
-      "defines audit policies explicitly",
+      "defines audit policies",
       () => {
         expect(
           policyStatements.length,
@@ -655,7 +775,6 @@ describe(
               ),
           );
 
-
         expect(
           updatePolicies,
         ).toHaveLength(
@@ -676,7 +795,6 @@ describe(
               ),
           );
 
-
         expect(
           deletePolicies,
         ).toHaveLength(
@@ -696,13 +814,12 @@ describe(
   "audit application writer",
   () => {
     it(
-      "does not call update or delete on audit records",
+      "does not update or delete audit records",
       () => {
         const source =
           readRepositoryFile(
             "lib/audit.ts",
           );
-
 
         expect(
           source,
@@ -720,7 +837,7 @@ describe(
 
 
     it(
-      "contains an insert path for audit events",
+      "contains the insert path for audit events",
       () => {
         const source =
           normalizeSource(
@@ -728,7 +845,6 @@ describe(
               "lib/audit.ts",
             ),
           );
-
 
         expect(
           source,
@@ -792,7 +908,6 @@ describe(
             )
             .toLowerCase();
 
-
         const prohibited =
           [
             "transfer_money",
@@ -828,7 +943,6 @@ describe(
             )
             .toLowerCase();
 
-
         const prohibited =
           [
             "send_email",
@@ -838,7 +952,7 @@ describe(
             "execute_sql",
             "delete_record",
             "change_password",
-            "disable_mfa",
+            "change_authentication",
           ];
 
 
@@ -876,7 +990,7 @@ describe(
 
 
     it(
-      "/api/ai requires the AAL2 API boundary",
+      "/api/ai uses the centralized user-id authorization boundary",
       () => {
         expect(
           aiRoute,
@@ -888,7 +1002,7 @@ describe(
 
 
     it(
-      "/api/opportunities requires the AAL2 API boundary",
+      "/api/opportunities uses the centralized user-id authorization boundary",
       () => {
         expect(
           opportunityRoute,
@@ -922,7 +1036,7 @@ describe(
 
 
     it(
-      "both routes perform origin validation",
+      "both private AI routes validate request origin",
       () => {
         expect(
           aiRoute,
@@ -949,13 +1063,12 @@ describe(
   "AI route mode restriction",
   () => {
     it(
-      "does not expose a generic execution mode",
+      "does not expose generic execution modes",
       () => {
         const source =
           readRepositoryFile(
             "app/api/ai/route.ts",
           );
-
 
         expect(
           source,
@@ -969,11 +1082,6 @@ describe(
           /z\.literal\s*\(\s*"decision"/,
         );
 
-
-        /**
-         * Search only executable request-schema definitions,
-         * not security comments explaining forbidden modes.
-         */
         expect(
           source,
         ).not.toMatch(
@@ -1012,7 +1120,6 @@ describe(
             "app/api/opportunities/route.ts",
           );
 
-
         const categories =
           [
             "course",
@@ -1038,13 +1145,12 @@ describe(
 
 
     it(
-      "contains explicit external URL protocol validation",
+      "contains external URL protocol validation",
       () => {
         const source =
           readRepositoryFile(
             "app/api/opportunities/route.ts",
           );
-
 
         expect(
           source,
@@ -1064,7 +1170,7 @@ describe(
 
 
 /* =========================================================
- * 17. PRIVATE PAGE AAL2 GUARDS
+ * 17. PRIVATE PAGE AUTHENTICATION GUARDS
  * ======================================================= */
 
 describe(
@@ -1089,14 +1195,19 @@ describe(
       const page of privatePages
     ) {
       it(
-        `${page} contains an AAL2 page guard`,
+        `${page} contains the centralized private-page guard`,
         () => {
           const source =
             readRepositoryFile(
               page,
             );
 
-
+          /**
+           * The legacy function name is intentionally kept.
+           *
+           * lib/auth.ts now maps it to the normal verified
+           * authenticated identity guard.
+           */
           expect(
             source,
           ).toContain(
@@ -1124,7 +1235,6 @@ describe(
             "app/assistant/page.tsx",
           );
 
-
         expect(
           source,
         ).not.toMatch(
@@ -1147,7 +1257,6 @@ describe(
           readRepositoryFile(
             "app/assistant/page.tsx",
           );
-
 
         expect(
           source,
@@ -1192,12 +1301,8 @@ describe(
 
 
     it(
-      "does not accept a browser-controlled next destination",
+      "does not accept browser-controlled redirect destinations",
       () => {
-        /**
-         * Security check is intentionally targeted at query
-         * retrieval rather than comments.
-         */
         expect(
           source,
         ).not.toMatch(
@@ -1220,7 +1325,25 @@ describe(
 
 
     it(
-      "does not invoke AI from the authentication callback",
+      "does not route authenticated users into an MFA step",
+      () => {
+        expect(
+          source,
+        ).not.toContain(
+          "?step=mfa",
+        );
+
+        expect(
+          source,
+        ).not.toContain(
+          "?step=enroll",
+        );
+      },
+    );
+
+
+    it(
+      "does not invoke AI",
       () => {
         expect(
           source,
@@ -1240,7 +1363,52 @@ describe(
 
 
 /* =========================================================
- * 20. SECURITY HEADERS
+ * 20. ROOT AUTH ROUTING
+ * ======================================================= */
+
+describe(
+  "root authentication routing",
+  () => {
+    const source =
+      readRepositoryFile(
+        "app/page.tsx",
+      );
+
+
+    it(
+      "routes signed-in users to the authenticated workspace",
+      () => {
+        expect(
+          source,
+        ).toContain(
+          "DEFAULT_AUTHENTICATED_ROUTE",
+        );
+      },
+    );
+
+
+    it(
+      "does not route through MFA screens",
+      () => {
+        expect(
+          source,
+        ).not.toContain(
+          "?step=mfa",
+        );
+
+        expect(
+          source,
+        ).not.toContain(
+          "?step=enroll",
+        );
+      },
+    );
+  },
+);
+
+
+/* =========================================================
+ * 21. SECURITY HEADERS
  * ======================================================= */
 
 describe(
@@ -1329,7 +1497,7 @@ describe(
 
 
 /* =========================================================
- * 21. GITHUB DATA SAFETY
+ * 22. GITHUB DATA SAFETY
  * ======================================================= */
 
 describe(
@@ -1344,7 +1512,6 @@ describe(
               "supabase/seed.sql",
             ),
           );
-
 
         expect(
           source,
@@ -1362,7 +1529,7 @@ describe(
 
 
     it(
-      "does not contain obvious consumer email domains in the synthetic seed",
+      "does not contain common consumer email domains in the seed",
       () => {
         const source =
           normalizeSource(
@@ -1370,7 +1537,6 @@ describe(
               "supabase/seed.sql",
             ),
           );
-
 
         const forbiddenDomains =
           [
@@ -1398,7 +1564,7 @@ describe(
 
 
 /* =========================================================
- * 22. CLIENT SECRET ISOLATION
+ * 23. CLIENT SECRET ISOLATION
  * ======================================================= */
 
 describe(
@@ -1411,7 +1577,6 @@ describe(
           readRepositoryFile(
             "lib/supabase/client.ts",
           );
-
 
         expect(
           source,
@@ -1430,7 +1595,6 @@ describe(
             "app/assistant/page.tsx",
           );
 
-
         expect(
           source,
         ).not.toContain(
@@ -1441,13 +1605,12 @@ describe(
 
 
     it(
-      "does not expose the OpenAI key as a NEXT_PUBLIC variable",
+      "does not expose the OpenAI key as NEXT_PUBLIC",
       () => {
         const source =
           readRepositoryFile(
             ".env.example",
           );
-
 
         expect(
           source,
@@ -1461,14 +1624,14 @@ describe(
 
 
 /* =========================================================
- * 23. NO BANK / BROKER INTEGRATION
+ * 24. NO BANK / BROKER INTEGRATION
  * ======================================================= */
 
 describe(
   "V1 execution boundary",
   () => {
     it(
-      "does not include bank or brokerage environment credentials",
+      "does not include bank or brokerage credentials",
       () => {
         const source =
           normalizeSource(
@@ -1476,7 +1639,6 @@ describe(
               ".env.example",
             ),
           );
-
 
         const prohibited =
           [
@@ -1505,14 +1667,14 @@ describe(
 
 
 /* =========================================================
- * 24. DATABASE OWNERSHIP COLUMN
+ * 25. DATABASE OWNERSHIP MODEL
  * ======================================================= */
 
 describe(
   "database ownership model",
   () => {
     it(
-      "defines user ownership across the V1 schema",
+      "defines all V1 user-owned tables",
       () => {
         const source =
           normalizeSource(
@@ -1520,7 +1682,6 @@ describe(
               "supabase/migrations/001_v1_schema.sql",
             ),
           );
-
 
         for (
           const table of USER_OWNED_TABLES
@@ -1531,7 +1692,19 @@ describe(
             table,
           );
         }
+      },
+    );
 
+
+    it(
+      "defines the user ownership column",
+      () => {
+        const source =
+          normalizeSource(
+            readRepositoryFile(
+              "supabase/migrations/001_v1_schema.sql",
+            ),
+          );
 
         expect(
           source,
@@ -1545,84 +1718,88 @@ describe(
 
 
 /* =========================================================
- * 25. SECURITY TEST ISOLATION
+ * 26. SECURITY TEST ISOLATION
  * ======================================================= */
 
 /**
- * security.test.ts is intentionally static / deterministic.
+ * security.test.ts remains static and deterministic.
  *
  * It does not require:
  *
- * production Supabase
- * a real authentication session
- * OpenAI
- * internet access
- * production secrets
- *
- *
- * This means the security contract can be checked on every
- * GitHub Actions run safely.
+ * - production Supabase access
+ * - a real user session
+ * - OpenAI
+ * - internet access
+ * - production secrets
  */
 
 
 /* =========================================================
- * 26. DEFENSE-IN-DEPTH RULE
+ * 27. DEFENSE IN DEPTH
  * ======================================================= */
 
 /**
- * LIFE OS security is not one test or one component.
- *
- * Expected layers:
+ * LIFE OS V1 security:
  *
  * Git secret hygiene
  *      ↓
  * Environment validation
  *      ↓
- * Supabase authentication
+ * Email + password
  *      ↓
- * TOTP / AAL2
+ * Verified Supabase JWT
  *      ↓
  * Server authorization
  *      ↓
- * PostgreSQL RLS
+ * PostgreSQL FORCE RLS
+ *      ↓
+ * user_id ownership
  *      ↓
  * AI allow-list
  *      ↓
- * Audit trail
+ * append-oriented audit trail
+ *
+ *
+ * Password-only authentication intentionally replaces the
+ * previous mandatory MFA requirement.
+ *
+ * Removing MFA does NOT remove:
+ *
+ * - verified JWT checks
+ * - private route guards
+ * - server authorization
+ * - RLS
+ * - row ownership
+ * - secret isolation
  */
 
 
 /* =========================================================
- * 27. SECURITY REGRESSION RULE
+ * 28. SECURITY REGRESSION RULE
  * ======================================================= */
 
 /**
  * These tests intentionally fail if a future change:
  *
- * removes RLS
- * removes FORCE RLS
- * adds a service-role runtime credential
- * restores middleware.ts
- * bypasses verified claims
- * removes AAL2 page guards
- * exposes an execution AI tool
- * makes audit history editable
- * exposes unsafe external URLs
- * places secrets in client code
+ * - removes RLS
+ * - removes FORCE RLS
+ * - adds a service-role runtime credential
+ * - restores middleware.ts
+ * - bypasses verified claims
+ * - removes private page guards
+ * - restores mandatory MFA into the login flow
+ * - exposes an execution AI tool
+ * - makes audit history editable
+ * - places secrets in browser code
  */
 
 
 /* =========================================================
- * 28. FINAL SECURITY TEST RULE
+ * 29. FINAL SECURITY TEST RULE
  * ======================================================= */
 
 /**
- * Security changes should not rely on:
- *
- * "I think this is still safe."
- *
- *
- * They should be able to survive:
+ * Security changes should survive:
  *
  * npm test
  * npm run typecheck
@@ -1630,6 +1807,6 @@ describe(
  * npm run build
  *
  *
- * Trust the architecture.
- * Verify the implementation.
+ * Simple outside.
+ * Protected underneath.
  */
