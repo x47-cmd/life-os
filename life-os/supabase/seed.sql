@@ -621,8 +621,7 @@ begin
     'high',
     current_date - 90,
     current_date + 120,
-    'إكمال الواجهة الرئيسية',
-    current_date - 90
+    'إكمال الواجهة الرئيسية'
   ),
   (
     v_project_education,
@@ -636,21 +635,12 @@ begin
     'high',
     current_date - 30,
     current_date + 300,
-    'مراجعة المادة التعليمية التالية',
-    current_date - 30
+    'مراجعة المادة التعليمية التالية'
   );
 
 
-  -- =======================================================
-  -- NOTE:
-  --
-  -- The previous INSERT includes an accidental additional
-  -- value if written using a mismatched column list.
-  --
-  -- To keep this seed deterministic and valid, the projects
-  -- data is normalized immediately below by replacing the
-  -- section correctly.
-  -- =======================================================
+  raise notice
+    'LIFE OS synthetic development seed completed successfully.';
 
 end;
 $$;
