@@ -1,127 +1,261 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+
+import {
+  usePathname,
+} from "next/navigation";
 
 import {
   APP_NAME,
-  NAVIGATION_ITEMS,
   SETTINGS_ROUTE,
 } from "@/lib/constants";
 
 
 /* =========================================================
- * 1. ROUTE HELPERS
+ * LIFE OS V2
+ * TOPBAR
+ *
+ * The Topbar should show the user's current LIFE AREA,
+ * not expose the internal database/page structure.
+ *
+ * V2 areas:
+ *
+ * الرئيسية
+ * المال
+ * خططي
+ * السفر
+ * التطوير
+ * LIFE AI
+ *
+ * Legacy routes remain accessible during migration, but
+ * their labels are mapped to the new V2 information
+ * architecture.
+ * ======================================================= */
+
+
+/* =========================================================
+ * 1. TYPES
+ * ======================================================= */
+
+interface LifeArea {
+  label: string;
+  routes: readonly string[];
+}
+
+
+/* =========================================================
+ * 2. V2 LIFE AREAS
  * ======================================================= */
 
 /**
- * Matches both:
+ * Multiple existing V1 routes can belong to one V2 area.
+ *
+ * Example:
  *
  * /finance
+ * /investments
  *
- * and nested paths such as:
+ * both belong to:
  *
- * /finance/history
+ * المال
+ *
+ *
+ * /goals
+ * /projects
+ *
+ * both belong to:
+ *
+ * خططي
+ *
+ *
+ * /career
+ * /learning
+ *
+ * both belong to:
+ *
+ * التطوير
  */
+
+const LIFE_AREAS: readonly LifeArea[] = [
+  {
+    label: "الرئيسية",
+    routes: [
+      "/dashboard",
+    ],
+  },
+
+  {
+    label: "المال",
+    routes: [
+      "/finance",
+      "/investments",
+    ],
+  },
+
+  {
+    label: "خططي",
+    routes: [
+      "/goals",
+      "/projects",
+    ],
+  },
+
+  {
+    label: "السفر",
+    routes: [
+      "/travel",
+    ],
+  },
+
+  {
+    label: "التطوير",
+    routes: [
+      "/career",
+      "/learning",
+    ],
+  },
+
+  {
+    label: "LIFE AI",
+    routes: [
+      "/assistant",
+    ],
+  },
+
+  /*
+   * Temporary V2 transition areas.
+   *
+   * These are not primary navigation items anymore.
+   * They remain available under "المزيد".
+   */
+
+  {
+    label: "المهام",
+    routes: [
+      "/tasks",
+    ],
+  },
+
+  {
+    label: "السجل",
+    routes: [
+      "/audit",
+    ],
+  },
+
+  {
+    label: "الإعدادات",
+    routes: [
+      "/settings",
+    ],
+  },
+];
+
+
+/* =========================================================
+ * 3. ROUTE HELPERS
+ * ======================================================= */
+
 function isRouteMatch(
   pathname: string,
-  href: string,
+  route: string,
 ): boolean {
   return (
-    pathname === href ||
+    pathname === route ||
     pathname.startsWith(
-      `${href}/`,
+      `${route}/`,
     )
   );
 }
 
 
 /**
- * Returns the most specific matching navigation item.
+ * Returns the V2 area that contains the current route.
  *
- * Sorting by href length prevents a shorter parent route from
- * winning when a more specific route exists.
+ * The user should see:
+ *
+ * "المال"
+ *
+ * rather than needing to understand whether the internal
+ * page is technically:
+ *
+ * finance
+ *
+ * or:
+ *
+ * investments
  */
-function getCurrentNavigationItem(
+function getCurrentLifeArea(
   pathname: string,
-) {
-  return [
-    ...NAVIGATION_ITEMS,
-  ]
-    .sort(
-      (
-        a,
-        b,
-      ) =>
-        b.href.length -
-        a.href.length,
-    )
-    .find(
-      (item) =>
-        isRouteMatch(
-          pathname,
-          item.href,
-        ),
-    );
+): LifeArea | undefined {
+  return LIFE_AREAS.find(
+    (area) =>
+      area.routes.some(
+        (route) =>
+          isRouteMatch(
+            pathname,
+            route,
+          ),
+      ),
+  );
 }
 
 
 /* =========================================================
- * 2. TOPBAR
+ * 4. TOPBAR
  * ======================================================= */
 
 export function Topbar() {
   const pathname =
     usePathname();
 
-  const currentItem =
-    getCurrentNavigationItem(
+
+  const currentArea =
+    getCurrentLifeArea(
       pathname,
     );
 
+
   const pageLabel =
-    currentItem?.label ??
+    currentArea?.label ??
     APP_NAME;
+
 
   return (
     <header className="topbar">
       <div className="topbar__inner">
 
         {/* ===============================================
-         * CURRENT CONTEXT
+         * CURRENT LIFE AREA
          * ============================================= */}
 
         <div className="topbar__context">
+
           <span className="topbar__eyebrow">
             {APP_NAME}
           </span>
 
+
           <span className="topbar__page-title">
             {pageLabel}
           </span>
+
         </div>
 
 
         {/* ===============================================
-         * SYSTEM / ACCOUNT AREA
+         * ACCOUNT / SETTINGS
          * ============================================= */}
 
         <div className="topbar__actions">
 
-          <div
-            className="topbar__status"
-            title="مساحة LIFE OS الخاصة"
-          >
-            <span
-              className="topbar__status-dot"
-              aria-hidden="true"
-            />
-
-            <span className="topbar__status-text">
-              خاص وآمن
-            </span>
-          </div>
-
+          {/*
+           * Keep this area deliberately quiet.
+           *
+           * Security should be real underneath rather than
+           * represented by unnecessary permanent badges.
+           */}
 
           <Link
             href={
@@ -141,6 +275,7 @@ export function Topbar() {
               الإعدادات
             </span>
           </Link>
+
         </div>
       </div>
     </header>
@@ -149,137 +284,114 @@ export function Topbar() {
 
 
 /* =========================================================
- * 3. CLIENT COMPONENT RULE
+ * 5. V2 INFORMATION ARCHITECTURE RULE
  * ======================================================= */
 
 /**
- * Topbar intentionally uses:
+ * Topbar represents user-facing LIFE OS areas.
  *
- * "use client"
+ * It must NOT simply mirror:
  *
- * only because usePathname() is required to display the
- * current application context.
+ * database tables
+ * internal routes
+ * backend entities
  *
- * It does NOT:
  *
- * - fetch data
- * - access Supabase
- * - access OpenAI
+ * Example:
+ *
+ * /finance
+ * /investments
+ *
+ * both appear to the user as:
+ *
+ * المال
+ *
+ *
+ * /goals
+ * /projects
+ *
+ * both appear as:
+ *
+ * خططي
+ */
+
+
+/* =========================================================
+ * 6. CLIENT COMPONENT RULE
+ * ======================================================= */
+
+/**
+ * Topbar is a Client Component only because usePathname()
+ * is required.
+ *
+ * It does not:
+ *
+ * - fetch user data
+ * - query Supabase
+ * - call AI
+ * - modify data
  * - manage authentication
- *
- * AppShell itself remains server-first.
  */
 
 
 /* =========================================================
- * 4. PAGE TITLE RULE
+ * 7. SECURITY DISPLAY RULE
  * ======================================================= */
 
 /**
- * Topbar displays the broad current area:
+ * V2 does not display a permanent visual claim such as:
  *
- * Dashboard
- * Goals
- * Projects
- * Finance
- * Investments
- * Career
- * Learning
- * Tasks
- * Assistant
- * Audit
- * Settings
+ * "خاص وآمن"
  *
- * Detailed page titles belong to:
+ * simply because the user is inside the application.
  *
- * components/page-header.tsx
+ * Actual protection belongs to:
  *
- * This avoids duplicating large headings.
- */
-
-
-/* =========================================================
- * 5. SECURITY STATUS RULE
- * ======================================================= */
-
-/**
- * "خاص وآمن" is a product-status label only.
- *
- * It does NOT make an independent authentication claim.
- *
- * Actual security remains enforced by:
- *
- * Supabase Auth
- *      ↓
- * verified JWT
- *      ↓
- * MFA / AAL2
- *      ↓
- * server authorization
- *      ↓
+ * Supabase authentication
+ * verified server session
+ * server-side authorization
  * PostgreSQL RLS
  *
- * Never derive real authentication state from this visual
- * component.
+ * Security UI shown later inside Settings must reflect the
+ * real authentication configuration.
  */
 
 
 /* =========================================================
- * 6. ACCOUNT AREA RULE
+ * 8. MOBILE RULE
  * ======================================================= */
 
 /**
- * V1 deliberately avoids placing personal identifiers such as
- * email address in the persistent topbar.
+ * On mobile the Topbar should remain extremely simple:
  *
- * Benefits:
+ * Menu
+ * +
+ * Current area
  *
- * - less visual clutter
- * - less shoulder-surfing exposure
- * - fewer unnecessary personal details on every screen
+ * Secondary account labels may be hidden by CSS.
  *
- * Account and security controls live inside Settings.
+ * Detailed page titles belong inside the page itself.
  */
 
 
 /* =========================================================
- * 7. MOBILE RULE
+ * 9. FINAL V2 RULE
  * ======================================================= */
 
 /**
- * On small screens:
+ * A user should never open LIFE OS and wonder:
  *
- * - Sidebar trigger remains available.
- * - Current page remains visible.
- * - Secondary labels may be hidden by CSS.
- * - No horizontal scrolling should be introduced.
+ * "هل الاستثمار منفصل عن المال؟"
  *
- * Exact responsive behavior is centralized later in:
+ * "هل المشروع منفصل عن هدفي؟"
  *
- * app/globals.css
- */
-
-
-/* =========================================================
- * 8. FINAL TOPBAR RULE
- * ======================================================= */
-
-/**
- * Topbar answers only:
+ * "هل الجامعة داخل Career أو Learning؟"
  *
- * Where am I?
- * Is this my private LIFE OS workspace?
- * Where are settings?
  *
- * Nothing more.
+ * LIFE OS handles that complexity underneath.
  *
- * No:
+ * The interface exposes only clear life areas.
  *
- * - portfolio ticker
- * - salary number
- * - notifications feed
- * - AI recommendations
- * - decorative dashboard statistics
- *
- * Those belong inside the relevant page content.
+ * Simple outside.
+ * Intelligent underneath.
  */
