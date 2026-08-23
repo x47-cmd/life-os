@@ -25,14 +25,11 @@ import type {
   TaskStatus,
 } from "@/lib/types";
 
-
-/* =========================================================
- * 1. APPLICATION IDENTITY
- * ======================================================= */
-
 export const APP_NAME = "LIFE OS";
 
-export const APP_VERSION = "1.0.0";
+export const APP_VERSION = "2.0.0-beta.1";
+
+export const APP_PHASE = "V2";
 
 export const APP_DESCRIPTION =
   "Personal AI Operating System";
@@ -46,11 +43,6 @@ export const APP_DIRECTION = "rtl";
 export const DEFAULT_CURRENCY = "AED";
 
 export const DEFAULT_TIMEZONE = "Asia/Dubai";
-
-
-/* =========================================================
- * 2. PRODUCT PRINCIPLES
- * ======================================================= */
 
 export const PRODUCT_PRINCIPLE =
   "Simple outside. Intelligent underneath.";
@@ -70,21 +62,11 @@ export const MAX_DASHBOARD_TASKS = 5;
 
 export const MAX_DASHBOARD_LEARNING_ITEMS = 5;
 
-
-/* =========================================================
- * 3. PAGINATION
- * ======================================================= */
-
 export const DEFAULT_PAGE_SIZE = 20;
 
 export const AUDIT_PAGE_SIZE = 50;
 
 export const MAX_PAGE_SIZE = 100;
-
-
-/* =========================================================
- * 4. AI LIMITS
- * ======================================================= */
 
 export const AI_MAX_USER_MESSAGE_LENGTH = 4_000;
 
@@ -102,11 +84,6 @@ export const OPPORTUNITY_MIN_FIT_SCORE = 0;
 
 export const OPPORTUNITY_MAX_FIT_SCORE = 100;
 
-
-/* =========================================================
- * 5. PRIORITIES
- * ======================================================= */
-
 export const PRIORITIES = [
   "low",
   "medium",
@@ -118,11 +95,6 @@ export const PRIORITY_LABELS: Record<Priority, string> = {
   medium: "متوسط",
   high: "مرتفع",
 };
-
-
-/* =========================================================
- * 6. FREQUENCIES
- * ======================================================= */
 
 export const FREQUENCIES = [
   "monthly",
@@ -137,11 +109,6 @@ export const FREQUENCY_LABELS: Record<Frequency, string> = {
   one_time: "مرة واحدة",
   other: "أخرى",
 };
-
-
-/* =========================================================
- * 7. GOALS
- * ======================================================= */
 
 export const GOAL_STATUSES = [
   "planned",
@@ -187,11 +154,6 @@ export const GOAL_CATEGORY_LABELS: Record<
   personal: "شخصي",
   other: "أخرى",
 };
-
-
-/* =========================================================
- * 8. PROJECTS
- * ======================================================= */
 
 export const PROJECT_STATUSES = [
   "planned",
@@ -243,11 +205,6 @@ export const PROJECT_CATEGORY_LABELS: Record<
   other: "أخرى",
 };
 
-
-/* =========================================================
- * 9. TASKS
- * ======================================================= */
-
 export const TASK_STATUSES = [
   "pending",
   "active",
@@ -261,11 +218,6 @@ export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
   completed: "مكتمل",
   cancelled: "ملغي",
 };
-
-
-/* =========================================================
- * 10. FINANCE
- * ======================================================= */
 
 export const BUDGET_CATEGORIES = [
   "family",
@@ -315,11 +267,6 @@ export const BUDGET_ITEM_TYPE_LABELS: Record<
   debt: "التزام",
 };
 
-
-/* =========================================================
- * 11. INVESTMENTS
- * ======================================================= */
-
 export const INVESTMENT_ASSET_TYPES = [
   "stock",
   "etf",
@@ -359,11 +306,6 @@ export const INVESTMENT_TRANSACTION_TYPE_LABELS: Record<
   fee: "رسوم",
   adjustment: "تعديل",
 };
-
-
-/* =========================================================
- * 12. LEARNING
- * ======================================================= */
 
 export const LEARNING_ITEM_TYPES = [
   "course",
@@ -405,11 +347,6 @@ export const LEARNING_STATUS_LABELS: Record<
   dropped: "متوقف",
 };
 
-
-/* =========================================================
- * 13. CAREER
- * ======================================================= */
-
 export const CAREER_ITEM_TYPES = [
   "current_role",
   "target_role",
@@ -448,11 +385,6 @@ export const CAREER_STATUS_LABELS: Record<
   archived: "مؤرشف",
 };
 
-
-/* =========================================================
- * 14. MEMORY
- * ======================================================= */
-
 export const MEMORY_CATEGORIES = [
   "finance",
   "investments",
@@ -487,11 +419,6 @@ export const MEMORY_CATEGORY_LABELS: Record<
   decision: "قرار",
   other: "أخرى",
 };
-
-
-/* =========================================================
- * 15. AI RECOMMENDATIONS
- * ======================================================= */
 
 export const AI_RECOMMENDATION_CATEGORIES = [
   "general",
@@ -552,11 +479,6 @@ export const AI_RECOMMENDATION_ENTITY_TYPES = [
   "task",
 ] as const satisfies readonly AIRecommendationEntityType[];
 
-
-/* =========================================================
- * 16. AI TOOLS
- * ======================================================= */
-
 export const AI_TOOL_NAMES = [
   "get_dashboard_snapshot",
   "get_finance_snapshot",
@@ -566,11 +488,6 @@ export const AI_TOOL_NAMES = [
   "simulate_decision",
   "search_opportunities",
 ] as const satisfies readonly AIToolName[];
-
-
-/* =========================================================
- * 17. PROHIBITED AI ACTIONS
- * ======================================================= */
 
 export const PROHIBITED_AI_ACTIONS = [
   "transfer_money",
@@ -585,11 +502,6 @@ export const PROHIBITED_AI_ACTIONS = [
   "execute_sql",
   "execute_shell_command",
 ] as const satisfies readonly ProhibitedAIAction[];
-
-
-/* =========================================================
- * 18. OPPORTUNITIES
- * ======================================================= */
 
 export const OPPORTUNITY_CATEGORIES = [
   "course",
@@ -629,39 +541,19 @@ export const OPPORTUNITY_RECOMMENDATION_LABELS: Record<
   skip: "تجاوزها",
 };
 
-
-/* =========================================================
- * 19. CAREER RATING
- * ======================================================= */
-
 export const CAREER_RATING_MIN = 1;
 
 export const CAREER_RATING_MAX = 5;
 
-
-/* =========================================================
- * 20. PROGRESS
- * ======================================================= */
-
 export const PROGRESS_MIN = 0;
 
 export const PROGRESS_MAX = 100;
-
-
-/* =========================================================
- * 21. FINANCIAL LIMITS
- * ======================================================= */
 
 export const MONEY_MIN = 0;
 
 export const DUE_DAY_MIN = 1;
 
 export const DUE_DAY_MAX = 31;
-
-
-/* =========================================================
- * 22. TEXT LIMITS
- * ======================================================= */
 
 export const TITLE_MIN_LENGTH = 1;
 
@@ -675,21 +567,11 @@ export const MEMORY_CONTENT_MAX_LENGTH = 4_000;
 
 export const AI_RECOMMENDATION_MAX_LENGTH = 2_000;
 
-
-/* =========================================================
- * 23. DASHBOARD PRIORITY ORDER
- * ======================================================= */
-
 export const PRIORITY_WEIGHT: Record<Priority, number> = {
   high: 3,
   medium: 2,
   low: 1,
 };
-
-
-/* =========================================================
- * 24. NAVIGATION
- * ======================================================= */
 
 export const NAVIGATION_ITEMS = [
   {
@@ -698,9 +580,37 @@ export const NAVIGATION_ITEMS = [
     icon: "⌂",
   },
   {
-    label: "الأهداف",
+    label: "المال",
+    href: "/finance",
+    icon: "◈",
+  },
+  {
+    label: "خططي",
     href: "/goals",
     icon: "◎",
+  },
+  {
+    label: "السفر",
+    href: "/travel",
+    icon: "✈",
+  },
+  {
+    label: "التطوير",
+    href: "/learning",
+    icon: "◉",
+  },
+  {
+    label: "LIFE AI",
+    href: "/assistant",
+    icon: "✦",
+  },
+] as const satisfies readonly NavigationItem[];
+
+export const LEGACY_NAVIGATION_ITEMS = [
+  {
+    label: "الاستثمارات",
+    href: "/investments",
+    icon: "↗",
   },
   {
     label: "المشاريع",
@@ -708,34 +618,14 @@ export const NAVIGATION_ITEMS = [
     icon: "▣",
   },
   {
-    label: "المالية",
-    href: "/finance",
-    icon: "◈",
-  },
-  {
-    label: "الاستثمارات",
-    href: "/investments",
-    icon: "↗",
-  },
-  {
     label: "المسار المهني",
     href: "/career",
     icon: "◇",
   },
   {
-    label: "التعلم",
-    href: "/learning",
-    icon: "◉",
-  },
-  {
     label: "المهام",
     href: "/tasks",
     icon: "✓",
-  },
-  {
-    label: "المساعد الذكي",
-    href: "/assistant",
-    icon: "✦",
   },
   {
     label: "السجل",
@@ -749,10 +639,17 @@ export const NAVIGATION_ITEMS = [
   },
 ] as const satisfies readonly NavigationItem[];
 
+export const HOME_ROUTE = "/dashboard";
 
-/* =========================================================
- * 25. ROUTES
- * ======================================================= */
+export const MONEY_ROUTE = "/finance";
+
+export const PLANS_ROUTE = "/goals";
+
+export const TRAVEL_ROUTE = "/travel";
+
+export const GROWTH_ROUTE = "/learning";
+
+export const LIFE_AI_ROUTE = "/assistant";
 
 export const PUBLIC_ROUTES = [
   "/",
@@ -762,32 +659,23 @@ export const PUBLIC_ROUTES = [
 
 export const PROTECTED_ROUTES = [
   "/dashboard",
-  "/goals",
-  "/projects",
   "/finance",
-  "/investments",
-  "/career",
+  "/goals",
+  "/travel",
   "/learning",
-  "/tasks",
   "/assistant",
+  "/investments",
+  "/projects",
+  "/career",
+  "/tasks",
   "/audit",
   "/settings",
 ] as const;
-
-
-/* =========================================================
- * 26. API ROUTES
- * ======================================================= */
 
 export const AI_API_ROUTE = "/api/ai";
 
 export const OPPORTUNITIES_API_ROUTE =
   "/api/opportunities";
-
-
-/* =========================================================
- * 27. DEFAULT USER-FACING ERRORS
- * ======================================================= */
 
 export const USER_ERRORS = {
   generic: "تعذر تنفيذ الطلب الآن.",
@@ -803,11 +691,6 @@ export const USER_ERRORS = {
     "تعذر البحث عن الفرص الآن.",
 } as const;
 
-
-/* =========================================================
- * 28. EMPTY STATE MESSAGES
- * ======================================================= */
-
 export const EMPTY_STATE_MESSAGES = {
   goals: {
     title: "لا توجد أهداف بعد",
@@ -816,27 +699,32 @@ export const EMPTY_STATE_MESSAGES = {
 
   projects: {
     title: "لا توجد مشاريع بعد",
-    description: "أضف مشروعًا عندما يكون لديك هدف متعدد الخطوات.",
+    description:
+      "أضف مشروعًا عندما يكون لديك هدف متعدد الخطوات.",
   },
 
   finance: {
     title: "لا توجد بيانات مالية بعد",
-    description: "ابدأ بإضافة مصدر الدخل والتوزيعات الأساسية.",
+    description:
+      "ابدأ بإضافة مصدر الدخل والتوزيعات الأساسية.",
   },
 
   investments: {
     title: "لا توجد استثمارات بعد",
-    description: "أضف أول أصل استثماري لمتابعة المحفظة.",
+    description:
+      "أضف أول أصل استثماري لمتابعة المحفظة.",
   },
 
   career: {
     title: "لا توجد بيانات مهنية بعد",
-    description: "ابدأ بإضافة دورك الحالي أو هدفك المهني.",
+    description:
+      "ابدأ بإضافة دورك الحالي أو هدفك المهني.",
   },
 
   learning: {
     title: "لا توجد عناصر تعليمية بعد",
-    description: "أضف الدورة أو البرنامج الذي تعمل عليه حاليًا.",
+    description:
+      "أضف الدورة أو البرنامج الذي تعمل عليه حاليًا.",
   },
 
   tasks: {
@@ -846,14 +734,10 @@ export const EMPTY_STATE_MESSAGES = {
 
   audit: {
     title: "لا يوجد نشاط مسجل بعد",
-    description: "ستظهر هنا العمليات المهمة داخل LIFE OS.",
+    description:
+      "ستظهر هنا العمليات المهمة داخل LIFE OS.",
   },
 } as const;
-
-
-/* =========================================================
- * 29. SORTING RULES
- * ======================================================= */
 
 export const STATUS_SORT_WEIGHT = {
   active: 5,
@@ -866,11 +750,6 @@ export const STATUS_SORT_WEIGHT = {
   dropped: 1,
   cancelled: 0,
 } as const;
-
-
-/* =========================================================
- * 30. DATE / TIME DISPLAY
- * ======================================================= */
 
 export const DATE_DISPLAY_OPTIONS = {
   year: "numeric",
@@ -886,31 +765,16 @@ export const DATE_TIME_DISPLAY_OPTIONS = {
   minute: "2-digit",
 } as const satisfies Intl.DateTimeFormatOptions;
 
-
-/* =========================================================
- * 31. CURRENCY DISPLAY
- * ======================================================= */
-
 export const CURRENCY_DISPLAY_OPTIONS = {
   style: "currency",
   currencyDisplay: "symbol",
   maximumFractionDigits: 2,
 } as const satisfies Intl.NumberFormatOptions;
 
-
-/* =========================================================
- * 32. PERCENT DISPLAY
- * ======================================================= */
-
 export const PERCENT_DISPLAY_OPTIONS = {
   minimumFractionDigits: 0,
   maximumFractionDigits: 1,
 } as const satisfies Intl.NumberFormatOptions;
-
-
-/* =========================================================
- * 33. AUDIT
- * ======================================================= */
 
 export const AUDIT_METADATA_MAX_KEYS = 10;
 
@@ -933,11 +797,6 @@ export const FORBIDDEN_AUDIT_METADATA_KEYS = [
   "openai_api_key",
 ] as const;
 
-
-/* =========================================================
- * 34. AUTHENTICATION
- * ======================================================= */
-
 export const REQUIRED_AUTHENTICATION_LEVEL = "aal1";
 
 export const LOGIN_ROUTE = "/login";
@@ -946,11 +805,6 @@ export const SETTINGS_ROUTE = "/settings";
 
 export const DEFAULT_AUTHENTICATED_ROUTE =
   "/dashboard";
-
-
-/* =========================================================
- * 35. SECURITY
- * ======================================================= */
 
 export const SENSITIVE_QUERY_PARAMETER_NAMES = [
   "password",
@@ -963,11 +817,6 @@ export const SENSITIVE_QUERY_PARAMETER_NAMES = [
   "salary",
   "investment_balance",
 ] as const;
-
-
-/* =========================================================
- * 36. LIFE OS TABLES
- * ======================================================= */
 
 export const LIFE_OS_TABLES = [
   "profiles",
@@ -986,21 +835,11 @@ export const LIFE_OS_TABLES = [
   "audit_logs",
 ] as const;
 
-
-/* =========================================================
- * 37. AI DEFAULT OUTPUT LABELS
- * ======================================================= */
-
 export const AI_OUTPUT_LABELS = {
   situation: "الوضع",
   recommendation: "الاقتراح",
   nextAction: "الخطوة التالية",
 } as const;
-
-
-/* =========================================================
- * 38. DECISION SIMULATOR LABELS
- * ======================================================= */
 
 export const DECISION_LABELS = {
   optionA: "الخيار A",
@@ -1010,11 +849,6 @@ export const DECISION_LABELS = {
   tradeoff: "المقابل",
   nextAction: "الخطوة التالية",
 } as const;
-
-
-/* =========================================================
- * 39. APPLICATION SAFETY DEFAULTS
- * ======================================================= */
 
 export const APPLICATION_SAFETY_DEFAULTS = {
   publicRegistrationEnabled: false,
@@ -1027,20 +861,3 @@ export const APPLICATION_SAFETY_DEFAULTS = {
   directBankIntegration: false,
   brokerExecution: false,
 } as const;
-
-
-/* =========================================================
- * 40. FINAL CONSTANTS RULE
- * ======================================================= */
-
-/**
- * LIFE OS constants rules:
- *
- * - Stable shared values live here.
- * - User-specific values never live here.
- * - Secrets never live here.
- * - Salary and real investment data never live here.
- * - Validation schemas reuse these values.
- * - UI labels reuse these values.
- * - AI permissions reuse these values.
- */
