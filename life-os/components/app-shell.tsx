@@ -10,6 +10,26 @@ import {
   Topbar,
 } from "@/components/topbar";
 
+import {
+  UniversalAdd,
+} from "@/components/universal-add";
+
+
+/* =========================================================
+ * LIFE OS V2
+ * APP SHELL
+ *
+ * Global authenticated application structure:
+ *
+ * Sidebar
+ * +
+ * Topbar
+ * +
+ * Main Content
+ * +
+ * Universal Add
+ * ======================================================= */
+
 
 /* =========================================================
  * 1. PROPS
@@ -24,28 +44,16 @@ export interface AppShellProps {
  * 2. APP SHELL
  * ======================================================= */
 
-/**
- * LIFE OS primary authenticated application shell.
- *
- * Structure:
- *
- * Sidebar
- *      +
- * Topbar
- *      +
- * Main Content
- *
- * This component intentionally contains no business logic,
- * authentication logic or database access.
- *
- * Protected pages remain responsible for authentication at
- * the page/server boundary.
- */
 export function AppShell({
   children,
 }: AppShellProps) {
   return (
     <div className="app-shell">
+
+      {/* ===================================================
+       * ACCESSIBILITY
+       * ================================================= */}
+
       <a
         href="#main-content"
         className="skip-link"
@@ -53,10 +61,22 @@ export function AppShell({
         انتقل إلى المحتوى الرئيسي
       </a>
 
+
+      {/* ===================================================
+       * PRIMARY NAVIGATION
+       * ================================================= */}
+
       <Sidebar />
 
+
+      {/* ===================================================
+       * WORKSPACE
+       * ================================================= */}
+
       <div className="app-shell__workspace">
+
         <Topbar />
+
 
         <main
           id="main-content"
@@ -67,7 +87,16 @@ export function AppShell({
             {children}
           </div>
         </main>
+
       </div>
+
+
+      {/* ===================================================
+       * V2 UNIVERSAL ADD
+       * ================================================= */}
+
+      <UniversalAdd />
+
     </div>
   );
 }
@@ -80,24 +109,89 @@ export function AppShell({
 /**
  * AppShell remains a Server Component.
  *
- * It does NOT use:
+ * UniversalAdd is a Client Component, but importing a Client
+ * Component inside a Server Component is supported.
+ *
+ * Therefore AppShell itself does NOT need:
  *
  * "use client"
  *
- * Client-side behavior belongs only in the smallest component
- * that actually requires browser state or interaction.
  *
- * Example:
+ * Browser interaction remains isolated inside:
  *
- * Sidebar may use client behavior for mobile navigation.
+ * components/universal-add.tsx
  *
- * The entire application shell does not need to become a
- * Client Component because of that.
+ * and:
+ *
+ * components/sidebar.tsx
  */
 
 
 /* =========================================================
- * 4. RESPONSIVE RULE
+ * 4. V2 GLOBAL ADD RULE
+ * ======================================================= */
+
+/**
+ * Universal Add belongs to the application shell rather than
+ * an individual page.
+ *
+ * This means the user can add information from anywhere:
+ *
+ * الرئيسية
+ * المال
+ * خططي
+ * السفر
+ * التطوير
+ * LIFE AI
+ *
+ *
+ * The user should never need to think:
+ *
+ * "أي صفحة أفتح أول عشان أضيف هالمعلومة؟"
+ *
+ * LIFE OS decides where the information belongs.
+ */
+
+
+/* =========================================================
+ * 5. SECURITY BOUNDARY
+ * ======================================================= */
+
+/**
+ * AppShell itself has no authority to write data.
+ *
+ * UniversalAdd:
+ *
+ * user input
+ *      ↓
+ * preview API
+ *      ↓
+ * AI understanding
+ *      ↓
+ * user confirmation
+ *
+ *
+ * A separate secure confirmed-write endpoint will later own:
+ *
+ * database mutations
+ * document persistence
+ * audit creation
+ *
+ *
+ * Permanent rule:
+ *
+ * AI Suggests
+ * →
+ * User Reviews
+ * →
+ * User Approves
+ * →
+ * System Executes
+ */
+
+
+/* =========================================================
+ * 6. RESPONSIVE RULE
  * ======================================================= */
 
 /**
@@ -108,7 +202,7 @@ export function AppShell({
  * │   Sidebar     ├───────────────────────────────┤
  * │               │                               │
  * │               │ Main Content                  │
- * │               │                               │
+ * │               │                         (+)   │
  * └───────────────┴───────────────────────────────┘
  *
  *
@@ -119,52 +213,57 @@ export function AppShell({
  * ├───────────────────────────────────────────────┤
  * │                                               │
  * │ Main Content                                  │
- * │                                               │
+ * │                                         (+)   │
  * └───────────────────────────────────────────────┘
  *
- * Sidebar mobile behavior is handled by Sidebar + CSS.
+ *
+ * UniversalAdd owns its own fixed positioning.
  */
 
 
 /* =========================================================
- * 5. ACCESSIBILITY RULE
+ * 7. ACCESSIBILITY RULE
  * ======================================================= */
 
 /**
- * The shell includes a keyboard-accessible skip link.
- *
- * This allows keyboard and assistive-technology users to jump
- * directly past navigation to:
+ * The shell preserves:
  *
  * #main-content
  *
- * Main content also has tabIndex={-1} so it can receive focus
- * when targeted by the skip link.
+ * and:
+ *
+ * tabIndex={-1}
+ *
+ * for keyboard navigation.
+ *
+ * UniversalAdd also exposes a proper button with:
+ *
+ * aria-label="أضف إلى LIFE OS"
  */
 
 
 /* =========================================================
- * 6. UI PRINCIPLE
+ * 8. UI PRINCIPLE
  * ======================================================= */
 
 /**
- * The shell should never become visually busy.
- *
- * Permanent LIFE OS interface rule:
+ * LIFE OS V2 application shell:
  *
  * Navigation
  * +
  * Context
  * +
  * Content
+ * +
+ * One universal action
  *
- * No unnecessary:
  *
- * - banners
- * - widgets
- * - decorative panels
- * - duplicated navigation
- * - excessive status indicators
+ * No duplicated add buttons across every page.
+ *
+ * No user-facing database structure.
+ *
+ * No unnecessary widgets.
+ *
  *
  * Simple outside.
  * Intelligent underneath.
