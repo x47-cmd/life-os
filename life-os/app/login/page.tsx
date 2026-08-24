@@ -16,7 +16,6 @@ import {
 
 import {
   APP_NAME,
-  DEFAULT_AUTHENTICATED_ROUTE,
 } from "@/lib/constants";
 
 import {
@@ -29,7 +28,32 @@ import {
 
 
 /* =========================================================
- * 1. AUTH FLOW
+ * LIFE OS V2
+ * LOGIN
+ *
+ * Flow:
+ *
+ * Email + Password
+ *      ↓
+ * Supabase Auth
+ *      ↓
+ * /onboarding
+ *      ↓
+ * No profile → setup
+ * Existing profile → dashboard
+ * ======================================================= */
+
+
+/* =========================================================
+ * 1. ROUTES
+ * ======================================================= */
+
+const AFTER_LOGIN_ROUTE =
+  "/onboarding";
+
+
+/* =========================================================
+ * 2. AUTH FLOW
  * ======================================================= */
 
 type AuthFlow =
@@ -38,7 +62,7 @@ type AuthFlow =
 
 
 /* =========================================================
- * 2. SAFE USER MESSAGES
+ * 3. SAFE USER MESSAGES
  * ======================================================= */
 
 const AUTH_MESSAGES = {
@@ -54,12 +78,13 @@ const AUTH_MESSAGES = {
 
 
 /* =========================================================
- * 3. LOGIN PAGE
+ * 4. LOGIN PAGE
  * ======================================================= */
 
 export default function LoginPage() {
   const router =
     useRouter();
+
 
   const supabase =
     useMemo(
@@ -67,6 +92,7 @@ export default function LoginPage() {
         createClient(),
       [],
     );
+
 
   const [
     flow,
@@ -76,11 +102,13 @@ export default function LoginPage() {
       "checking",
     );
 
+
   const [
     email,
     setEmail,
   ] =
     useState("");
+
 
   const [
     password,
@@ -88,11 +116,13 @@ export default function LoginPage() {
   ] =
     useState("");
 
+
   const [
     isBusy,
     setIsBusy,
   ] =
     useState(false);
+
 
   const [
     errorMessage,
@@ -104,27 +134,42 @@ export default function LoginPage() {
 
 
   /* =======================================================
-   * 4. ENTER PRIVATE WORKSPACE
+   * 5. ENTER LIFE OS V2
    * ===================================================== */
 
   function enterLifeOS():
   void {
+    /*
+     * Everyone goes through /onboarding first.
+     *
+     * The onboarding Server Component decides:
+     *
+     * profile missing
+     *      → show setup
+     *
+     * profile exists
+     *      → redirect /dashboard
+     *
+     * This prevents client-side profile authorization logic.
+     */
     router.replace(
-      DEFAULT_AUTHENTICATED_ROUTE,
+      AFTER_LOGIN_ROUTE,
     );
+
 
     router.refresh();
   }
 
 
   /* =======================================================
-   * 5. INITIAL AUTH CHECK
+   * 6. INITIAL AUTH CHECK
    * ===================================================== */
 
   useEffect(
     () => {
       let active =
         true;
+
 
       async function initialize():
       Promise<void> {
@@ -136,10 +181,22 @@ export default function LoginPage() {
             await supabase.auth
               .getUser();
 
-          if (!active) {
+
+          if (
+            !active
+          ) {
             return;
           }
 
+
+          /*
+           * Already authenticated.
+           *
+           * Do not guess on the client whether onboarding has
+           * been completed.
+           *
+           * Let /onboarding resolve that on the server.
+           */
           if (
             !error &&
             data.user
@@ -149,18 +206,23 @@ export default function LoginPage() {
             return;
           }
 
+
           setFlow(
             "login",
           );
         } catch {
-          if (!active) {
+          if (
+            !active
+          ) {
             return;
           }
+
 
           setErrorMessage(
             AUTH_MESSAGES
               .authCheckFailed,
           );
+
 
           setFlow(
             "login",
@@ -168,12 +230,16 @@ export default function LoginPage() {
         }
       }
 
+
       void initialize();
 
+
       return () => {
-        active = false;
+        active =
+          false;
       };
     },
+
     // Supabase client and router remain stable for the
     // lifetime of this page.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -182,27 +248,34 @@ export default function LoginPage() {
 
 
   /* =======================================================
-   * 6. PASSWORD LOGIN
+   * 7. PASSWORD LOGIN
    * ===================================================== */
 
   async function handleLogin(
-    event: FormEvent<HTMLFormElement>,
+    event:
+      FormEvent<HTMLFormElement>,
   ):
   Promise<void> {
     event.preventDefault();
 
-    if (isBusy) {
+
+    if (
+      isBusy
+    ) {
       return;
     }
+
 
     setErrorMessage(
       null,
     );
 
+
     const normalizedEmail =
       email
         .trim()
         .toLowerCase();
+
 
     const validation =
       loginInputSchema.safeParse({
@@ -211,6 +284,7 @@ export default function LoginPage() {
 
         password,
       });
+
 
     if (
       !validation.success
@@ -223,9 +297,11 @@ export default function LoginPage() {
       return;
     }
 
+
     setIsBusy(
       true,
     );
+
 
     try {
       const {
@@ -240,12 +316,9 @@ export default function LoginPage() {
             password,
           });
 
-      /**
-       * Provider-specific authentication errors are never
-       * shown directly.
-       *
-       * This avoids exposing unnecessary account or
-       * infrastructure information.
+
+      /*
+       * Never expose raw Supabase authentication errors.
        */
       if (
         error ||
@@ -260,21 +333,23 @@ export default function LoginPage() {
         return;
       }
 
-      /**
+
+      /*
        * Password is no longer needed after successful login.
        */
       setPassword(
         "",
       );
 
-      /**
-       * LIFE OS V1 uses password-only authentication.
+
+      /*
+       * V2 onboarding router decides whether this is:
        *
-       * A verified Supabase session is sufficient to enter
-       * the private workspace.
+       * first setup
        *
-       * Private database access remains protected separately
-       * by PostgreSQL RLS and row ownership.
+       * or:
+       *
+       * normal returning user.
        */
       enterLifeOS();
     } catch {
@@ -291,7 +366,7 @@ export default function LoginPage() {
 
 
   /* =======================================================
-   * 7. CHECKING SCREEN
+   * 8. CHECKING SCREEN
    * ===================================================== */
 
   if (
@@ -305,6 +380,7 @@ export default function LoginPage() {
           aria-live="polite"
         >
           <div className="auth-brand">
+
             <div
               className="auth-brand__mark"
               aria-hidden="true"
@@ -312,13 +388,16 @@ export default function LoginPage() {
               L
             </div>
 
+
             <h1 className="auth-brand__title">
               {APP_NAME}
             </h1>
 
+
             <p className="auth-brand__subtitle">
               جارٍ التحقق من حالة الدخول...
             </p>
+
           </div>
         </section>
       </main>
@@ -327,14 +406,19 @@ export default function LoginPage() {
 
 
   /* =======================================================
-   * 8. LOGIN SCREEN
+   * 9. LOGIN SCREEN
    * ===================================================== */
 
   return (
     <main className="auth-page">
       <section className="auth-card">
 
+        {/* ===============================================
+         * BRAND
+         * ============================================= */}
+
         <div className="auth-brand">
+
           <div
             className="auth-brand__mark"
             aria-hidden="true"
@@ -342,15 +426,22 @@ export default function LoginPage() {
             L
           </div>
 
+
           <h1 className="auth-brand__title">
             {APP_NAME}
           </h1>
 
+
           <p className="auth-brand__subtitle">
-            مساحة شخصية خاصة
+            حياتك. خططك. قراراتك.
           </p>
+
         </div>
 
+
+        {/* ===============================================
+         * ERROR
+         * ============================================= */}
 
         {errorMessage ? (
           <div
@@ -362,19 +453,26 @@ export default function LoginPage() {
         ) : null}
 
 
+        {/* ===============================================
+         * LOGIN FORM
+         * ============================================= */}
+
         <form
           className="form"
           onSubmit={
             handleLogin
           }
         >
+
           <div className="form-field">
+
             <label
               className="form-label"
               htmlFor="life-os-email"
             >
               البريد الإلكتروني
             </label>
+
 
             <input
               id="life-os-email"
@@ -385,21 +483,35 @@ export default function LoginPage() {
               autoCapitalize="none"
               spellCheck={false}
               required
-              value={email}
-              disabled={isBusy}
+              value={
+                email
+              }
+              disabled={
+                isBusy
+              }
               onChange={(
                 event,
               ) => {
                 setEmail(
-                  event.target
-                    .value,
+                  event.target.value,
                 );
+
+
+                if (
+                  errorMessage
+                ) {
+                  setErrorMessage(
+                    null,
+                  );
+                }
               }}
             />
+
           </div>
 
 
           <div className="form-field">
+
             <label
               className="form-label"
               htmlFor="life-os-password"
@@ -407,37 +519,58 @@ export default function LoginPage() {
               كلمة المرور
             </label>
 
+
             <input
               id="life-os-password"
               className="input ltr"
               type="password"
               autoComplete="current-password"
               required
-              value={password}
-              disabled={isBusy}
+              value={
+                password
+              }
+              disabled={
+                isBusy
+              }
               onChange={(
                 event,
               ) => {
                 setPassword(
-                  event.target
-                    .value,
+                  event.target.value,
                 );
+
+
+                if (
+                  errorMessage
+                ) {
+                  setErrorMessage(
+                    null,
+                  );
+                }
               }}
             />
+
           </div>
 
 
           <button
             type="submit"
             className="button button--primary button--full"
-            disabled={isBusy}
+            disabled={
+              isBusy
+            }
           >
             {isBusy
               ? "جارٍ تسجيل الدخول..."
               : "تسجيل الدخول"}
           </button>
+
         </form>
 
+
+        {/* ===============================================
+         * PRIVATE WORKSPACE NOTE
+         * ============================================= */}
 
         <p
           className="text-subtle text-small text-center"
@@ -446,8 +579,9 @@ export default function LoginPage() {
               "18px 0 0",
           }}
         >
-          لا يوجد تسجيل عام في LIFE OS.
+          LIFE OS مساحة شخصية خاصة.
         </p>
+
       </section>
     </main>
   );
@@ -455,23 +589,52 @@ export default function LoginPage() {
 
 
 /* =========================================================
- * 9. SECURITY BOUNDARY
+ * 10. V2 LOGIN FLOW
  * ======================================================= */
 
 /**
- * This page establishes a Supabase authenticated session.
+ * New user:
  *
- * It does NOT authorize private database rows by itself.
- *
- * LIFE OS protection remains:
- *
- * Email + password
+ * Login
  *      ↓
- * Verified Supabase session
+ * /onboarding
+ *      ↓
+ * profile missing
+ *      ↓
+ * setup
+ *      ↓
+ * /dashboard
+ *
+ *
+ * Returning user:
+ *
+ * Login
+ *      ↓
+ * /onboarding
+ *      ↓
+ * profile exists
+ *      ↓
+ * /dashboard
+ */
+
+
+/* =========================================================
+ * 11. SECURITY BOUNDARY
+ * ======================================================= */
+
+/**
+ * Login establishes authentication only.
+ *
+ * It does NOT determine database ownership.
+ *
+ *
+ * Protection remains:
+ *
+ * Supabase Auth
  *      ↓
  * Verified JWT
  *      ↓
- * Server authorization
+ * Server-side identity
  *      ↓
  * PostgreSQL RLS
  *      ↓
@@ -480,72 +643,52 @@ export default function LoginPage() {
 
 
 /* =========================================================
- * 10. NO PUBLIC SIGN-UP
+ * 12. CLIENT DATA RULE
  * ======================================================= */
 
 /**
- * LIFE OS V1 contains:
+ * The browser does NOT ask:
  *
- * Sign in ✅
+ * "Does this user have a profile?"
  *
- * Public sign-up ❌
- * Social sign-up ❌
- * Anonymous account creation ❌
+ * That decision belongs to:
  *
- * The account is provisioned administratively in Supabase.
+ * /onboarding
+ *
+ * on the server.
+ *
+ * This keeps V2 routing simple and avoids duplicating
+ * sensitive data logic inside the login client.
  */
 
 
 /* =========================================================
- * 11. SECRET HANDLING
+ * 13. SECRET HANDLING
  * ======================================================= */
 
 /**
- * Passwords:
+ * Password:
  *
- * - remain only in transient component state
- * - are cleared after successful authentication
- * - are never logged
- * - are never stored in LIFE OS tables
- * - are never sent to OpenAI
- * - are never added to audit metadata
+ * - exists only temporarily in component state
+ * - is cleared after successful login
+ * - is never stored in LIFE OS tables
+ * - is never logged
+ * - is never sent to OpenAI
  */
 
 
 /* =========================================================
- * 12. SAFE AUTH ERRORS
+ * 14. FINAL V2 LOGIN RULE
  * ======================================================= */
 
 /**
- * Provider error messages are not displayed directly.
+ * Authentication decides:
  *
- * This prevents unnecessary disclosure of:
+ * "Who are you?"
  *
- * - account existence
- * - authentication configuration
- * - internal provider information
- * - infrastructure details
- */
-
-
-/* =========================================================
- * 13. FINAL LOGIN RULE
- * ======================================================= */
-
-/**
- * Email
- *      +
- * Password
- *      ↓
- * Verified Supabase session
- *      ↓
- * Dashboard
+ * Onboarding decides:
  *
+ * "Is LIFE OS ready for you?"
  *
- * No MFA requirement.
- * No QR enrollment.
- * No TOTP verification.
- * No public registration.
- * No secrets in logs.
- * No client-side database authorization assumptions.
+ * The dashboard should never be responsible for either.
  */
