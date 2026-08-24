@@ -12,6 +12,11 @@ import {
 } from "@/lib/intake-data";
 
 import {
+  executeIntakeItem,
+  isIntakeKindExecutable,
+} from "@/lib/intake-executor";
+
+import {
   getFirstValidationError,
   intakeFileMimeSchema,
   intakeFileNameSchema,
@@ -25,31 +30,28 @@ import {
  * LIFE OS V2
  * UNIVERSAL INTAKE — CONFIRM API
  *
- * Purpose:
+ * Flow:
  *
  * User reviews AI preview
  *      ↓
  * User presses Confirm
  *      ↓
- * This endpoint validates everything again
+ * Validate source + preview again
  *      ↓
- * Creates intake proposal
+ * Create previewed intake
  *      ↓
- * Marks proposal approved
+ * Explicitly approve intake
+ *      ↓
+ * Dispatcher checks supported executor
+ *      ↓
+ * note → memory_item
  *
- * IMPORTANT:
  *
- * Approval is NOT domain execution.
+ * Unsupported kinds remain safely:
  *
- * This endpoint does NOT yet create:
+ * approved
  *
- * - income
- * - expense
- * - investment
- * - goal
- * - project
- * - trip
- * - learning item
+ * until their deterministic executor exists.
  * ======================================================= */
 
 
@@ -494,10 +496,6 @@ export async function POST(
    * ---------------------------------------------------- */
 
   try {
-    /*
-     * Explicit confirmation can only come from an
-     * authenticated LIFE OS session.
-     */
     await requireAAL2UserId();
   } catch {
     return errorResponse(
@@ -690,22 +688,23 @@ export async function POST(
 
 
   /* -------------------------------------------------------
-   * Persist + approve proposal
+   * Persist proposal
    * ---------------------------------------------------- */
+
+  let approved:
+    Awaited<
+      ReturnType<
+        typeof approveIntakeItem
+      >
+    >;
+
 
   try {
     /*
-     * First:
+     * STEP 1
      *
-     * create a durable PREVIEWED proposal.
-     *
-     * Then:
-     *
-     * this explicit Confirm request moves it to APPROVED.
-     *
-     * Neither step executes the final domain action.
+     * Persist the exact proposal the user reviewed.
      */
-
     const created =
       await createIntakeItem({
         kind:
@@ -745,21 +744,183 @@ export async function POST(
           preview.next_action,
 
         /*
-         * Detailed domain extraction will be added later.
-         *
-         * The human-readable preview already lives in the
-         * dedicated intake columns.
+         * Detailed deterministic domain payloads will be
+         * introduced with each dedicated executor.
          */
         proposed_payload:
           {},
       });
 
 
-    const approved =
+    /*
+     * STEP 2
+     *
+     * The current HTTP request represents the user's
+     * explicit confirmation.
+     */
+    approved =
       await approveIntakeItem(
         created.id,
       );
+  } catch {
+    /*
+     * No executor is reached when proposal persistence or
+     * explicit approval fails.
+     */
+    return errorResponse(
+      500,
+      "تعذر اعتماد الإضافة حاليًا. حاول مرة أخرى.",
+    );
+  }
 
+
+  /* -------------------------------------------------------
+   * Unsupported kinds remain approved
+   * ---------------------------------------------------- */
+
+  if (
+    !isIntakeKindExecutable(
+      approved.kind,
+    )
+  ) {
+    return NextResponse.json(
+      {
+        ok:
+          true,
+
+        intake: {
+          id:
+            approved.id,
+
+          kind:
+            approved.kind,
+
+          title:
+            approved.title,
+
+          status:
+            approved.status,
+
+          approved_at:
+            approved.approved_at,
+
+          target_entity_type:
+            null,
+
+          target_entity_id:
+            null,
+        },
+
+        execution: {
+          attempted:
+            false,
+
+          applied:
+            false,
+
+          reason:
+            "EXECUTOR_NOT_AVAILABLE",
+        },
+
+        message:
+          "تم اعتماد الإضافة داخل LIFE OS. التنفيذ لهذا النوع بيتفعل بعد إضافة الـExecutor الخاص فيه.",
+      },
+      {
+        status:
+          200,
+
+        headers:
+          PRIVATE_RESPONSE_HEADERS,
+      },
+    );
+  }
+
+
+  /* -------------------------------------------------------
+   * Execute supported kind
+   * ---------------------------------------------------- */
+
+  try {
+    const execution =
+      await executeIntakeItem(
+        approved.id,
+      );
+
+
+    return NextResponse.json(
+      {
+        ok:
+          true,
+
+        intake: {
+          id:
+            execution.intake_id,
+
+          kind:
+            execution.kind,
+
+          title:
+            approved.title,
+
+          status:
+            execution.status,
+
+          approved_at:
+            approved.approved_at,
+
+          target_entity_type:
+            execution.target_entity_type,
+
+          target_entity_id:
+            execution.target_entity_id,
+        },
+
+        execution: {
+          attempted:
+            true,
+
+          applied:
+            true,
+
+          target_entity_type:
+            execution.target_entity_type,
+
+          target_entity_id:
+            execution.target_entity_id,
+        },
+
+        message:
+          execution.kind ===
+          "note"
+            ? "تم حفظ الملاحظة داخل LIFE OS."
+            : "تم تنفيذ الإضافة داخل LIFE OS.",
+      },
+      {
+        status:
+          200,
+
+        headers:
+          PRIVATE_RESPONSE_HEADERS,
+      },
+    );
+  } catch {
+    /*
+     * IMPORTANT:
+     *
+     * The user's confirmation was already persisted.
+     *
+     * Therefore we do NOT return a generic failure that might
+     * encourage the browser to submit the same source again
+     * and create another intake proposal.
+     *
+     *
+     * The proposal remains:
+     *
+     * approved
+     *
+     * and can be safely retried later by a dedicated retry
+     * flow.
+     */
 
     return NextResponse.json(
       {
@@ -781,33 +942,41 @@ export async function POST(
 
           approved_at:
             approved.approved_at,
+
+          target_entity_type:
+            null,
+
+          target_entity_id:
+            null,
+        },
+
+        execution: {
+          attempted:
+            true,
+
+          applied:
+            false,
+
+          reason:
+            "EXECUTION_PENDING",
         },
 
         message:
-          "تم اعتماد الإضافة داخل LIFE OS.",
+          "تم اعتماد الإضافة، لكن التنفيذ النهائي ما اكتمل. الإضافة محفوظة بأمان للمحاولة لاحقًا.",
       },
       {
+        /*
+         * 202 means:
+         *
+         * confirmation was accepted,
+         * execution is not fully complete.
+         */
         status:
-          200,
+          202,
 
         headers:
           PRIVATE_RESPONSE_HEADERS,
       },
-    );
-  } catch {
-    /*
-     * Never expose:
-     *
-     * database errors
-     * Supabase internals
-     * SQL
-     * stack traces
-     * user ids
-     * secrets
-     */
-    return errorResponse(
-      500,
-      "تعذر اعتماد الإضافة حاليًا. حاول مرة أخرى.",
     );
   }
 }
@@ -826,124 +995,91 @@ export async function GET() {
 
 
 /* =========================================================
- * 14. CONFIRMATION MEANING
+ * 14. CURRENT EXECUTION MATRIX
  * ======================================================= */
 
 /**
- * A successful response from this endpoint means:
+ * note
  *
- * ✅ user reviewed the AI interpretation
- * ✅ proposal was persisted
- * ✅ proposal status became approved
+ * approved
+ *      ↓
+ * executeIntakeItem()
+ *      ↓
+ * execute_note_intake()
+ *      ↓
+ * memory_items
+ *      ↓
+ * applied
  *
  *
- * It does NOT mean:
+ * finance
+ * plan
+ * travel
+ * growth
+ * document
  *
- * ❌ salary was changed
- * ❌ expense was added
- * ❌ goal was created
- * ❌ project was created
- * ❌ trip was created
- * ❌ investment was changed
+ * remain:
+ *
+ * approved
+ *
+ * until their exact deterministic executors exist.
  */
 
 
 /* =========================================================
- * 15. FILE RULE
+ * 15. CONFIRMATION ≠ GENERIC WRITE AUTHORITY
  * ======================================================= */
 
 /**
- * The PDF is sent again during confirmation so that the
- * confirmation request remains tied to the user's explicit
- * source.
+ * Confirming:
  *
- * At this stage only file metadata is persisted:
+ * "راتبي 30,000"
  *
- * - name
- * - MIME
- * - size
+ * does NOT grant AI permission to choose arbitrary tables.
  *
  *
- * PDF bytes are NOT permanently stored yet.
+ * It only allows:
  *
- * A later private Storage layer will persist documents.
+ * the explicitly implemented executor for that intake kind.
  */
 
 
 /* =========================================================
- * 16. TRUST BOUNDARY
+ * 16. PARTIAL FAILURE SAFETY
  * ======================================================= */
 
 /**
- * Browser preview data is never trusted automatically.
- *
- * It must pass:
- *
- * intakePreviewSchema
- *
- * again before persistence.
+ * There are two separate boundaries:
  *
  *
- * Later domain execution will perform a separate validation
- * against the exact target domain schema.
+ * Boundary A:
+ *
+ * proposal creation
+ * +
+ * explicit approval
+ *
+ *
+ * Boundary B:
+ *
+ * deterministic execution
+ *
+ *
+ * If Boundary B fails:
+ *
+ * the approved proposal remains available.
+ *
+ * It is not silently recreated.
+ *
+ * It is not treated as applied.
  */
 
 
 /* =========================================================
- * 17. OWNERSHIP
+ * 17. NOTE EXECUTION SAFETY
  * ======================================================= */
 
 /**
- * The request never accepts:
+ * Note execution itself is atomic inside PostgreSQL:
  *
- * user_id
- *
- *
- * Ownership is derived by intake-data.ts from the verified
- * authenticated Supabase session.
- *
- * PostgreSQL RLS then enforces ownership again.
- */
-
-
-/* =========================================================
- * 18. FAILURE SAFETY
- * ======================================================= */
-
-/**
- * If proposal creation succeeds but approval fails, the
- * proposal remains in:
- *
- * previewed
- *
- * state.
- *
- * It is NOT executed.
- *
- * Therefore partial failure remains safe and recoverable.
- */
-
-
-/* =========================================================
- * 19. FINAL V2 RULE
- * ======================================================= */
-
-/**
- * AI preview
- *      ↓
- * User reviews
- *      ↓
- * User presses Confirm
- *      ↓
- * Proposal becomes approved
- *      ↓
- * Separate domain executor
- *      ↓
- * Final validated write
- *
- *
- * Approval ≠ Execution.
- *
- * Simple outside.
- * Intelligent underneath.
- */
+ * memory_items insert
+ *      +
