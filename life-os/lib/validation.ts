@@ -3274,6 +3274,236 @@ export const structuredIntakeProposalSchema =
     careerIntakeProposalSchema,
   ]);
 
+/* =========================================================
+ * 25A. STRICT UNIVERSAL INTAKE PREVIEW
+ * ======================================================= */
+
+/**
+ * Authoritative V2 preview contract.
+ *
+ * Structured kinds:
+ *
+ * finance
+ * plan
+ * growth
+ *
+ * MUST contain an exact structured proposal.
+ *
+ *
+ * Non-structured kinds:
+ *
+ * note
+ * travel
+ * document
+ *
+ * MUST contain:
+ *
+ * proposal: null
+ */
+export const strictIntakePreviewSchema =
+  z
+    .object({
+      kind:
+        intakeKindSchema,
+
+      label:
+        intakeLabelSchema,
+
+      title:
+        intakeTitleSchema,
+
+      summary:
+        intakeSummarySchema,
+
+      confidence:
+        intakeConfidenceSchema,
+
+      next_action:
+        intakeNextActionSchema,
+
+      proposal:
+        structuredIntakeProposalSchema
+          .nullable(),
+
+      requires_confirmation:
+        z.literal(
+          true,
+        ),
+    })
+    .strict()
+    .superRefine(
+      (
+        value,
+        context,
+      ) => {
+
+        /* -------------------------------------------------
+         * STRUCTURED KINDS REQUIRE A PROPOSAL
+         * ----------------------------------------------- */
+
+        if (
+          value.kind ===
+            "finance" ||
+          value.kind ===
+            "plan" ||
+          value.kind ===
+            "growth"
+        ) {
+          if (
+            value.proposal ===
+            null
+          ) {
+            context.addIssue({
+              code:
+                "custom",
+
+              path:
+                [
+                  "proposal",
+                ],
+
+              message:
+                "هذا النوع يحتاج اقتراحًا منظمًا قبل التأكيد.",
+            });
+
+
+            return;
+          }
+
+
+          /* -----------------------------------------------
+           * KIND MUST MATCH PROPOSAL KIND
+           * --------------------------------------------- */
+
+          if (
+            value.proposal.kind !==
+            value.kind
+          ) {
+            context.addIssue({
+              code:
+                "custom",
+
+              path:
+                [
+                  "proposal",
+                  "kind",
+                ],
+
+              message:
+                "نوع الاقتراح لا يطابق تصنيف الإضافة.",
+            });
+          }
+
+
+          return;
+        }
+
+
+        /* -------------------------------------------------
+         * NON-STRUCTURED KINDS MUST NOT INVENT A PROPOSAL
+         * ----------------------------------------------- */
+
+        if (
+          value.proposal !==
+          null
+        ) {
+          context.addIssue({
+            code:
+              "custom",
+
+            path:
+              [
+                "proposal",
+              ],
+
+            message:
+              "هذا النوع لا يستخدم اقتراحًا منظمًا حاليًا.",
+          });
+        }
+      },
+    );
+
+
+/* =========================================================
+ * 25B. STRICT PREVIEW TYPE
+ * ======================================================= */
+
+export type StrictIntakePreview =
+  z.infer<
+    typeof strictIntakePreviewSchema
+  >;
+
+
+/* =========================================================
+ * 25C. PREVIEW PROPOSAL RULE
+ * ======================================================= */
+
+/**
+ * Valid:
+ *
+ * finance
+ * +
+ * {
+ *   version: 1,
+ *   kind: "finance",
+ *   action: "create_income_source",
+ *   data: ...
+ * }
+ *
+ *
+ * Invalid:
+ *
+ * finance
+ * +
+ * null
+ *
+ *
+ * Invalid:
+ *
+ * finance
+ * +
+ * plan proposal
+ *
+ *
+ * Valid:
+ *
+ * note
+ * +
+ * null
+ *
+ *
+ * Invalid:
+ *
+ * note
+ * +
+ * finance proposal
+ */
+
+
+/* =========================================================
+ * 25D. TWO-PHASE ROLLOUT RULE
+ * ======================================================= */
+
+/**
+ * intakePreviewSchema
+ *
+ * = temporary backwards-compatible boundary.
+ *
+ *
+ * strictIntakePreviewSchema
+ *
+ * = authoritative V2 structured preview boundary.
+ *
+ *
+ * The next API upgrade switches AI output validation to:
+ *
+ * strictIntakePreviewSchema
+ *
+ *
+ * Once all preview consumers are migrated, the transitional
+ * schema can be retired.
+ */
+
 
 /* =========================================================
  * 26. STRUCTURED PROPOSAL — KIND CONSISTENCY
