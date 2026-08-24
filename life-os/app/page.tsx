@@ -7,25 +7,45 @@ import {
 } from "@/lib/auth";
 
 import {
+  getProfile,
+} from "@/lib/data";
+
+import {
   DEFAULT_AUTHENTICATED_ROUTE,
   LOGIN_ROUTE,
 } from "@/lib/constants";
 
 
 /* =========================================================
- * 1. ROOT ENTRY
- * ======================================================= */
-
-/**
- * LIFE OS root route:
+ * LIFE OS V2
+ * ROOT ROUTER
  *
  * /
+ *      ↓
  *
- * This page never renders private user data.
+ * No session
+ *      → /login
  *
- * Its only responsibility is to resolve the authenticated
- * destination safely on the server.
- */
+ * Authenticated + no profile
+ *      → /onboarding
+ *
+ * Authenticated + profile
+ *      → /dashboard
+ * ======================================================= */
+
+
+/* =========================================================
+ * 1. ROUTES
+ * ======================================================= */
+
+const ONBOARDING_ROUTE =
+  "/onboarding";
+
+
+/* =========================================================
+ * 2. ROOT ENTRY
+ * ======================================================= */
+
 export default async function HomePage():
 Promise<never> {
   const auth =
@@ -33,7 +53,7 @@ Promise<never> {
 
 
   /* -------------------------------------------------------
-   * No verified authentication
+   * NOT AUTHENTICATED
    * ---------------------------------------------------- */
 
   if (
@@ -47,7 +67,28 @@ Promise<never> {
 
 
   /* -------------------------------------------------------
-   * Verified authenticated session
+   * AUTHENTICATED
+   * ---------------------------------------------------- */
+
+  const profile =
+    await getProfile();
+
+
+  /* -------------------------------------------------------
+   * FIRST-TIME SETUP
+   * ---------------------------------------------------- */
+
+  if (
+    !profile
+  ) {
+    redirect(
+      ONBOARDING_ROUTE,
+    );
+  }
+
+
+  /* -------------------------------------------------------
+   * READY
    * ---------------------------------------------------- */
 
   redirect(
@@ -57,122 +98,147 @@ Promise<never> {
 
 
 /* =========================================================
- * 2. SERVER-ONLY RULE
+ * 3. SERVER-ONLY RULE
  * ======================================================= */
 
 /**
- * This page intentionally remains a Server Component.
+ * Root routing stays entirely server-side.
  *
- * It does not use:
+ * No:
  *
  * "use client"
  *
- * Authentication routing occurs before private application
- * content reaches the browser.
+ * No browser-side profile lookup.
+ *
+ * No private user information is rendered here.
  */
 
 
 /* =========================================================
- * 3. NO PRIVATE CONTENT RULE
+ * 4. V2 ROUTING FLOW
  * ======================================================= */
 
 /**
- * The root route never renders:
+ * First visit:
  *
- * - salary
- * - finances
- * - investments
- * - goals
- * - projects
- * - personal memory
- * - AI recommendations
+ * /
+ *      ↓
+ * session?
  *
- * It is purely an authentication router.
- */
-
-
-/* =========================================================
- * 4. NO CLIENT-PROVIDED DESTINATION
- * ======================================================= */
-
-/**
- * Redirect destinations are application constants.
  *
- * LIFE OS does NOT accept:
- *
- * ?next=https://...
- * ?redirect=...
- * user-supplied destination URLs
- *
- * at this boundary.
- *
- * This avoids creating an open-redirect path.
- */
-
-
-/* =========================================================
- * 5. AUTHENTICATION FLOW
- * ======================================================= */
-
-/**
- * Possible states:
- *
- * No valid session
+ * No
  *      ↓
  * /login
  *
  *
- * Verified Supabase session
+ * Yes
+ *      ↓
+ * profile?
+ *
+ *
+ * No
+ *      ↓
+ * /onboarding
+ *
+ *
+ * Yes
  *      ↓
  * /dashboard
- *
- *
- * LIFE OS V1 does not require:
- *
- * - MFA enrollment
- * - TOTP verification
- * - QR setup
- * - AAL2
  */
 
 
 /* =========================================================
- * 6. SECURITY PRINCIPLE
+ * 5. RESPONSIBILITY RULE
  * ======================================================= */
 
 /**
- * This redirect is UX routing.
+ * Authentication answers:
  *
- * It is NOT the final database authorization boundary.
+ * "Who is this?"
  *
- * Protected LIFE OS data still requires:
  *
- * verified Supabase JWT
+ * Profile answers:
+ *
+ * "Has LIFE OS been initialized?"
+ *
+ *
+ * Dashboard answers:
+ *
+ * "What matters now?"
+ *
+ *
+ * Each layer has one responsibility.
+ */
+
+
+/* =========================================================
+ * 6. SECURITY RULE
+ * ======================================================= */
+
+/**
+ * Profile existence is checked through the authenticated
+ * LIFE OS data layer.
+ *
+ * The browser cannot supply:
+ *
+ * - user_id
+ * - destination
+ * - onboarding state
+ *
+ *
+ * Ownership remains:
+ *
+ * verified Supabase identity
  *      ↓
- * authenticated user identity
- *      ↓
- * server authorization
+ * server data layer
  *      ↓
  * PostgreSQL RLS
- *      ↓
- * row ownership
  */
 
 
 /* =========================================================
- * 7. FINAL ROOT RULE
+ * 7. NO OPEN REDIRECT
  * ======================================================= */
 
 /**
- * /
+ * LIFE OS does not accept:
  *
- * should answer only:
+ * ?next=
+ * ?redirect=
+ * external destinations
  *
- * Where should this authenticated state go?
  *
- * Nothing else.
+ * All destinations are application-controlled.
+ */
+
+
+/* =========================================================
+ * 8. FAILURE BEHAVIOR
+ * ======================================================= */
+
+/**
+ * If profile retrieval fails because the session or data
+ * layer is invalid, the data layer is responsible for
+ * surfacing that failure.
  *
- * No dashboard flash.
- * No private-data flash.
- * No client-side auth guessing.
+ * LIFE OS must not silently treat a database error as:
+ *
+ * "new user"
+ *
+ * Missing profile and failed profile lookup are different
+ * states.
+ */
+
+
+/* =========================================================
+ * 9. FINAL V2 RULE
+ * ======================================================= */
+
+/**
+ * Opening LIFE OS should require zero navigation decisions.
+ *
+ * The system decides the correct entry point automatically.
+ *
+ * Simple outside.
+ * Intelligent underneath.
  */
