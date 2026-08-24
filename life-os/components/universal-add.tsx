@@ -16,6 +16,7 @@ import type {
   IntakePreview,
   IntakeTargetEntityType,
   StructuredIntakeProposal,
+  TravelIntakeProposal,
 } from "@/lib/types";
 
 
@@ -38,17 +39,68 @@ import type {
  * deterministic executor
  *
  *
- * Permanent UI rule:
+ * HARD UI RULE
  *
- * finance / plan / growth
+ * finance
+ * plan
+ * growth
+ * travel
  *
- * CANNOT be confirmed unless their exact structured proposal
+ * cannot be confirmed unless the exact structured proposal
  * is visible to the user.
+ *
+ *
+ * note
+ *
+ * may be confirmed from the exact approved source text.
+ *
+ *
+ * document
+ *
+ * may currently be approved as metadata intake only.
  * ======================================================= */
 
 
 /* =========================================================
- * 1. API TYPES
+ * 1. REVIEWABLE PROPOSAL
+ * ======================================================= */
+
+/**
+ * Travel is staged in the shared TypeScript model.
+ *
+ * It is intentionally not yet part of:
+ *
+ * StructuredIntakeProposal
+ *
+ * because the backend activation happens after this UI
+ * safety boundary is deployed.
+ *
+ *
+ * This local union allows the UI to be ready BEFORE the API
+ * starts returning create_trip.
+ */
+type ReviewableProposal =
+  | StructuredIntakeProposal
+  | TravelIntakeProposal;
+
+
+/* =========================================================
+ * 2. REVIEWABLE PREVIEW
+ * ======================================================= */
+
+interface ReviewablePreview
+  extends Omit<
+    IntakePreview,
+    "proposal"
+  > {
+  proposal?:
+    ReviewableProposal |
+    null;
+}
+
+
+/* =========================================================
+ * 3. API TYPES
  * ======================================================= */
 
 interface PreviewApiResponse {
@@ -56,7 +108,7 @@ interface PreviewApiResponse {
     boolean;
 
   preview?:
-    IntakePreview;
+    ReviewablePreview;
 
   error?:
     string;
@@ -100,8 +152,8 @@ interface IntakeExecutionState {
     boolean;
 
   reason?:
-    "EXECUTOR_NOT_AVAILABLE" |
-    "EXECUTION_PENDING";
+    | "EXECUTOR_NOT_AVAILABLE"
+    | "EXECUTION_PENDING";
 
   target_entity_type?:
     IntakeTargetEntityType;
@@ -150,7 +202,7 @@ interface ConfirmationState {
 
 
 /* =========================================================
- * 2. PROPOSAL REVIEW
+ * 4. PROPOSAL REVIEW
  * ======================================================= */
 
 interface ProposalReviewRow {
@@ -172,7 +224,7 @@ interface ProposalReview {
 
 
 /* =========================================================
- * 3. CONSTANTS
+ * 5. CONSTANTS
  * ======================================================= */
 
 const MAX_TEXT_LENGTH =
@@ -188,7 +240,7 @@ const PDF_MIME =
 
 
 /* =========================================================
- * 4. BASIC HELPERS
+ * 6. BASIC HELPERS
  * ======================================================= */
 
 function formatFileSize(
@@ -260,10 +312,10 @@ function formatAmount(
 
 function displayNullable(
   value:
-    string |
-    number |
-    null |
-    undefined,
+    | string
+    | number
+    | null
+    | undefined,
 
   fallback:
     string =
@@ -288,7 +340,7 @@ function displayNullable(
 
 
 /* =========================================================
- * 5. LABEL HELPERS
+ * 7. KIND LABELS
  * ======================================================= */
 
 function getKindIcon(
@@ -349,6 +401,10 @@ function getKindLabel(
 }
 
 
+/* =========================================================
+ * 8. VALUE LABELS
+ * ======================================================= */
+
 function getFrequencyLabel(
   value:
     string,
@@ -401,6 +457,9 @@ function getStatusLabel(
   ) {
     case "planned":
       return "مخطط";
+
+    case "booked":
+      return "تم الحجز";
 
     case "active":
       return "نشط";
@@ -641,7 +700,7 @@ function getCareerTypeLabel(
 
 
 /* =========================================================
- * 6. EXECUTION TARGET LABEL
+ * 9. EXECUTION TARGET LABEL
  * ======================================================= */
 
 function getExecutionTargetLabel(
@@ -696,9 +755,29 @@ function getExecutionTargetLabel(
 
 
 /* =========================================================
- * 7. STRUCTURED KIND RULE
+ * 10. EXACT PROPOSAL REQUIREMENT
  * ======================================================= */
 
+/**
+ * Travel is included BEFORE backend activation.
+ *
+ * Result right now:
+ *
+ * travel preview
+ * +
+ * proposal null
+ *
+ *      ↓
+ *
+ * confirmation button BLOCKED.
+ *
+ *
+ * Once the backend starts returning create_trip:
+ *
+ * exact trip values appear
+ *      ↓
+ * confirmation becomes available.
+ */
 function requiresStructuredProposal(
   kind:
     IntakeKind,
@@ -709,18 +788,20 @@ function requiresStructuredProposal(
     kind ===
       "plan" ||
     kind ===
-      "growth"
+      "growth" ||
+    kind ===
+      "travel"
   );
 }
 
 
 /* =========================================================
- * 8. PROPOSAL REVIEW BUILDER
+ * 11. PROPOSAL REVIEW BUILDER
  * ======================================================= */
 
 function buildProposalReview(
   proposal:
-    StructuredIntakeProposal,
+    ReviewableProposal,
 ): ProposalReview {
   switch (
     proposal.action
@@ -791,7 +872,7 @@ function buildProposalReview(
 
 
     /* -----------------------------------------------------
-     * BUDGET ITEM
+     * BUDGET
      * -------------------------------------------------- */
 
     case "create_budget_item": {
@@ -1345,12 +1426,109 @@ function buildProposalReview(
         ],
       };
     }
+
+
+    /* -----------------------------------------------------
+     * TRAVEL
+     * -------------------------------------------------- */
+
+    case "create_trip": {
+      const data =
+        proposal.data;
+
+
+      return {
+        title:
+          "رحلة جديدة",
+
+        rows: [
+          {
+            label:
+              "اسم الرحلة",
+
+            value:
+              data.title,
+          },
+          {
+            label:
+              "الوجهة",
+
+            value:
+              data.destination,
+          },
+          {
+            label:
+              "تاريخ البداية",
+
+            value:
+              displayNullable(
+                data.start_date,
+              ),
+          },
+          {
+            label:
+              "تاريخ النهاية",
+
+            value:
+              displayNullable(
+                data.end_date,
+              ),
+          },
+          {
+            label:
+              "الحالة",
+
+            value:
+              getStatusLabel(
+                data.status,
+              ),
+          },
+          {
+            label:
+              "الميزانية",
+
+            value:
+              data.budget_total ===
+              null
+                ? "غير محددة"
+                : formatAmount(
+                    data.budget_total,
+                    data.currency,
+                  ),
+          },
+          {
+            label:
+              "العملة",
+
+            value:
+              data.currency,
+          },
+          {
+            label:
+              "الجاهزية",
+
+            value:
+              `${data.readiness_percent}%`,
+          },
+          {
+            label:
+              "ملاحظات",
+
+            value:
+              displayNullable(
+                data.notes,
+                "لا توجد",
+              ),
+          },
+        ],
+      };
+    }
   }
 }
 
 
 /* =========================================================
- * 9. COMPONENT
+ * 12. COMPONENT
  * ======================================================= */
 
 export function UniversalAdd() {
@@ -1397,7 +1575,7 @@ export function UniversalAdd() {
     preview,
     setPreview,
   ] =
-    useState<IntakePreview | null>(
+    useState<ReviewablePreview | null>(
       null,
     );
 
@@ -1481,7 +1659,7 @@ export function UniversalAdd() {
 
 
   /* =======================================================
-   * 10. RESET
+   * 13. RESET
    * ===================================================== */
 
   function resetIntake():
@@ -1531,7 +1709,7 @@ export function UniversalAdd() {
 
 
   /* =======================================================
-   * 11. OPEN / CLOSE
+   * 14. OPEN / CLOSE
    * ===================================================== */
 
   function handleOpen():
@@ -1592,7 +1770,7 @@ export function UniversalAdd() {
 
 
   /* =======================================================
-   * 12. ESCAPE
+   * 15. ESCAPE
    * ===================================================== */
 
   useEffect(
@@ -1647,7 +1825,7 @@ export function UniversalAdd() {
 
 
   /* =======================================================
-   * 13. BODY SCROLL
+   * 16. BODY SCROLL
    * ===================================================== */
 
   useEffect(
@@ -1682,7 +1860,7 @@ export function UniversalAdd() {
 
 
   /* =======================================================
-   * 14. FILE PICKER
+   * 17. FILE PICKER
    * ===================================================== */
 
   function handleFileChange(
@@ -1823,7 +2001,7 @@ export function UniversalAdd() {
 
 
   /* =======================================================
-   * 15. ANALYZE
+   * 18. ANALYZE
    * ===================================================== */
 
   async function handleAnalyze(
@@ -1972,7 +2150,7 @@ export function UniversalAdd() {
 
 
   /* =======================================================
-   * 16. EDIT
+   * 19. EDIT
    * ===================================================== */
 
   function handleEdit():
@@ -2011,7 +2189,7 @@ export function UniversalAdd() {
 
 
   /* =======================================================
-   * 17. CONFIRM
+   * 20. CONFIRM
    * ===================================================== */
 
   async function handleConfirm():
@@ -2027,8 +2205,12 @@ export function UniversalAdd() {
     /*
      * HARD UI SAFETY BOUNDARY
      *
-     * Finance / Plan / Growth cannot be confirmed without
-     * visible exact proposal values.
+     * finance
+     * plan
+     * growth
+     * travel
+     *
+     * cannot be confirmed without visible exact values.
      */
     if (
       requiresStructuredProposal(
@@ -2175,7 +2357,7 @@ export function UniversalAdd() {
 
 
   /* =======================================================
-   * 18. SUCCESS VALUES
+   * 21. SUCCESS VALUES
    * ===================================================== */
 
   const wasApplied =
@@ -2199,7 +2381,7 @@ export function UniversalAdd() {
 
 
   /* =======================================================
-   * 19. RENDER
+   * 22. RENDER
    * ===================================================== */
 
   return (
@@ -2750,7 +2932,7 @@ export function UniversalAdd() {
                     );
                   }}
                   placeholder={
-                    "مثال: راتبي 26,700 درهم\nأو: أبغي أفتح مغسلة في خورفكان في مارس 2027"
+                    "مثال: راتبي 26,700 درهم\nأو: رحلة سلوفينيا من 9 إلى 16 يناير 2027"
                   }
                   maxLength={
                     MAX_TEXT_LENGTH
@@ -3194,7 +3376,6 @@ export function UniversalAdd() {
                           </strong>
                         </div>
 
-
                         <span
                           className="badge badge--neutral"
                         >
@@ -3336,9 +3517,10 @@ export function UniversalAdd() {
                             1.65,
                         }}
                       >
-                        هذا النوع يحتاج عرض القيم الدقيقة قبل
-                        التأكيد، لذلك زر التأكيد متوقف مؤقتًا
-                        للحماية.
+                        {preview.kind ===
+                        "travel"
+                          ? "قبل اعتماد الرحلة لازم LIFE OS يعرض لك الوجهة والتواريخ والميزانية والعملة والجاهزية بشكل واضح. لذلك التأكيد مقفول حاليًا للحماية."
+                          : "هذا النوع يحتاج عرض القيم الدقيقة قبل التأكيد، لذلك زر التأكيد متوقف مؤقتًا للحماية."}
                       </p>
                     </div>
                   ) : null}
@@ -3431,14 +3613,17 @@ export function UniversalAdd() {
                       {preview.kind ===
                       "note"
                         ? "الملاحظة جاهزة للتنفيذ والحفظ الفعلي."
-                        : proposal
-                          ? "سيتم اعتماد القيم المعروضة أعلاه. التنفيذ النهائي يبدأ فقط عند وجود Executor محدد وآمن."
-                          : preview.kind ===
-                              "travel" ||
-                            preview.kind ===
-                              "document"
-                            ? "سيتم اعتماد الإضافة فقط. التنفيذ النهائي لهذا النوع غير مفعّل حاليًا."
-                            : "لن يتم التأكيد قبل ظهور القيم الدقيقة."}
+                        : preview.kind ===
+                            "travel"
+                          ? proposal
+                            ? "سيتم اعتماد تفاصيل الرحلة المعروضة فقط. تنفيذ إنشاء الرحلة يبدأ بعد تفعيل Travel Executor."
+                            : "لن نسمح باعتماد الرحلة قبل ظهور تفاصيلها الدقيقة."
+                          : proposal
+                            ? "سيتم اعتماد القيم المعروضة أعلاه. التنفيذ النهائي يبدأ فقط عند وجود Executor محدد وآمن."
+                            : preview.kind ===
+                                "document"
+                              ? "سيتم اعتماد المستند فقط. الحفظ النهائي في Private Storage يحتاج مسار التنفيذ المخصص."
+                              : "لن يتم التأكيد قبل ظهور القيم الدقيقة."}
                     </p>
                   </div>
                 </div>
@@ -3548,11 +3733,57 @@ export function UniversalAdd() {
 
 
 /* =========================================================
- * FINAL V2 RULE
+ * 23. TRAVEL UI SAFETY CONTRACT
  * ======================================================= */
 
 /**
- * finance / plan / growth:
+ * Current safe state:
+ *
+ * preview API
+ *      ↓
+ * travel
+ *      ↓
+ * proposal: null
+ *      ↓
+ * Universal Add
+ *      ↓
+ * confirm BLOCKED
+ *
+ *
+ * Future state:
+ *
+ * preview API
+ *      ↓
+ * travel
+ *      ↓
+ * create_trip
+ *      ↓
+ * UI displays:
+ *
+ * title
+ * destination
+ * start_date
+ * end_date
+ * status
+ * budget_total
+ * currency
+ * readiness_percent
+ * notes
+ *
+ *      ↓
+ * user explicitly confirms
+ *
+ *
+ * No hidden Travel values can be approved.
+ */
+
+
+/* =========================================================
+ * 24. FINAL V2 RULE
+ * ======================================================= */
+
+/**
+ * finance / plan / growth / travel:
  *
  * AI proposes exact values
  *      ↓
@@ -3575,10 +3806,10 @@ export function UniversalAdd() {
  * deterministic memory executor
  *
  *
- * travel / document:
+ * document:
  *
- * may be approved without structured proposal for now,
- * but cannot create a final domain entity yet.
+ * currently may be approved without a structured proposal,
+ * but permanent file persistence is handled separately.
  *
  *
  * Permanent rule:
