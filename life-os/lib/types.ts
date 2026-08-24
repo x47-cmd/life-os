@@ -6,6 +6,8 @@
  * V2 Universal Intake
  * +
  * V2 Structured Proposals
+ * +
+ * V2 Travel OS
  *
  * This file defines the shared TypeScript domain model used across:
  *
@@ -17,6 +19,8 @@
  * - AI tools
  * - Universal Intake
  * - Structured Proposals
+ * - Travel OS
+ * - Private Documents
  * - Decision Simulator
  * - Opportunity Engine
  *
@@ -127,6 +131,23 @@ export type CareerStatus =
   | "archived";
 
 
+/* =========================================================
+ * V2 TRAVEL + DOCUMENT STATUS VALUES
+ * ======================================================= */
+
+export type TripStatus =
+  | "planned"
+  | "booked"
+  | "active"
+  | "completed"
+  | "cancelled";
+
+
+export type DocumentStatus =
+  | "active"
+  | "archived";
+
+
 export type AIRecommendationStatus =
   | "new"
   | "reviewed"
@@ -225,6 +246,28 @@ export type CareerItemType =
   | "achievement"
   | "milestone"
   | "gap";
+
+
+/* =========================================================
+ * V2 DOCUMENT DOMAIN VALUES
+ * ======================================================= */
+
+export type DocumentCategory =
+  | "travel"
+  | "education"
+  | "career"
+  | "finance"
+  | "personal"
+  | "general"
+  | "other";
+
+
+export type DocumentMimeType =
+  "application/pdf";
+
+
+export type DocumentStorageBucket =
+  "life-os-private-documents";
 
 
 export type MemoryCategory =
@@ -673,7 +716,124 @@ export type GrowthIntakeProposal =
 
 
 /* =========================================================
- * 4E. STRUCTURED PROPOSAL UNION
+ * 4E. TRAVEL STRUCTURED PROPOSAL — STAGED
+ * ======================================================= */
+
+/**
+ * Travel proposal contract.
+ *
+ * IMPORTANT:
+ *
+ * This type is defined now so Travel OS has a stable domain
+ * contract.
+ *
+ * It is deliberately NOT part of:
+ *
+ * StructuredIntakeProposal
+ *
+ * yet.
+ *
+ *
+ * Activation order:
+ *
+ * type contract
+ *      ↓
+ * runtime validation
+ *      ↓
+ * preview structured output
+ *      ↓
+ * UI exact-value review
+ *      ↓
+ * explicit confirmation
+ *      ↓
+ * deterministic executor
+ *
+ *
+ * Until all those boundaries exist, travel continues to use:
+ *
+ * proposal: null
+ *
+ * at the active Universal Intake runtime boundary.
+ */
+
+export type TravelProposalAction =
+  "create_trip";
+
+
+export interface TripProposalData
+  extends JsonObject {
+
+  title:
+    string;
+
+  destination:
+    string;
+
+  start_date:
+    Nullable<ISODate>;
+
+  end_date:
+    Nullable<ISODate>;
+
+  status:
+    TripStatus;
+
+  budget_total:
+    Nullable<number>;
+
+  currency:
+    CurrencyCode;
+
+  readiness_percent:
+    number;
+
+  notes:
+    Nullable<string>;
+}
+
+
+export interface TravelIntakeProposal
+  extends JsonObject {
+
+  version:
+    IntakeProposalVersion;
+
+  kind:
+    "travel";
+
+  action:
+    "create_trip";
+
+  data:
+    TripProposalData;
+}
+
+
+/* =========================================================
+ * TRAVEL PROPOSAL ACTIVATION RULE
+ * ======================================================= */
+
+/**
+ * DO NOT add TravelIntakeProposal to StructuredIntakeProposal
+ * until the active runtime validation + Universal Add review
+ * UI support create_trip.
+ *
+ *
+ * This protects against:
+ *
+ * TypeScript accepting travel
+ *
+ * while:
+ *
+ * UI cannot display its exact values.
+ *
+ *
+ * User review must exist before execution authority exists.
+ */
+
+
+/* =========================================================
+ * 4F. STRUCTURED PROPOSAL UNION
  * ======================================================= */
 
 export type StructuredIntakeProposal =
@@ -689,7 +849,7 @@ export type StructuredIntakeProposalAction =
 
 
 /* =========================================================
- * 4F. STRUCTURED PROPOSAL SAFETY MODEL
+ * 4G. STRUCTURED PROPOSAL SAFETY MODEL
  * ======================================================= */
 
 /**
@@ -1631,6 +1791,270 @@ export type CareerItemUpdate =
 
 
 /* =========================================================
+ * 15A. TRIPS — TRAVEL OS V2
+ * ======================================================= */
+
+export interface Trip {
+  id:
+    UUID;
+
+  user_id:
+    UUID;
+
+  title:
+    string;
+
+  destination:
+    string;
+
+  start_date:
+    Nullable<ISODate>;
+
+  end_date:
+    Nullable<ISODate>;
+
+  status:
+    TripStatus;
+
+  budget_total:
+    Nullable<number>;
+
+  currency:
+    CurrencyCode;
+
+  readiness_percent:
+    number;
+
+  notes:
+    Nullable<string>;
+
+  created_at:
+    ISODateTime;
+
+  updated_at:
+    ISODateTime;
+}
+
+
+/**
+ * user_id is deliberately absent.
+ *
+ * Ownership must always come from the authenticated server
+ * identity and never from browser or AI input.
+ */
+export interface TripInsert {
+  title:
+    string;
+
+  destination:
+    string;
+
+  start_date?:
+    Nullable<ISODate>;
+
+  end_date?:
+    Nullable<ISODate>;
+
+  status?:
+    TripStatus;
+
+  budget_total?:
+    Nullable<number>;
+
+  currency?:
+    CurrencyCode;
+
+  readiness_percent?:
+    number;
+
+  notes?:
+    Nullable<string>;
+}
+
+
+export type TripUpdate =
+  Partial<
+    TripInsert
+  >;
+
+
+/* =========================================================
+ * 15B. PRIVATE DOCUMENTS — V2
+ * ======================================================= */
+
+/**
+ * Document metadata only.
+ *
+ * PDF binary bytes are stored in:
+ *
+ * Supabase Storage
+ *
+ * bucket:
+ *
+ * life-os-private-documents
+ *
+ *
+ * Never store PDF base64 or binary content in this object.
+ */
+export interface Document {
+  id:
+    UUID;
+
+  user_id:
+    UUID;
+
+  trip_id:
+    Nullable<UUID>;
+
+  title:
+    string;
+
+  category:
+    DocumentCategory;
+
+  file_name:
+    string;
+
+  mime_type:
+    DocumentMimeType;
+
+  file_size_bytes:
+    number;
+
+  storage_bucket:
+    DocumentStorageBucket;
+
+  storage_path:
+    string;
+
+  status:
+    DocumentStatus;
+
+  notes:
+    Nullable<string>;
+
+  created_at:
+    ISODateTime;
+
+  updated_at:
+    ISODateTime;
+}
+
+
+/**
+ * New document metadata.
+ *
+ * user_id is deliberately absent.
+ *
+ * The server derives ownership from auth.uid().
+ *
+ *
+ * storage_path must use:
+ *
+ * <authenticated-user-id>/...
+ *
+ * and is validated again by PostgreSQL + Storage RLS.
+ */
+export interface DocumentInsert {
+  trip_id?:
+    Nullable<UUID>;
+
+  title:
+    string;
+
+  category?:
+    DocumentCategory;
+
+  file_name:
+    string;
+
+  mime_type?:
+    DocumentMimeType;
+
+  file_size_bytes:
+    number;
+
+  storage_bucket?:
+    DocumentStorageBucket;
+
+  storage_path:
+    string;
+
+  status?:
+    DocumentStatus;
+
+  notes?:
+    Nullable<string>;
+}
+
+
+/**
+ * Generic metadata updates deliberately cannot change:
+ *
+ * file_name
+ * mime_type
+ * file_size_bytes
+ * storage_bucket
+ * storage_path
+ *
+ *
+ * Replacing or moving an actual Storage object requires a
+ * dedicated coordinated file operation later.
+ */
+export interface DocumentUpdate {
+  trip_id?:
+    Nullable<UUID>;
+
+  title?:
+    string;
+
+  category?:
+    DocumentCategory;
+
+  status?:
+    DocumentStatus;
+
+  notes?:
+    Nullable<string>;
+}
+
+
+/* =========================================================
+ * TRAVEL STORAGE SAFETY MODEL
+ * ======================================================= */
+
+/**
+ * PostgreSQL:
+ *
+ * documents
+ *
+ * stores metadata.
+ *
+ *
+ * Supabase Storage:
+ *
+ * life-os-private-documents
+ *
+ * stores PDF bytes.
+ *
+ *
+ * Required object path:
+ *
+ * auth.uid()/...
+ *
+ *
+ * Example:
+ *
+ * <user-id>/travel/<trip-id>/itinerary.pdf
+ *
+ *
+ * No public URLs.
+ * No service_role.
+ * No AI-generated ownership identifiers.
+ */
+
+
+/* =========================================================
  * 16. MEMORY ITEMS
  * ======================================================= */
 
@@ -1850,12 +2274,18 @@ export interface IntakePreview {
   /**
    * finance / plan / growth:
    *
-   * eventually contains the exact validated proposal.
+   * contains the exact validated proposal.
    *
-   * travel / document / note:
    *
-   * currently null or omitted because they do not yet use
-   * the structured proposal pipeline.
+   * travel:
+   *
+   * TravelIntakeProposal is defined but remains staged until
+   * validation + preview + review UI are all enabled.
+   *
+   *
+   * document / note:
+   *
+   * currently null or omitted.
    */
   proposal?:
     Nullable<
@@ -2361,6 +2791,58 @@ export interface CareerSnapshot {
 
   gaps:
     CareerItem[];
+}
+
+
+/* =========================================================
+ * 27A. TRAVEL SUMMARY TYPES
+ * ======================================================= */
+
+export interface TripSummary {
+  id:
+    UUID;
+
+  title:
+    string;
+
+  destination:
+    string;
+
+  start_date:
+    Nullable<ISODate>;
+
+  end_date:
+    Nullable<ISODate>;
+
+  status:
+    TripStatus;
+
+  budget_total:
+    Nullable<number>;
+
+  currency:
+    CurrencyCode;
+
+  readiness_percent:
+    number;
+}
+
+
+export interface TravelSnapshot {
+  upcoming_trips:
+    TripSummary[];
+
+  active_trips:
+    TripSummary[];
+
+  completed_trip_count:
+    number;
+
+  document_count:
+    number;
+
+  next_trip:
+    Nullable<TripSummary>;
 }
 
 
@@ -2891,6 +3373,12 @@ export interface LifeOSEntityMap {
   career_items:
     CareerItem;
 
+  trips:
+    Trip;
+
+  documents:
+    Document;
+
   memory_items:
     MemoryItem;
 
@@ -3064,6 +3552,12 @@ export type AuditAction =
  *
  * Server code derives user ownership from the verified
  * authenticated Supabase identity.
+ *
+ *
+ * Travel OS:
+ *
+ * TripInsert and DocumentInsert also deliberately do not
+ * accept user_id.
  */
 
 
@@ -3091,31 +3585,72 @@ export type AuditAction =
 
 /**
  * IntakePreview.proposal is temporarily optional at the
- * TypeScript boundary only.
+ * TypeScript boundary.
  *
- * This keeps the current preview API compatible while the
- * structured-output route is upgraded.
  *
- * The next runtime layer will require:
+ * Runtime currently requires:
  *
  * finance → structured finance proposal
  * plan    → structured plan proposal
  * growth  → structured growth proposal
  *
- * and will intentionally use:
  *
- * null
+ * TravelIntakeProposal now has a stable TypeScript contract,
+ * but remains intentionally staged.
  *
- * for:
+ * Until Travel validation + preview + UI review are enabled:
  *
- * note
- * travel
- * document
+ * travel → null
+ *
+ *
+ * document → null
+ * note     → null
+ *
+ *
+ * Travel must not be added to StructuredIntakeProposal
+ * prematurely.
  */
 
 
 /* =========================================================
- * 51. FINAL TYPE SAFETY RULE
+ * 51. TRAVEL STORAGE RULE
+ * ======================================================= */
+
+/**
+ * Private documents:
+ *
+ * PostgreSQL
+ *      ↓
+ * document metadata only
+ *
+ *
+ * Supabase Storage
+ *      ↓
+ * actual PDF bytes
+ *
+ *
+ * Bucket:
+ *
+ * life-os-private-documents
+ *
+ *
+ * Object ownership:
+ *
+ * auth.uid()/...
+ *
+ *
+ * Never:
+ *
+ * public bucket
+ * public permanent URL
+ * service_role in browser
+ * PDF base64 in documents table
+ * AI-supplied user_id
+ */
+
+
+/* =========================================================
+ * 52. FINAL TYPE SAFETY RULE
  * ======================================================= */
 
 /**
