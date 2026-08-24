@@ -1,78 +1,86 @@
 "use client";
 
 import {
-  ChangeEvent,
-  FormEvent,
   useEffect,
   useRef,
   useState,
 } from "react";
+
+import type {
+  ChangeEvent,
+  FormEvent,
+} from "react";
+
+import type {
+  IntakeKind,
+  IntakePreview,
+} from "@/lib/types";
 
 
 /* =========================================================
  * LIFE OS V2
  * UNIVERSAL ADD
  *
- * One place to add:
+ * User input
+ *      ↓
+ * AI preview
+ *      ↓
+ * User review
+ *      ↓
+ * Explicit confirmation
+ *      ↓
+ * Approved intake proposal
  *
- * - money
- * - goals
- * - projects
- * - trips
- * - education
- * - notes
- * - PDF documents
- *
- * Flow:
- *
- * User writes/uploads
- *        ↓
- * LIFE OS understands
- *        ↓
- * Preview
- *        ↓
- * User confirms
- *        ↓
- * Save happens later through secure server action
+ * Approval is NOT final domain execution.
  * ======================================================= */
 
 
 /* =========================================================
- * 1. TYPES
+ * 1. API TYPES
  * ======================================================= */
 
-type IntakeKind =
-  | "finance"
-  | "plan"
-  | "travel"
-  | "growth"
-  | "document"
-  | "note";
+interface PreviewApiResponse {
+  ok:
+    boolean;
 
+  preview?:
+    IntakePreview;
 
-interface IntakePreview {
-  kind: IntakeKind;
-
-  label: string;
-
-  title: string;
-
-  summary: string;
-
-  confidence: number;
-
-  next_action: string;
-
-  requires_confirmation: boolean;
+  error?:
+    string;
 }
 
 
-interface IntakeApiResponse {
-  ok: boolean;
+interface ConfirmedIntake {
+  id:
+    string;
 
-  preview?: IntakePreview;
+  kind:
+    IntakeKind;
 
-  error?: string;
+  title:
+    string;
+
+  status:
+    string;
+
+  approved_at:
+    string | null;
+}
+
+
+interface ConfirmApiResponse {
+  ok:
+    boolean;
+
+  intake?:
+    ConfirmedIntake;
+
+  message?:
+    string;
+
+  error?:
+    string;
 }
 
 
@@ -80,13 +88,16 @@ interface IntakeApiResponse {
  * 2. CONSTANTS
  * ======================================================= */
 
+const MAX_TEXT_LENGTH =
+  4_000;
+
+
 const MAX_FILE_SIZE_BYTES =
   15 * 1024 * 1024;
 
 
-const ACCEPTED_FILE_TYPES = [
-  "application/pdf",
-] as const;
+const PDF_MIME =
+  "application/pdf";
 
 
 /* =========================================================
@@ -94,10 +105,12 @@ const ACCEPTED_FILE_TYPES = [
  * ======================================================= */
 
 function formatFileSize(
-  bytes: number,
+  bytes:
+    number,
 ): string {
   if (
-    bytes < 1024
+    bytes <
+    1024
   ) {
     return `${bytes} B`;
   }
@@ -108,22 +121,33 @@ function formatFileSize(
     1024 * 1024
   ) {
     return `${(
-      bytes / 1024
-    ).toFixed(1)} KB`;
+      bytes /
+      1024
+    ).toFixed(
+      1,
+    )} KB`;
   }
 
 
   return `${(
     bytes /
-    (1024 * 1024)
-  ).toFixed(1)} MB`;
+    (
+      1024 *
+      1024
+    )
+  ).toFixed(
+    1,
+  )} MB`;
 }
 
 
 function getKindIcon(
-  kind: IntakeKind,
+  kind:
+    IntakeKind,
 ): string {
-  switch (kind) {
+  switch (
+    kind
+  ) {
     case "finance":
       return "◈";
 
@@ -147,7 +171,7 @@ function getKindIcon(
 
 
 /* =========================================================
- * 4. UNIVERSAL ADD
+ * 4. COMPONENT
  * ======================================================= */
 
 export function UniversalAdd() {
@@ -167,14 +191,18 @@ export function UniversalAdd() {
     open,
     setOpen,
   ] =
-    useState(false);
+    useState(
+      false,
+    );
 
 
   const [
     text,
     setText,
   ] =
-    useState("");
+    useState(
+      "",
+    );
 
 
   const [
@@ -196,10 +224,30 @@ export function UniversalAdd() {
 
 
   const [
-    loading,
-    setLoading,
+    confirmation,
+    setConfirmation,
   ] =
-    useState(false);
+    useState<ConfirmedIntake | null>(
+      null,
+    );
+
+
+  const [
+    analyzing,
+    setAnalyzing,
+  ] =
+    useState(
+      false,
+    );
+
+
+  const [
+    confirming,
+    setConfirming,
+  ] =
+    useState(
+      false,
+    );
 
 
   const [
@@ -211,14 +259,71 @@ export function UniversalAdd() {
     );
 
 
+  const busy =
+    analyzing ||
+    confirming;
+
+
   /* =======================================================
-   * 5. OPEN
+   * 5. RESET
    * ===================================================== */
 
-  function handleOpen() {
+  function resetIntake():
+  void {
+    setText(
+      "",
+    );
+
+
+    setFile(
+      null,
+    );
+
+
+    setPreview(
+      null,
+    );
+
+
+    setConfirmation(
+      null,
+    );
+
+
+    setAnalyzing(
+      false,
+    );
+
+
+    setConfirming(
+      false,
+    );
+
+
+    setError(
+      null,
+    );
+
+
+    if (
+      fileInputRef.current
+    ) {
+      fileInputRef.current.value =
+        "";
+    }
+  }
+
+
+  /* =======================================================
+   * 6. OPEN
+   * ===================================================== */
+
+  function handleOpen():
+  void {
     setOpen(
       true,
     );
+
 
     setError(
       null,
@@ -237,55 +342,49 @@ export function UniversalAdd() {
 
 
   /* =======================================================
-   * 6. RESET
-   * ===================================================== */
-
-  function resetIntake() {
-    setText(
-      "",
-    );
-
-    setFile(
-      null,
-    );
-
-    setPreview(
-      null,
-    );
-
-    setError(
-      null,
-    );
-
-    setLoading(
-      false,
-    );
-
-
-    if (
-      fileInputRef.current
-    ) {
-      fileInputRef.current.value =
-        "";
-    }
-  }
-
-
-  /* =======================================================
    * 7. CLOSE
    * ===================================================== */
 
-  function handleClose() {
+  function handleClose():
+  void {
+    if (
+      busy
+    ) {
+      return;
+    }
+
+
     setOpen(
       false,
     );
+
 
     resetIntake();
   }
 
 
   /* =======================================================
-   * 8. ESCAPE KEY
+   * 8. ADD ANOTHER
+   * ===================================================== */
+
+  function handleAddAnother():
+  void {
+    resetIntake();
+
+
+    window.setTimeout(
+      () => {
+        textareaRef
+          .current
+          ?.focus();
+      },
+      50,
+    );
+  }
+
+
+  /* =======================================================
+   * 9. ESCAPE KEY
    * ===================================================== */
 
   useEffect(
@@ -298,13 +397,20 @@ export function UniversalAdd() {
 
 
       function handleKeyDown(
-        event: KeyboardEvent,
+        event:
+          KeyboardEvent,
       ) {
         if (
           event.key ===
-          "Escape"
+            "Escape" &&
+          !busy
         ) {
-          handleClose();
+          setOpen(
+            false,
+          );
+
+
+          resetIntake();
         }
       }
 
@@ -322,14 +428,18 @@ export function UniversalAdd() {
         );
       };
     },
+
+    // resetIntake only manages local component state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       open,
+      busy,
     ],
   );
 
 
   /* =======================================================
-   * 9. BODY SCROLL
+   * 10. BODY SCROLL
    * ===================================================== */
 
   useEffect(
@@ -364,13 +474,14 @@ export function UniversalAdd() {
 
 
   /* =======================================================
-   * 10. FILE PICKER
+   * 11. FILE PICKER
    * ===================================================== */
 
   function handleFileChange(
     event:
       ChangeEvent<HTMLInputElement>,
-  ) {
+  ):
+  void {
     const selectedFile =
       event
         .target
@@ -384,6 +495,12 @@ export function UniversalAdd() {
     setPreview(
       null,
     );
+
+
+    setConfirmation(
+      null,
+    );
+
 
     setError(
       null,
@@ -401,21 +518,29 @@ export function UniversalAdd() {
     }
 
 
+    const normalizedName =
+      selectedFile
+        .name
+        .trim()
+        .toLowerCase();
+
+
     if (
-      !ACCEPTED_FILE_TYPES.includes(
-        selectedFile.type as
-          (
-            typeof ACCEPTED_FILE_TYPES
-          )[number],
+      selectedFile.type !==
+        PDF_MIME ||
+      !normalizedName.endsWith(
+        ".pdf",
       )
     ) {
       setFile(
         null,
       );
 
+
       setError(
         "حالياً ندعم ملفات PDF فقط.",
       );
+
 
       event.target.value =
         "";
@@ -432,9 +557,11 @@ export function UniversalAdd() {
         null,
       );
 
+
       setError(
         "حجم الملف أكبر من 15 MB.",
       );
+
 
       event.target.value =
         "";
@@ -450,17 +577,32 @@ export function UniversalAdd() {
 
 
   /* =======================================================
-   * 11. REMOVE FILE
+   * 12. REMOVE FILE
    * ===================================================== */
 
-  function handleRemoveFile() {
+  function handleRemoveFile():
+  void {
+    if (
+      busy
+    ) {
+      return;
+    }
+
+
     setFile(
       null,
     );
 
+
     setPreview(
       null,
     );
+
+
+    setConfirmation(
+      null,
+    );
+
 
     setError(
       null,
@@ -477,14 +619,23 @@ export function UniversalAdd() {
 
 
   /* =======================================================
-   * 12. ANALYZE
+   * 13. ANALYZE
    * ===================================================== */
 
   async function handleAnalyze(
     event:
       FormEvent<HTMLFormElement>,
-  ) {
+  ):
+  Promise<void> {
     event.preventDefault();
+
+
+    if (
+      analyzing ||
+      confirming
+    ) {
+      return;
+    }
 
 
     const cleanText =
@@ -503,15 +654,34 @@ export function UniversalAdd() {
     }
 
 
-    setLoading(
+    if (
+      cleanText.length >
+      MAX_TEXT_LENGTH
+    ) {
+      setError(
+        "النص أطول من المسموح.",
+      );
+
+      return;
+    }
+
+
+    setAnalyzing(
       true,
     );
+
 
     setError(
       null,
     );
 
+
     setPreview(
+      null,
+    );
+
+
+    setConfirmation(
       null,
     );
 
@@ -546,9 +716,11 @@ export function UniversalAdd() {
         await fetch(
           "/api/intake/preview",
           {
-            method: "POST",
+            method:
+              "POST",
 
-            body: formData,
+            body:
+              formData,
 
             credentials:
               "same-origin",
@@ -562,7 +734,7 @@ export function UniversalAdd() {
       const result =
         (
           await response.json()
-        ) as IntakeApiResponse;
+        ) as PreviewApiResponse;
 
 
       if (
@@ -572,7 +744,7 @@ export function UniversalAdd() {
       ) {
         throw new Error(
           result.error ??
-            "تعذر فهم المدخل الآن.",
+          "تعذر فهم المدخل الآن.",
         );
       }
 
@@ -583,17 +755,13 @@ export function UniversalAdd() {
     } catch (
       caughtError
     ) {
-      const message =
+      setError(
         caughtError instanceof Error
           ? caughtError.message
-          : "تعذر تحليل المدخل الآن.";
-
-
-      setError(
-        message,
+          : "تعذر تحليل المدخل الآن.",
       );
     } finally {
-      setLoading(
+      setAnalyzing(
         false,
       );
     }
@@ -601,11 +769,29 @@ export function UniversalAdd() {
 
 
   /* =======================================================
-   * 13. EDIT PREVIEW
+   * 14. EDIT
    * ===================================================== */
 
-  function handleEdit() {
+  function handleEdit():
+  void {
+    if (
+      busy
+    ) {
+      return;
+    }
+
+
     setPreview(
+      null,
+    );
+
+
+    setConfirmation(
+      null,
+    );
+
+
+    setError(
       null,
     );
 
@@ -622,28 +808,143 @@ export function UniversalAdd() {
 
 
   /* =======================================================
-   * 14. CONFIRM — TEMPORARY V2 SAFETY
+   * 15. CONFIRM
    * ===================================================== */
 
-  function handleConfirm() {
-    /*
-     * Deliberately not saving yet.
-     *
-     * The secure confirmed-write endpoint will be introduced
-     * separately.
-     *
-     * LIFE OS must never allow an AI interpretation to write
-     * directly into personal data without explicit approval.
-     */
+  async function handleConfirm():
+  Promise<void> {
+    if (
+      !preview ||
+      confirming ||
+      analyzing
+    ) {
+      return;
+    }
+
+
+    const cleanText =
+      text.trim();
+
+
+    if (
+      !cleanText &&
+      !file
+    ) {
+      setError(
+        "المدخل الأصلي غير موجود. ارجع وعدله.",
+      );
+
+      return;
+    }
+
+
+    setConfirming(
+      true,
+    );
+
 
     setError(
-      "تم فهم المدخل. الحفظ الآمن سيتم ربطه في خطوة V2 القادمة.",
+      null,
     );
+
+
+    try {
+      const formData =
+        new FormData();
+
+
+      if (
+        cleanText
+      ) {
+        formData.append(
+          "text",
+          cleanText,
+        );
+      }
+
+
+      if (
+        file
+      ) {
+        formData.append(
+          "file",
+          file,
+          file.name,
+        );
+      }
+
+
+      formData.append(
+        "preview",
+        JSON.stringify(
+          preview,
+        ),
+      );
+
+
+      const response =
+        await fetch(
+          "/api/intake/confirm",
+          {
+            method:
+              "POST",
+
+            body:
+              formData,
+
+            credentials:
+              "same-origin",
+
+            cache:
+              "no-store",
+          },
+        );
+
+
+      const result =
+        (
+          await response.json()
+        ) as ConfirmApiResponse;
+
+
+      if (
+        !response.ok ||
+        !result.ok ||
+        !result.intake
+      ) {
+        throw new Error(
+          result.error ??
+          "تعذر اعتماد الإضافة حاليًا.",
+        );
+      }
+
+
+      setConfirmation(
+        result.intake,
+      );
+
+
+      setError(
+        null,
+      );
+    } catch (
+      caughtError
+    ) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "تعذر اعتماد الإضافة حاليًا.",
+      );
+    } finally {
+      setConfirming(
+        false,
+      );
+    }
   }
 
 
   /* =======================================================
-   * 15. RENDER
+   * 16. RENDER
    * ===================================================== */
 
   return (
@@ -762,7 +1063,8 @@ export function UniversalAdd() {
           ) => {
             if (
               event.target ===
-              event.currentTarget
+                event.currentTarget &&
+              !busy
             ) {
               handleClose();
             }
@@ -860,6 +1162,9 @@ export function UniversalAdd() {
                 onClick={
                   handleClose
                 }
+                disabled={
+                  busy
+                }
                 className="button button--ghost button--small"
                 style={{
                   minWidth:
@@ -878,10 +1183,190 @@ export function UniversalAdd() {
 
 
             {/* =============================================
-             * INPUT MODE
+             * SUCCESS MODE
              * =========================================== */}
 
-            {!preview ? (
+            {confirmation ? (
+              <div
+                style={{
+                  marginTop:
+                    "24px",
+                }}
+              >
+                <div
+                  className="card"
+                  style={{
+                    padding:
+                      "24px",
+
+                    textAlign:
+                      "center",
+                  }}
+                >
+                  <div
+                    aria-hidden="true"
+                    style={{
+                      width:
+                        "54px",
+
+                      height:
+                        "54px",
+
+                      margin:
+                        "0 auto",
+
+                      borderRadius:
+                        "18px",
+
+                      display:
+                        "grid",
+
+                      placeItems:
+                        "center",
+
+                      background:
+                        "var(--surface-soft, #f8fafc)",
+
+                      fontSize:
+                        "26px",
+                    }}
+                  >
+                    ✓
+                  </div>
+
+
+                  <h3
+                    style={{
+                      margin:
+                        "16px 0 0",
+
+                      fontSize:
+                        "20px",
+                    }}
+                  >
+                    تم الاعتماد ✓
+                  </h3>
+
+
+                  <p
+                    className="text-muted"
+                    style={{
+                      margin:
+                        "8px auto 0",
+
+                      maxWidth:
+                        "480px",
+
+                      lineHeight:
+                        1.75,
+                    }}
+                  >
+                    تم حفظه كإضافة معتمدة داخل LIFE OS.
+                    التنفيذ النهائي على المال أو الخطط أو
+                    السفر أو التطوير بيصير في طبقة التنفيذ
+                    الآمنة القادمة.
+                  </p>
+
+
+                  <div
+                    style={{
+                      marginTop:
+                        "18px",
+
+                      padding:
+                        "14px 16px",
+
+                      borderRadius:
+                        "16px",
+
+                      background:
+                        "var(--surface-soft, #f8fafc)",
+
+                      textAlign:
+                        "start",
+                    }}
+                  >
+                    <span
+                      className="text-muted text-small"
+                    >
+                      تم اعتماد
+                    </span>
+
+                    <div
+                      style={{
+                        display:
+                          "flex",
+
+                        alignItems:
+                          "center",
+
+                        gap:
+                          "9px",
+
+                        marginTop:
+                          "6px",
+                      }}
+                    >
+                      <span
+                        aria-hidden="true"
+                      >
+                        {
+                          getKindIcon(
+                            confirmation.kind,
+                          )
+                        }
+                      </span>
+
+                      <strong>
+                        {confirmation.title}
+                      </strong>
+                    </div>
+                  </div>
+                </div>
+
+
+                <div
+                  style={{
+                    display:
+                      "grid",
+
+                    gridTemplateColumns:
+                      "1fr 1fr",
+
+                    gap:
+                      "10px",
+
+                    marginTop:
+                      "18px",
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="button button--secondary"
+                    onClick={
+                      handleAddAnother
+                    }
+                  >
+                    إضافة جديدة
+                  </button>
+
+                  <button
+                    type="button"
+                    className="button button--primary"
+                    onClick={
+                      handleClose
+                    }
+                  >
+                    تم
+                  </button>
+                </div>
+              </div>
+            ) : !preview ? (
+
+              /* ===========================================
+               * INPUT MODE
+               * ========================================= */
+
               <form
                 onSubmit={
                   handleAnalyze
@@ -919,6 +1404,9 @@ export function UniversalAdd() {
                   value={
                     text
                   }
+                  disabled={
+                    busy
+                  }
                   onChange={(
                     event,
                   ) => {
@@ -934,7 +1422,7 @@ export function UniversalAdd() {
                     "مثال: راتبي 26,700 درهم\nأو: أبغي أفتح مغسلة في خورفكان في مارس 2027"
                   }
                   maxLength={
-                    4000
+                    MAX_TEXT_LENGTH
                   }
                   rows={
                     5
@@ -983,7 +1471,7 @@ export function UniversalAdd() {
 
 
                 {/* =========================================
-                 * FILE UPLOAD
+                 * FILE
                  * ======================================= */}
 
                 <div
@@ -998,6 +1486,9 @@ export function UniversalAdd() {
                     }
                     type="file"
                     accept=".pdf,application/pdf"
+                    disabled={
+                      busy
+                    }
                     onChange={
                       handleFileChange
                     }
@@ -1012,6 +1503,9 @@ export function UniversalAdd() {
                     <button
                       type="button"
                       className="button button--secondary"
+                      disabled={
+                        busy
+                      }
                       onClick={() => {
                         fileInputRef
                           .current
@@ -1082,6 +1576,9 @@ export function UniversalAdd() {
                         <button
                           type="button"
                           className="button button--ghost button--small"
+                          disabled={
+                            busy
+                          }
                           onClick={
                             handleRemoveFile
                           }
@@ -1093,10 +1590,6 @@ export function UniversalAdd() {
                   )}
                 </div>
 
-
-                {/* =========================================
-                 * ERROR
-                 * ======================================= */}
 
                 {error ? (
                   <p
@@ -1120,10 +1613,6 @@ export function UniversalAdd() {
                 ) : null}
 
 
-                {/* =========================================
-                 * ACTION
-                 * ======================================= */}
-
                 <div
                   style={{
                     marginTop:
@@ -1134,7 +1623,7 @@ export function UniversalAdd() {
                     type="submit"
                     className="button button--primary"
                     disabled={
-                      loading ||
+                      busy ||
                       (
                         !text.trim() &&
                         !file
@@ -1148,7 +1637,7 @@ export function UniversalAdd() {
                         "54px",
                     }}
                   >
-                    {loading
+                    {analyzing
                       ? "جاري الفهم..."
                       : "✦ فهم وتحليل"}
                   </button>
@@ -1168,13 +1657,13 @@ export function UniversalAdd() {
                       1.6,
                   }}
                 >
-                  ما ينحفظ أي تغيير قبل موافقتك.
+                  ما ينحفظ أي شيء قبل موافقتك.
                 </p>
               </form>
             ) : (
 
               /* ===========================================
-               * PREVIEW
+               * PREVIEW MODE
                * ========================================= */
 
               <div
@@ -1212,6 +1701,7 @@ export function UniversalAdd() {
                         LIFE OS فهم:
                       </span>
 
+
                       <div
                         style={{
                           display:
@@ -1248,9 +1738,7 @@ export function UniversalAdd() {
                               0,
                           }}
                         >
-                          {
-                            preview.label
-                          }
+                          {preview.label}
                         </h3>
                       </div>
                     </div>
@@ -1261,7 +1749,7 @@ export function UniversalAdd() {
                     >
                       {Math.round(
                         preview.confidence *
-                          100,
+                        100,
                       )}
                       %
                     </span>
@@ -1337,9 +1825,7 @@ export function UniversalAdd() {
                           600,
                       }}
                     >
-                      {
-                        preview.next_action
-                      }
+                      {preview.next_action}
                     </p>
                   </div>
                 </div>
@@ -1356,11 +1842,7 @@ export function UniversalAdd() {
                         "13px",
 
                       color:
-                        error.startsWith(
-                          "تم فهم",
-                        )
-                          ? "var(--positive, #16a34a)"
-                          : "var(--negative, #dc2626)",
+                        "var(--negative, #dc2626)",
 
                       lineHeight:
                         1.6,
@@ -1389,6 +1871,9 @@ export function UniversalAdd() {
                   <button
                     type="button"
                     className="button button--secondary"
+                    disabled={
+                      busy
+                    }
                     onClick={
                       handleEdit
                     }
@@ -1396,16 +1881,40 @@ export function UniversalAdd() {
                     تعديل
                   </button>
 
+
                   <button
                     type="button"
                     className="button button--primary"
+                    disabled={
+                      busy
+                    }
                     onClick={
                       handleConfirm
                     }
                   >
-                    تأكيد
+                    {confirming
+                      ? "جاري الاعتماد..."
+                      : "تأكيد"}
                   </button>
                 </div>
+
+
+                <p
+                  className="text-muted text-small"
+                  style={{
+                    textAlign:
+                      "center",
+
+                    margin:
+                      "12px 0 0",
+
+                    lineHeight:
+                      1.6,
+                  }}
+                >
+                  التأكيد يعتمد الاقتراح فقط؛ التنفيذ النهائي
+                  يتم بشكل منفصل وآمن.
+                </p>
               </div>
             )}
           </section>
@@ -1414,3 +1923,33 @@ export function UniversalAdd() {
     </>
   );
 }
+
+
+/* =========================================================
+ * FINAL V2 RULE
+ * ======================================================= */
+
+/**
+ * Universal Add now supports:
+ *
+ * input
+ *      ↓
+ * preview
+ *      ↓
+ * explicit confirmation
+ *      ↓
+ * approved intake proposal
+ *
+ *
+ * It still does NOT allow AI preview alone to mutate
+ * permanent domain data.
+ *
+ *
+ * AI Suggests
+ *      ↓
+ * User Reviews
+ *      ↓
+ * User Approves
+ *      ↓
+ * System Executes
+ */
