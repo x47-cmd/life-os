@@ -61,16 +61,20 @@ import type {
  * V1 domains
  * +
  * V2 Universal Intake
+ * +
+ * V2 Structured Proposals
  *
- * Permanent V2 rule:
+ * Permanent rule:
  *
  * AI Suggests
  *      ↓
- * User Reviews
+ * Validation
+ *      ↓
+ * User Reviews Exact Values
  *      ↓
  * User Approves
  *      ↓
- * System Executes
+ * Deterministic Executor
  * ======================================================= */
 
 
@@ -79,7 +83,8 @@ import type {
  * ======================================================= */
 
 function isValidISODate(
-  value: string,
+  value:
+    string,
 ): boolean {
   const match =
     /^(\d{4})-(\d{2})-(\d{2})$/.exec(
@@ -159,7 +164,8 @@ function isValidISODate(
 
 
 function isValidTimeZone(
-  value: string,
+  value:
+    string,
 ): boolean {
   try {
     new Intl.DateTimeFormat(
@@ -179,7 +185,8 @@ function isValidTimeZone(
 
 
 function isHttpUrl(
-  value: string,
+  value:
+    string,
 ): boolean {
   try {
     const url =
@@ -227,7 +234,8 @@ function isDateRangeValid(
 
 
 function normalizeAuditKey(
-  value: string,
+  value:
+    string,
 ): string {
   return value
     .trim()
@@ -362,6 +370,18 @@ export const moneySchema =
     .max(
       999_999_999_999.99,
     );
+
+
+export const positiveMoneySchema =
+  moneySchema.refine(
+    (
+      value,
+    ) =>
+      value >
+      0,
+
+    "المبلغ يجب أن يكون أكبر من صفر.",
+  );
 
 
 export const signedMoneySchema =
@@ -2361,6 +2381,16 @@ export const INTAKE_TARGET_ENTITY_TYPES = [
 ] as const;
 
 
+export const STRUCTURED_INTAKE_PROPOSAL_ACTIONS = [
+  "create_income_source",
+  "create_budget_item",
+  "create_goal",
+  "create_project",
+  "create_learning_item",
+  "create_career_item",
+] as const;
+
+
 const INTAKE_TEXT_MAX_LENGTH =
   4_000;
 
@@ -2412,6 +2442,12 @@ export const intakeStatusSchema =
 export const intakeTargetEntityTypeSchema =
   z.enum(
     INTAKE_TARGET_ENTITY_TYPES,
+  );
+
+
+export const structuredIntakeProposalActionSchema =
+  z.enum(
+    STRUCTURED_INTAKE_PROPOSAL_ACTIONS,
   );
 
 
@@ -2561,10 +2597,6 @@ export const intakeErrorCodeSchema =
  * 21. UNIVERSAL INTAKE PREVIEW
  * ======================================================= */
 
-/**
- * Output returned by AI before anything is persisted as a
- * LIFE OS domain fact.
- */
 export const intakePreviewSchema =
   z
     .object({
@@ -2595,7 +2627,762 @@ export const intakePreviewSchema =
 
 
 /* =========================================================
- * 22. UNIVERSAL INTAKE VALIDATION HELPERS
+ * 22. STRUCTURED PROPOSAL — FINANCE
+ * ======================================================= */
+
+const financeProposalCurrencySchema =
+  currencyCodeSchema;
+
+
+/**
+ * Exact proposed income source.
+ *
+ * All values are REQUIRED because these are the exact values
+ * shown to the user before approval.
+ */
+export const financeIncomeSourceProposalDataSchema =
+  z
+    .object({
+      name:
+        titleSchema,
+
+      amount:
+        positiveMoneySchema,
+
+      currency:
+        financeProposalCurrencySchema,
+
+      frequency:
+        frequencySchema,
+
+      next_expected_date:
+        isoDateSchema
+          .nullable(),
+
+      notes:
+        notesSchema
+          .nullable(),
+    })
+    .strict();
+
+
+export const financeIncomeSourceProposalSchema =
+  z
+    .object({
+      version:
+        z.literal(
+          1,
+        ),
+
+      kind:
+        z.literal(
+          "finance",
+        ),
+
+      action:
+        z.literal(
+          "create_income_source",
+        ),
+
+      data:
+        financeIncomeSourceProposalDataSchema,
+    })
+    .strict();
+
+
+/**
+ * Exact proposed budget item.
+ *
+ * Used for:
+ *
+ * expense
+ * saving
+ * investment allocation
+ * debt payment
+ */
+export const financeBudgetItemProposalDataSchema =
+  z
+    .object({
+      name:
+        titleSchema,
+
+      category:
+        z.enum(
+          BUDGET_CATEGORIES,
+        ),
+
+      item_type:
+        z.enum(
+          BUDGET_ITEM_TYPES,
+        ),
+
+      amount:
+        positiveMoneySchema,
+
+      currency:
+        financeProposalCurrencySchema,
+
+      frequency:
+        frequencySchema,
+
+      due_day:
+        z
+          .number()
+          .finite()
+          .int()
+          .min(
+            DUE_DAY_MIN,
+          )
+          .max(
+            DUE_DAY_MAX,
+          )
+          .nullable(),
+
+      notes:
+        notesSchema
+          .nullable(),
+    })
+    .strict();
+
+
+export const financeBudgetItemProposalSchema =
+  z
+    .object({
+      version:
+        z.literal(
+          1,
+        ),
+
+      kind:
+        z.literal(
+          "finance",
+        ),
+
+      action:
+        z.literal(
+          "create_budget_item",
+        ),
+
+      data:
+        financeBudgetItemProposalDataSchema,
+    })
+    .strict();
+
+
+export const financeIntakeProposalSchema =
+  z.discriminatedUnion(
+    "action",
+    [
+      financeIncomeSourceProposalSchema,
+      financeBudgetItemProposalSchema,
+    ],
+  );
+
+
+/* =========================================================
+ * 23. STRUCTURED PROPOSAL — PLAN
+ * ======================================================= */
+
+export const goalProposalDataSchema =
+  z
+    .object({
+      title:
+        titleSchema,
+
+      category:
+        z.enum(
+          GOAL_CATEGORIES,
+        ),
+
+      description:
+        shortTextSchema
+          .nullable(),
+
+      target_value:
+        finiteNumberSchema
+          .nullable(),
+
+      current_value:
+        finiteNumberSchema
+          .nullable(),
+
+      unit:
+        z
+          .string()
+          .trim()
+          .min(
+            1,
+          )
+          .max(
+            30,
+          )
+          .nullable(),
+
+      progress_percent:
+        progressPercentSchema,
+
+      target_date:
+        isoDateSchema
+          .nullable(),
+
+      priority:
+        prioritySchema,
+
+      status:
+        z.enum(
+          GOAL_STATUSES,
+        ),
+
+      next_action:
+        shortTextSchema
+          .nullable(),
+
+      sort_order:
+        z
+          .number()
+          .finite()
+          .int()
+          .min(
+            0,
+          ),
+    })
+    .strict();
+
+
+export const goalIntakeProposalSchema =
+  z
+    .object({
+      version:
+        z.literal(
+          1,
+        ),
+
+      kind:
+        z.literal(
+          "plan",
+        ),
+
+      action:
+        z.literal(
+          "create_goal",
+        ),
+
+      data:
+        goalProposalDataSchema,
+    })
+    .strict();
+
+
+const projectProposalDataBaseSchema =
+  z
+    .object({
+      goal_id:
+        uuidSchema
+          .nullable(),
+
+      title:
+        titleSchema,
+
+      description:
+        shortTextSchema
+          .nullable(),
+
+      category:
+        z.enum(
+          PROJECT_CATEGORIES,
+        ),
+
+      status:
+        z.enum(
+          PROJECT_STATUSES,
+        ),
+
+      progress_percent:
+        progressPercentSchema,
+
+      priority:
+        prioritySchema,
+
+      start_date:
+        isoDateSchema
+          .nullable(),
+
+      target_date:
+        isoDateSchema
+          .nullable(),
+
+      next_action:
+        shortTextSchema
+          .nullable(),
+    })
+    .strict();
+
+
+export const projectProposalDataSchema =
+  projectProposalDataBaseSchema
+    .superRefine(
+      (
+        value,
+        context,
+      ) => {
+        if (
+          !isDateRangeValid(
+            value.start_date,
+            value.target_date,
+          )
+        ) {
+          context.addIssue({
+            code:
+              "custom",
+
+            path:
+              [
+                "target_date",
+              ],
+
+            message:
+              "تاريخ الهدف لا يمكن أن يسبق تاريخ البداية.",
+          });
+        }
+      },
+    );
+
+
+export const projectIntakeProposalSchema =
+  z
+    .object({
+      version:
+        z.literal(
+          1,
+        ),
+
+      kind:
+        z.literal(
+          "plan",
+        ),
+
+      action:
+        z.literal(
+          "create_project",
+        ),
+
+      data:
+        projectProposalDataSchema,
+    })
+    .strict();
+
+
+export const planIntakeProposalSchema =
+  z.discriminatedUnion(
+    "action",
+    [
+      goalIntakeProposalSchema,
+      projectIntakeProposalSchema,
+    ],
+  );
+
+
+/* =========================================================
+ * 24. STRUCTURED PROPOSAL — GROWTH
+ * ======================================================= */
+
+const learningProposalDataBaseSchema =
+  z
+    .object({
+      goal_id:
+        uuidSchema
+          .nullable(),
+
+      title:
+        titleSchema,
+
+      provider:
+        z
+          .string()
+          .trim()
+          .min(
+            1,
+          )
+          .max(
+            120,
+          )
+          .nullable(),
+
+      item_type:
+        z.enum(
+          LEARNING_ITEM_TYPES,
+        ),
+
+      status:
+        z.enum(
+          LEARNING_STATUSES,
+        ),
+
+      priority:
+        prioritySchema,
+
+      progress_percent:
+        progressPercentSchema,
+
+      start_date:
+        isoDateSchema
+          .nullable(),
+
+      target_date:
+        isoDateSchema
+          .nullable(),
+
+      completed_date:
+        isoDateSchema
+          .nullable(),
+
+      url:
+        httpUrlSchema
+          .nullable(),
+
+      cost:
+        moneySchema
+          .nullable(),
+
+      currency:
+        currencyCodeSchema,
+
+      notes:
+        notesSchema
+          .nullable(),
+    })
+    .strict();
+
+
+export const learningProposalDataSchema =
+  learningProposalDataBaseSchema
+    .superRefine(
+      (
+        value,
+        context,
+      ) => {
+        validateLearningDates(
+          value,
+
+          (
+            path,
+            message,
+          ) => {
+            context.addIssue({
+              code:
+                "custom",
+
+              path,
+
+              message,
+            });
+          },
+        );
+      },
+    );
+
+
+export const learningIntakeProposalSchema =
+  z
+    .object({
+      version:
+        z.literal(
+          1,
+        ),
+
+      kind:
+        z.literal(
+          "growth",
+        ),
+
+      action:
+        z.literal(
+          "create_learning_item",
+        ),
+
+      data:
+        learningProposalDataSchema,
+    })
+    .strict();
+
+
+const careerProposalDataBaseSchema =
+  z
+    .object({
+      goal_id:
+        uuidSchema
+          .nullable(),
+
+      item_type:
+        z.enum(
+          CAREER_ITEM_TYPES,
+        ),
+
+      title:
+        titleSchema,
+
+      description:
+        shortTextSchema
+          .nullable(),
+
+      status:
+        z.enum(
+          CAREER_STATUSES,
+        ),
+
+      priority:
+        prioritySchema,
+
+      rating:
+        z
+          .number()
+          .finite()
+          .int()
+          .min(
+            CAREER_RATING_MIN,
+          )
+          .max(
+            CAREER_RATING_MAX,
+          )
+          .nullable(),
+
+      event_date:
+        isoDateSchema
+          .nullable(),
+
+      target_date:
+        isoDateSchema
+          .nullable(),
+
+      evidence_url:
+        httpUrlSchema
+          .nullable(),
+
+      notes:
+        notesSchema
+          .nullable(),
+    })
+    .strict();
+
+
+export const careerProposalDataSchema =
+  careerProposalDataBaseSchema
+    .superRefine(
+      (
+        value,
+        context,
+      ) => {
+        if (
+          !isDateRangeValid(
+            value.event_date,
+            value.target_date,
+          )
+        ) {
+          context.addIssue({
+            code:
+              "custom",
+
+            path:
+              [
+                "target_date",
+              ],
+
+            message:
+              "تاريخ الهدف لا يمكن أن يسبق تاريخ الحدث.",
+          });
+        }
+      },
+    );
+
+
+export const careerIntakeProposalSchema =
+  z
+    .object({
+      version:
+        z.literal(
+          1,
+        ),
+
+      kind:
+        z.literal(
+          "growth",
+        ),
+
+      action:
+        z.literal(
+          "create_career_item",
+        ),
+
+      data:
+        careerProposalDataSchema,
+    })
+    .strict();
+
+
+export const growthIntakeProposalSchema =
+  z.discriminatedUnion(
+    "action",
+    [
+      learningIntakeProposalSchema,
+      careerIntakeProposalSchema,
+    ],
+  );
+
+
+/* =========================================================
+ * 25. STRUCTURED PROPOSAL — MASTER UNION
+ * ======================================================= */
+
+/**
+ * These are the only exact AI proposal actions LIFE OS
+ * currently understands structurally.
+ *
+ * travel/document are deliberately absent.
+ *
+ * note already executes directly from the approved source.
+ */
+export const structuredIntakeProposalSchema =
+  z.union([
+    financeIncomeSourceProposalSchema,
+    financeBudgetItemProposalSchema,
+    goalIntakeProposalSchema,
+    projectIntakeProposalSchema,
+    learningIntakeProposalSchema,
+    careerIntakeProposalSchema,
+  ]);
+
+
+/* =========================================================
+ * 26. STRUCTURED PROPOSAL — KIND CONSISTENCY
+ * ======================================================= */
+
+/**
+ * Validates that a structured proposal belongs to the same
+ * Universal Intake classification.
+ *
+ * Example:
+ *
+ * intake.kind = finance
+ *
+ * cannot carry:
+ *
+ * proposal.kind = plan
+ */
+export function validateStructuredProposalForIntakeKind(
+  intakeKind:
+    "finance" |
+    "plan" |
+    "travel" |
+    "growth" |
+    "document" |
+    "note",
+
+  proposal:
+    unknown,
+):
+  | {
+      success:
+        true;
+
+      data:
+        z.infer<
+          typeof structuredIntakeProposalSchema
+        >;
+    }
+  | {
+      success:
+        false;
+
+      error:
+        string;
+    } {
+  const validation =
+    structuredIntakeProposalSchema.safeParse(
+      proposal,
+    );
+
+
+  if (
+    !validation.success
+  ) {
+    return {
+      success:
+        false,
+
+      error:
+        getFirstValidationError(
+          validation.error,
+        ),
+    };
+  }
+
+
+  if (
+    validation.data.kind !==
+    intakeKind
+  ) {
+    return {
+      success:
+        false,
+
+      error:
+        "نوع الاقتراح لا يطابق تصنيف الإضافة.",
+    };
+  }
+
+
+  return {
+    success:
+      true,
+
+    data:
+      validation.data,
+  };
+}
+
+
+/* =========================================================
+ * 27. STRUCTURED PROPOSAL — EXECUTION TARGET
+ * ======================================================= */
+
+export function getStructuredProposalTarget(
+  proposal:
+    z.infer<
+      typeof structuredIntakeProposalSchema
+    >,
+):
+  | "income_source"
+  | "budget_item"
+  | "goal"
+  | "project"
+  | "learning_item"
+  | "career_item" {
+  switch (
+    proposal.action
+  ) {
+    case "create_income_source":
+      return "income_source";
+
+    case "create_budget_item":
+      return "budget_item";
+
+    case "create_goal":
+      return "goal";
+
+    case "create_project":
+      return "project";
+
+    case "create_learning_item":
+      return "learning_item";
+
+    case "create_career_item":
+      return "career_item";
+  }
+}
+
+
+/* =========================================================
+ * 28. UNIVERSAL INTAKE VALIDATION HELPERS
  * ======================================================= */
 
 interface IntakeSourceFields {
@@ -2853,7 +3640,7 @@ function validateIntakeLifecycle(
 
 
 /* =========================================================
- * 23. UNIVERSAL INTAKE ITEM BASE
+ * 29. UNIVERSAL INTAKE ITEM BASE
  * ======================================================= */
 
 const intakeItemBaseSchema =
@@ -2931,7 +3718,7 @@ const intakeItemBaseSchema =
 
 
 /* =========================================================
- * 24. UNIVERSAL INTAKE INSERT
+ * 30. UNIVERSAL INTAKE INSERT
  * ======================================================= */
 
 export const intakeItemInsertSchema =
@@ -3001,7 +3788,7 @@ export const intakeItemInsertSchema =
 
 
 /* =========================================================
- * 25. UNIVERSAL INTAKE UPDATE
+ * 31. UNIVERSAL INTAKE UPDATE
  * ======================================================= */
 
 export const intakeItemUpdateSchema =
@@ -3027,12 +3814,6 @@ export const intakeItemUpdateSchema =
         if (
           sourceFieldsProvided
         ) {
-          /*
-           * If file metadata is changed, all file metadata
-           * fields must travel together.
-           *
-           * Text-only updates remain valid.
-           */
           const fileFieldsProvided =
             value.source_file_name !==
               undefined ||
@@ -3188,15 +3969,9 @@ export const intakeItemUpdateSchema =
 
 
 /* =========================================================
- * 26. UNIVERSAL INTAKE APPROVAL
+ * 32. UNIVERSAL INTAKE APPROVAL
  * ======================================================= */
 
-/**
- * Dedicated payload used when the user explicitly presses
- * Confirm.
- *
- * The browser cannot choose a user_id.
- */
 export const intakeApprovalSchema =
   z
     .object({
@@ -3210,7 +3985,7 @@ export const intakeApprovalSchema =
 
 
 /* =========================================================
- * 27. UNIVERSAL INTAKE CANCELLATION
+ * 33. UNIVERSAL INTAKE CANCELLATION
  * ======================================================= */
 
 export const intakeCancellationSchema =
@@ -3223,7 +3998,7 @@ export const intakeCancellationSchema =
 
 
 /* =========================================================
- * 28. ENTITY IDENTIFIERS
+ * 34. ENTITY IDENTIFIERS
  * ======================================================= */
 
 export const entityIdSchema =
@@ -3236,7 +4011,7 @@ export const entityIdSchema =
 
 
 /* =========================================================
- * 29. PAGINATION
+ * 35. PAGINATION
  * ======================================================= */
 
 export const paginationSchema =
@@ -3273,7 +4048,7 @@ export const paginationSchema =
 
 
 /* =========================================================
- * 30. AI REQUEST
+ * 36. AI REQUEST
  * ======================================================= */
 
 export const aiRequestSchema =
@@ -3304,7 +4079,7 @@ export const aiRequestSchema =
 
 
 /* =========================================================
- * 31. AI RESPONSE
+ * 37. AI RESPONSE
  * ======================================================= */
 
 export const aiResponseSchema =
@@ -3349,7 +4124,7 @@ export const aiResponseSchema =
 
 
 /* =========================================================
- * 32. DECISION SIMULATOR INPUT
+ * 38. DECISION SIMULATOR INPUT
  * ======================================================= */
 
 export const decisionSimulationInputSchema =
@@ -3434,7 +4209,7 @@ export const decisionSimulationInputSchema =
 
 
 /* =========================================================
- * 33. DECISION SIMULATOR OUTPUT
+ * 39. DECISION SIMULATOR OUTPUT
  * ======================================================= */
 
 export const decisionChangeSchema =
@@ -3645,7 +4420,7 @@ export const decisionSimulationResultSchema =
 
 
 /* =========================================================
- * 34. OPPORTUNITY SEARCH INPUT
+ * 40. OPPORTUNITY SEARCH INPUT
  * ======================================================= */
 
 export const opportunitySearchInputSchema =
@@ -3672,7 +4447,7 @@ export const opportunitySearchInputSchema =
 
 
 /* =========================================================
- * 35. OPPORTUNITY OUTPUT
+ * 41. OPPORTUNITY OUTPUT
  * ======================================================= */
 
 export const opportunitySchema =
@@ -3783,7 +4558,7 @@ export const opportunitySearchResultSchema =
 
 
 /* =========================================================
- * 36. AI RECOMMENDATION COLLECTION
+ * 42. AI RECOMMENDATION COLLECTION
  * ======================================================= */
 
 export const aiRecommendationCollectionSchema =
@@ -3797,7 +4572,7 @@ export const aiRecommendationCollectionSchema =
 
 
 /* =========================================================
- * 37. SAFE SEARCH / FILTER INPUTS
+ * 43. SAFE SEARCH / FILTER INPUTS
  * ======================================================= */
 
 export const searchTextSchema =
@@ -3818,7 +4593,7 @@ export const optionalSearchTextSchema =
 
 
 /* =========================================================
- * 38. DATE RANGE FILTER
+ * 44. DATE RANGE FILTER
  * ======================================================= */
 
 export const dateRangeSchema =
@@ -3864,7 +4639,7 @@ export const dateRangeSchema =
 
 
 /* =========================================================
- * 39. SAFE VALIDATION RESULT HELPER
+ * 45. SAFE VALIDATION RESULT HELPER
  * ======================================================= */
 
 export function getFirstValidationError(
@@ -3887,7 +4662,97 @@ export function getFirstValidationError(
 
 
 /* =========================================================
- * 40. UNIVERSAL INTAKE SECURITY RULE
+ * 46. STRUCTURED PROPOSAL SECURITY RULE
+ * ======================================================= */
+
+/**
+ * Structured proposal schemas accept ONLY:
+ *
+ * exact supported action
+ * exact supported fields
+ * exact valid values
+ *
+ *
+ * They reject:
+ *
+ * arbitrary table names
+ * arbitrary RPC names
+ * user_id
+ * SQL
+ * unsupported actions
+ * extra object fields
+ * negative finance amounts
+ * malformed currencies
+ * malformed dates
+ */
+
+
+/* =========================================================
+ * 47. EXACT VALUES RULE
+ * ======================================================= */
+
+/**
+ * Optional defaults are acceptable in normal domain forms.
+ *
+ * Structured AI proposals are different:
+ *
+ * values must be explicit.
+ *
+ *
+ * Example:
+ *
+ * Instead of:
+ *
+ * {
+ *   amount: 30000
+ * }
+ *
+ *
+ * the proposal must contain:
+ *
+ * {
+ *   amount: 30000,
+ *   currency: "AED",
+ *   frequency: "monthly",
+ *   next_expected_date: null,
+ *   notes: null
+ * }
+ *
+ *
+ * This gives the user a complete review surface before
+ * approval.
+ */
+
+
+/* =========================================================
+ * 48. PROPOSAL ≠ EXECUTION
+ * ======================================================= */
+
+/**
+ * structuredIntakeProposalSchema validates:
+ *
+ * what LIFE OS proposes.
+ *
+ *
+ * It does NOT authorize:
+ *
+ * a database write.
+ *
+ *
+ * Execution still requires:
+ *
+ * 1. Proposal validates.
+ * 2. Proposal matches intake.kind.
+ * 3. User sees exact values.
+ * 4. User explicitly confirms.
+ * 5. Server selects exact executor.
+ * 6. Executor validates again.
+ * 7. PostgreSQL RLS enforces ownership.
+ */
+
+
+/* =========================================================
+ * 49. UNIVERSAL INTAKE SECURITY RULE
  * ======================================================= */
 
 /**
@@ -3895,23 +4760,19 @@ export function getFirstValidationError(
  *
  * user_id
  *
- * because all schemas use .strict() and user ownership is
- * resolved from the authenticated server session.
+ * because all user-facing schemas are strict and ownership
+ * comes from the authenticated server session.
  *
  *
- * AI output can provide:
+ * AI output may suggest:
  *
- * kind
- * title
+ * classification
  * summary
- * confidence
- * next_action
- * proposed_payload
+ * exact proposal values
  *
  *
- * AI output cannot provide:
+ * AI output cannot grant:
  *
- * user_id
  * authorization
  * permanent ownership
  * direct database authority
@@ -3919,38 +4780,39 @@ export function getFirstValidationError(
 
 
 /* =========================================================
- * 41. PREVIEW ≠ DATABASE FACT
+ * 50. PREVIEW ≠ DATABASE FACT
  * ======================================================= */
 
 /**
  * intakePreviewSchema:
  *
- * validates an AI interpretation only.
+ * validates an AI interpretation.
+ *
+ *
+ * structuredIntakeProposalSchema:
+ *
+ * validates exact proposed values.
  *
  *
  * intakeItemInsertSchema:
  *
- * validates a proposal record.
+ * validates the durable proposal record.
  *
  *
- * Neither schema automatically creates:
+ * None automatically creates:
  *
  * income
  * expense
  * investment
  * goal
  * project
- * trip
  * learning item
- * memory
- *
- *
- * Domain execution occurs only after explicit user approval.
+ * career item
  */
 
 
 /* =========================================================
- * 42. FILE SECURITY RULE
+ * 51. FILE SECURITY RULE
  * ======================================================= */
 
 /**
@@ -3958,57 +4820,37 @@ export function getFirstValidationError(
  *
  * application/pdf
  *
- * and:
- *
  * <= 15 MB
  *
  *
- * The SQL intake table stores only metadata.
- *
- * PDF binary content will later belong to private Supabase
- * Storage.
+ * PDF binary content is not stored inside intake_items.
  */
 
 
 /* =========================================================
- * 43. FINAL SECURITY RULE
+ * 52. FINAL SECURITY RULE
  * ======================================================= */
 
 /**
- * IMPORTANT:
- *
- * None of the normal user-facing insert/update schemas above
- * accepts `user_id`.
- *
- * Ownership must always be derived server-side from the
- * authenticated Supabase identity.
- *
- *
- * Input such as:
- *
- * {
- *   user_id: "another-user-id",
- *   ...
- * }
- *
- * is rejected by `.strict()`.
- *
- *
- * The same rule applies to AI-generated arguments.
- *
- *
- * Final authorization remains enforced again through:
- *
- * PostgreSQL Row Level Security.
- *
- *
  * LIFE OS V2:
  *
- * AI Suggests
+ * User Input
  *      ↓
- * User Reviews
+ * AI Interpretation
  *      ↓
- * User Approves
+ * Structured Proposal
  *      ↓
- * System Executes
+ * Zod Validation
+ *      ↓
+ * User Reviews Exact Values
+ *      ↓
+ * Explicit Approval
+ *      ↓
+ * Deterministic Executor
+ *      ↓
+ * RLS-Protected Write
+ *
+ *
+ * Simple outside.
+ * Intelligent underneath.
  */
