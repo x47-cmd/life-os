@@ -18,6 +18,7 @@ import {
   getStructuredProposalTarget,
   growthIntakeProposalSchema,
   planIntakeProposalSchema,
+  travelIntakeProposalSchema,
   uuidSchema,
 } from "@/lib/validation";
 
@@ -26,7 +27,7 @@ import {
  * LIFE OS V2
  * UNIVERSAL INTAKE EXECUTOR
  *
- * Current deterministic execution:
+ * Deterministic execution:
  *
  * note
  *      → memory_item
@@ -40,19 +41,21 @@ import {
  * growth
  *      → learning_item / career_item
  *
- *
- * Pending:
- *
  * travel
+ *      → trip
+ *
+ *
  * document
+ *      → handled by the dedicated private document pipeline
  *
  *
  * Permanent rule:
  *
  * AI proposes.
- * User reviews.
+ * User reviews exact values.
  * User approves.
  * Deterministic code executes.
+ * PostgreSQL RLS enforces ownership.
  * ======================================================= */
 
 
@@ -140,7 +143,7 @@ export class IntakeExecutorError extends Error {
           "عملة الإضافة لا تطابق العملة الأساسية في LIFE OS.",
 
         UNSUPPORTED_KIND:
-          "هذا النوع غير جاهز للتنفيذ الآمن حاليًا.",
+          "هذا النوع لا يملك منفذًا آمنًا عبر هذا المسار.",
 
         INVALID_EXECUTOR_RESULT:
           "نتيجة التنفيذ غير صالحة.",
@@ -186,7 +189,7 @@ interface RpcErrorLike {
 
 
 /* =========================================================
- * 5. SAFE RECORD HELPER
+ * 5. RECORD HELPER
  * ======================================================= */
 
 function isRecord(
@@ -220,7 +223,7 @@ function mapExecutorError(
 
 
   /* -------------------------------------------------------
-   * Ownership / existence
+   * Intake ownership / existence
    * ---------------------------------------------------- */
 
   if (
@@ -253,7 +256,7 @@ function mapExecutorError(
 
 
   /* -------------------------------------------------------
-   * Profile
+   * Finance profile
    * ---------------------------------------------------- */
 
   if (
@@ -302,6 +305,9 @@ function mapExecutorError(
 
   /* -------------------------------------------------------
    * Execution conflicts
+   *
+   * These checks MUST appear before the generic domain
+   * validation prefixes below.
    * ---------------------------------------------------- */
 
   if (
@@ -319,6 +325,9 @@ function mapExecutorError(
     ) ||
     message.includes(
       "LIFE_OS_GROWTH_TARGET_CONFLICT",
+    ) ||
+    message.includes(
+      "LIFE_OS_TRAVEL_TARGET_CONFLICT",
     )
   ) {
     return new IntakeExecutorError(
@@ -328,57 +337,33 @@ function mapExecutorError(
 
 
   /* -------------------------------------------------------
-   * Finance structured proposal
+   * Domain creation failures
    * ---------------------------------------------------- */
 
   if (
     message.includes(
-      "LIFE_OS_FINANCE_PAYLOAD_",
+      "LIFE_OS_TRAVEL_CREATE_FAILED",
     ) ||
     message.includes(
-      "LIFE_OS_FINANCE_VERSION_",
+      "LIFE_OS_LEARNING_CREATE_FAILED",
     ) ||
     message.includes(
-      "LIFE_OS_FINANCE_PROPOSAL_KIND_",
-    ) ||
+      "LIFE_OS_CAREER_CREATE_FAILED",
+    )
+  ) {
+    return new IntakeExecutorError(
+      "EXECUTION_FAILED",
+    );
+  }
+
+
+  /* -------------------------------------------------------
+   * Finance proposal validation
+   * ---------------------------------------------------- */
+
+  if (
     message.includes(
-      "LIFE_OS_FINANCE_ACTION_",
-    ) ||
-    message.includes(
-      "LIFE_OS_FINANCE_DATA_",
-    ) ||
-    message.includes(
-      "LIFE_OS_FINANCE_NAME_",
-    ) ||
-    message.includes(
-      "LIFE_OS_FINANCE_AMOUNT_",
-    ) ||
-    message.includes(
-      "LIFE_OS_FINANCE_CURRENCY_INVALID",
-    ) ||
-    message.includes(
-      "LIFE_OS_FINANCE_FREQUENCY_",
-    ) ||
-    message.includes(
-      "LIFE_OS_FINANCE_NOTES_",
-    ) ||
-    message.includes(
-      "LIFE_OS_FINANCE_INCOME_",
-    ) ||
-    message.includes(
-      "LIFE_OS_FINANCE_BUDGET_",
-    ) ||
-    message.includes(
-      "LIFE_OS_FINANCE_DATE_",
-    ) ||
-    message.includes(
-      "LIFE_OS_FINANCE_CATEGORY_",
-    ) ||
-    message.includes(
-      "LIFE_OS_FINANCE_ITEM_TYPE_",
-    ) ||
-    message.includes(
-      "LIFE_OS_FINANCE_DUE_DAY_",
+      "LIFE_OS_FINANCE_",
     )
   ) {
     return new IntakeExecutorError(
@@ -388,7 +373,7 @@ function mapExecutorError(
 
 
   /* -------------------------------------------------------
-   * Plan structured proposal
+   * Plan proposal validation
    * ---------------------------------------------------- */
 
   if (
@@ -403,7 +388,7 @@ function mapExecutorError(
 
 
   /* -------------------------------------------------------
-   * Growth structured proposal
+   * Growth proposal validation
    * ---------------------------------------------------- */
 
   if (
@@ -418,7 +403,22 @@ function mapExecutorError(
 
 
   /* -------------------------------------------------------
-   * Safe generic fallback
+   * Travel proposal validation
+   * ---------------------------------------------------- */
+
+  if (
+    message.includes(
+      "LIFE_OS_TRAVEL_",
+    )
+  ) {
+    return new IntakeExecutorError(
+      "INVALID_PROPOSAL",
+    );
+  }
+
+
+  /* -------------------------------------------------------
+   * Safe fallback
    * ---------------------------------------------------- */
 
   return new IntakeExecutorError(
@@ -444,16 +444,15 @@ interface NoteExecutorResult {
 
 
 /* =========================================================
- * 8. FINANCE RPC RESULT
+ * 8. STRUCTURED RPC RESULT
  * ======================================================= */
 
-interface FinanceExecutorResult {
+interface StructuredExecutorResult {
   intake_id:
     UUID;
 
   target_entity_type:
-    "income_source" |
-    "budget_item";
+    IntakeTargetEntityType;
 
   target_entity_id:
     UUID;
@@ -464,47 +463,7 @@ interface FinanceExecutorResult {
 
 
 /* =========================================================
- * 9. PLAN RPC RESULT
- * ======================================================= */
-
-interface PlanExecutorResult {
-  intake_id:
-    UUID;
-
-  target_entity_type:
-    "goal" |
-    "project";
-
-  target_entity_id:
-    UUID;
-
-  intake_status:
-    "applied";
-}
-
-
-/* =========================================================
- * 10. GROWTH RPC RESULT
- * ======================================================= */
-
-interface GrowthExecutorResult {
-  intake_id:
-    UUID;
-
-  target_entity_type:
-    "learning_item" |
-    "career_item";
-
-  target_entity_id:
-    UUID;
-
-  intake_status:
-    "applied";
-}
-
-
-/* =========================================================
- * 11. PARSE NOTE RESULT
+ * 9. PARSE NOTE RESULT
  * ======================================================= */
 
 function parseNoteExecutorResult(
@@ -577,13 +536,16 @@ function parseNoteExecutorResult(
 
 
 /* =========================================================
- * 12. PARSE FINANCE RESULT
+ * 10. PARSE STRUCTURED RESULT
  * ======================================================= */
 
-function parseFinanceExecutorResult(
+function parseStructuredExecutorResult(
   value:
     unknown,
-): FinanceExecutorResult {
+
+  allowedTargets:
+    readonly IntakeTargetEntityType[],
+): StructuredExecutorResult {
   if (
     !Array.isArray(
       value,
@@ -624,18 +586,30 @@ function parseFinanceExecutorResult(
     );
 
 
-  const targetType =
+  const rawTarget =
     row.target_entity_type;
+
+
+  if (
+    typeof rawTarget !==
+      "string"
+  ) {
+    throw new IntakeExecutorError(
+      "INVALID_EXECUTOR_RESULT",
+    );
+  }
+
+
+  const target =
+    rawTarget as
+      IntakeTargetEntityType;
 
 
   if (
     !intakeIdValidation.success ||
     !targetIdValidation.success ||
-    (
-      targetType !==
-        "income_source" &&
-      targetType !==
-        "budget_item"
+    !allowedTargets.includes(
+      target,
     ) ||
     row.intake_status !==
       "applied"
@@ -651,7 +625,7 @@ function parseFinanceExecutorResult(
       intakeIdValidation.data,
 
     target_entity_type:
-      targetType,
+      target,
 
     target_entity_id:
       targetIdValidation.data,
@@ -663,179 +637,7 @@ function parseFinanceExecutorResult(
 
 
 /* =========================================================
- * 13. PARSE PLAN RESULT
- * ======================================================= */
-
-function parsePlanExecutorResult(
-  value:
-    unknown,
-): PlanExecutorResult {
-  if (
-    !Array.isArray(
-      value,
-    ) ||
-    value.length !==
-      1
-  ) {
-    throw new IntakeExecutorError(
-      "INVALID_EXECUTOR_RESULT",
-    );
-  }
-
-
-  const row =
-    value[0];
-
-
-  if (
-    !isRecord(
-      row,
-    )
-  ) {
-    throw new IntakeExecutorError(
-      "INVALID_EXECUTOR_RESULT",
-    );
-  }
-
-
-  const intakeIdValidation =
-    uuidSchema.safeParse(
-      row.intake_id,
-    );
-
-
-  const targetIdValidation =
-    uuidSchema.safeParse(
-      row.target_entity_id,
-    );
-
-
-  const targetType =
-    row.target_entity_type;
-
-
-  if (
-    !intakeIdValidation.success ||
-    !targetIdValidation.success ||
-    (
-      targetType !==
-        "goal" &&
-      targetType !==
-        "project"
-    ) ||
-    row.intake_status !==
-      "applied"
-  ) {
-    throw new IntakeExecutorError(
-      "INVALID_EXECUTOR_RESULT",
-    );
-  }
-
-
-  return {
-    intake_id:
-      intakeIdValidation.data,
-
-    target_entity_type:
-      targetType,
-
-    target_entity_id:
-      targetIdValidation.data,
-
-    intake_status:
-      "applied",
-  };
-}
-
-
-/* =========================================================
- * 14. PARSE GROWTH RESULT
- * ======================================================= */
-
-function parseGrowthExecutorResult(
-  value:
-    unknown,
-): GrowthExecutorResult {
-  if (
-    !Array.isArray(
-      value,
-    ) ||
-    value.length !==
-      1
-  ) {
-    throw new IntakeExecutorError(
-      "INVALID_EXECUTOR_RESULT",
-    );
-  }
-
-
-  const row =
-    value[0];
-
-
-  if (
-    !isRecord(
-      row,
-    )
-  ) {
-    throw new IntakeExecutorError(
-      "INVALID_EXECUTOR_RESULT",
-    );
-  }
-
-
-  const intakeIdValidation =
-    uuidSchema.safeParse(
-      row.intake_id,
-    );
-
-
-  const targetIdValidation =
-    uuidSchema.safeParse(
-      row.target_entity_id,
-    );
-
-
-  const targetType =
-    row.target_entity_type;
-
-
-  if (
-    !intakeIdValidation.success ||
-    !targetIdValidation.success ||
-    (
-      targetType !==
-        "learning_item" &&
-      targetType !==
-        "career_item"
-    ) ||
-    row.intake_status !==
-      "applied"
-  ) {
-    throw new IntakeExecutorError(
-      "INVALID_EXECUTOR_RESULT",
-    );
-  }
-
-
-  return {
-    intake_id:
-      intakeIdValidation.data,
-
-    target_entity_type:
-      targetType,
-
-    target_entity_id:
-      targetIdValidation.data,
-
-    intake_status:
-      "applied",
-  };
-}
-
-
-/* =========================================================
- * 15. EXECUTE NOTE
+ * 11. EXECUTE NOTE
  * ======================================================= */
 
 async function executeNoteIntake(
@@ -904,7 +706,7 @@ async function executeNoteIntake(
 
 
 /* =========================================================
- * 16. VALIDATE FINANCE PROPOSAL
+ * 12. VALIDATE FINANCE PROPOSAL
  * ======================================================= */
 
 function validateFinanceProposal(
@@ -932,7 +734,7 @@ function validateFinanceProposal(
 
 
 /* =========================================================
- * 17. EXECUTE FINANCE
+ * 13. EXECUTE FINANCE
  * ======================================================= */
 
 async function executeFinanceIntake(
@@ -993,24 +795,20 @@ async function executeFinanceIntake(
 
 
   const result =
-    parseFinanceExecutorResult(
+    parseStructuredExecutorResult(
       data,
+      [
+        "income_source",
+        "budget_item",
+      ],
     );
 
 
   if (
     result.intake_id !==
-    intakeId
-  ) {
-    throw new IntakeExecutorError(
-      "INVALID_EXECUTOR_RESULT",
-    );
-  }
-
-
-  if (
+      intakeId ||
     result.target_entity_type !==
-    expectedTarget
+      expectedTarget
   ) {
     throw new IntakeExecutorError(
       "INVALID_EXECUTOR_RESULT",
@@ -1038,7 +836,7 @@ async function executeFinanceIntake(
 
 
 /* =========================================================
- * 18. VALIDATE PLAN PROPOSAL
+ * 14. VALIDATE PLAN PROPOSAL
  * ======================================================= */
 
 function validatePlanProposal(
@@ -1066,7 +864,7 @@ function validatePlanProposal(
 
 
 /* =========================================================
- * 19. EXECUTE PLAN
+ * 15. EXECUTE PLAN
  * ======================================================= */
 
 async function executePlanIntake(
@@ -1127,24 +925,20 @@ async function executePlanIntake(
 
 
   const result =
-    parsePlanExecutorResult(
+    parseStructuredExecutorResult(
       data,
+      [
+        "goal",
+        "project",
+      ],
     );
 
 
   if (
     result.intake_id !==
-    intakeId
-  ) {
-    throw new IntakeExecutorError(
-      "INVALID_EXECUTOR_RESULT",
-    );
-  }
-
-
-  if (
+      intakeId ||
     result.target_entity_type !==
-    expectedTarget
+      expectedTarget
   ) {
     throw new IntakeExecutorError(
       "INVALID_EXECUTOR_RESULT",
@@ -1172,7 +966,7 @@ async function executePlanIntake(
 
 
 /* =========================================================
- * 20. VALIDATE GROWTH PROPOSAL
+ * 16. VALIDATE GROWTH PROPOSAL
  * ======================================================= */
 
 function validateGrowthProposal(
@@ -1200,7 +994,7 @@ function validateGrowthProposal(
 
 
 /* =========================================================
- * 21. EXECUTE GROWTH
+ * 17. EXECUTE GROWTH
  * ======================================================= */
 
 async function executeGrowthIntake(
@@ -1210,9 +1004,6 @@ async function executeGrowthIntake(
   proposedPayload:
     JsonObject,
 ): Promise<IntakeExecutionResult> {
-  /*
-   * Validate exact user-reviewed proposal again before RPC.
-   */
   const proposal =
     validateGrowthProposal(
       proposedPayload,
@@ -1241,17 +1032,6 @@ async function executeGrowthIntake(
     await createClient();
 
 
-  /*
-   * PostgreSQL:
-   *
-   * execute_growth_intake(uuid)
-   *
-   *
-   * Supports exactly:
-   *
-   * create_learning_item
-   * create_career_item
-   */
   const {
     data,
     error,
@@ -1275,36 +1055,20 @@ async function executeGrowthIntake(
 
 
   const result =
-    parseGrowthExecutorResult(
+    parseStructuredExecutorResult(
       data,
+      [
+        "learning_item",
+        "career_item",
+      ],
     );
 
 
-  /*
-   * The RPC must return the exact intake requested.
-   */
   if (
     result.intake_id !==
-    intakeId
-  ) {
-    throw new IntakeExecutorError(
-      "INVALID_EXECUTOR_RESULT",
-    );
-  }
-
-
-  /*
-   * Proposal action and returned table target must match.
-   *
-   * create_learning_item
-   *      → learning_item
-   *
-   * create_career_item
-   *      → career_item
-   */
-  if (
+      intakeId ||
     result.target_entity_type !==
-    expectedTarget
+      expectedTarget
   ) {
     throw new IntakeExecutorError(
       "INVALID_EXECUTOR_RESULT",
@@ -1332,26 +1096,163 @@ async function executeGrowthIntake(
 
 
 /* =========================================================
- * 22. MAIN DISPATCHER
+ * 18. VALIDATE TRAVEL PROPOSAL
  * ======================================================= */
 
-export async function executeIntakeItem(
+function validateTravelProposal(
+  proposedPayload:
+    JsonObject,
+) {
+  const validation =
+    travelIntakeProposalSchema
+      .safeParse(
+        proposedPayload,
+      );
+
+
+  if (
+    !validation.success
+  ) {
+    throw new IntakeExecutorError(
+      "INVALID_PROPOSAL",
+    );
+  }
+
+
+  return validation.data;
+}
+
+
+/* =========================================================
+ * 19. EXECUTE TRAVEL
+ * ======================================================= */
+
+async function executeTravelIntake(
+  intakeId:
+    UUID,
+
+  proposedPayload:
+    JsonObject,
+): Promise<IntakeExecutionResult> {
+  /*
+   * Exact user-reviewed proposal is validated again here
+   * before PostgreSQL sees the approved intake.
+   */
+  const proposal =
+    validateTravelProposal(
+      proposedPayload,
+    );
+
+
+  const expectedTarget =
+    getStructuredProposalTarget(
+      proposal,
+    );
+
+
+  if (
+    expectedTarget !==
+    "trip"
+  ) {
+    throw new IntakeExecutorError(
+      "INVALID_PROPOSAL",
+    );
+  }
+
+
+  const supabase =
+    await createClient();
+
+
+  /*
+   * Migration 010:
+   *
+   * execute_travel_intake(uuid)
+   *
+   * supports exactly:
+   *
+   * create_trip
+   */
+  const {
+    data,
+    error,
+  } =
+    await supabase.rpc(
+      "execute_travel_intake",
+      {
+        p_intake_id:
+          intakeId,
+      },
+    );
+
+
+  if (
+    error
+  ) {
+    throw mapExecutorError(
+      error,
+    );
+  }
+
+
+  const result =
+    parseStructuredExecutorResult(
+      data,
+      [
+        "trip",
+      ],
+    );
+
+
+  if (
+    result.intake_id !==
+      intakeId ||
+    result.target_entity_type !==
+      "trip" ||
+    result.target_entity_type !==
+      expectedTarget
+  ) {
+    throw new IntakeExecutorError(
+      "INVALID_EXECUTOR_RESULT",
+    );
+  }
+
+
+  return {
+    intake_id:
+      result.intake_id,
+
+    kind:
+      "travel",
+
+    status:
+      "applied",
+
+    target_entity_type:
+      "trip",
+
+    target_entity_id:
+      result.target_entity_id,
+  };
+}
+
+
+/* =========================================================
+ * 20. VALIDATE INTAKE ID
+ * ======================================================= */
+
+function validateIntakeId(
   id:
     UUID,
-): Promise<IntakeExecutionResult> {
-
-  /* -------------------------------------------------------
-   * Validate identifier
-   * ---------------------------------------------------- */
-
-  const idValidation =
+): UUID {
+  const validation =
     uuidSchema.safeParse(
       id,
     );
 
 
   if (
-    !idValidation.success
+    !validation.success
   ) {
     throw new IntakeExecutorError(
       "INVALID_INTAKE_ID",
@@ -1359,14 +1260,84 @@ export async function executeIntakeItem(
   }
 
 
+  return validation.data;
+}
+
+
+/* =========================================================
+ * 21. EXECUTION LIFECYCLE GUARD
+ * ======================================================= */
+
+function assertExecutableLifecycle(
+  status:
+    "previewed" |
+    "approved" |
+    "applied" |
+    "failed" |
+    "cancelled",
+): void {
+  if (
+    status ===
+    "cancelled"
+  ) {
+    throw new IntakeExecutorError(
+      "INTAKE_CANCELLED",
+    );
+  }
+
+
+  if (
+    status ===
+    "failed"
+  ) {
+    throw new IntakeExecutorError(
+      "INTAKE_FAILED",
+    );
+  }
+
+
+  if (
+    status ===
+    "previewed"
+  ) {
+    throw new IntakeExecutorError(
+      "INTAKE_NOT_APPROVED",
+    );
+  }
+
+
+  /*
+   * Allowed:
+   *
+   * approved
+   * applied
+   *
+   *
+   * Applied is intentionally allowed because every enabled
+   * PostgreSQL executor is idempotent and returns the already
+   * linked target instead of creating a duplicate.
+   */
+}
+
+
+/* =========================================================
+ * 22. MAIN DISPATCHER
+ * ======================================================= */
+
+export async function executeIntakeItem(
+  id:
+    UUID,
+): Promise<IntakeExecutionResult> {
   const safeId =
-    idValidation.data;
+    validateIntakeId(
+      id,
+    );
 
 
-  /* -------------------------------------------------------
-   * Load authenticated user's intake only
-   * ---------------------------------------------------- */
-
+  /*
+   * getIntakeItem() loads only the authenticated owner's
+   * intake through PostgreSQL RLS.
+   */
   const intake =
     await getIntakeItem(
       safeId,
@@ -1382,126 +1353,17 @@ export async function executeIntakeItem(
   }
 
 
-  /* -------------------------------------------------------
-   * Terminal states
-   * ---------------------------------------------------- */
-
-  if (
-    intake.status ===
-    "cancelled"
-  ) {
-    throw new IntakeExecutorError(
-      "INTAKE_CANCELLED",
-    );
-  }
+  assertExecutableLifecycle(
+    intake.status,
+  );
 
 
-  if (
-    intake.status ===
-    "failed"
-  ) {
-    throw new IntakeExecutorError(
-      "INTAKE_FAILED",
-    );
-  }
-
-
-  if (
-    intake.status ===
-    "previewed"
-  ) {
-    throw new IntakeExecutorError(
-      "INTAKE_NOT_APPROVED",
-    );
-  }
-
-
-  /* -------------------------------------------------------
-   * Already applied
-   * ---------------------------------------------------- */
-
-  if (
-    intake.status ===
-    "applied"
-  ) {
-    /*
-     * All currently enabled PostgreSQL executors are
-     * idempotent.
-     *
-     * Re-running them returns the existing target.
-     */
-    switch (
-      intake.kind
-    ) {
-      case "note":
-        return executeNoteIntake(
-          safeId,
-        );
-
-
-      case "finance":
-        return executeFinanceIntake(
-          safeId,
-          intake.proposed_payload,
-        );
-
-
-      case "plan":
-        return executePlanIntake(
-          safeId,
-          intake.proposed_payload,
-        );
-
-
-      case "growth":
-        return executeGrowthIntake(
-          safeId,
-          intake.proposed_payload,
-        );
-
-
-      case "travel":
-      case "document":
-        throw new IntakeExecutorError(
-          "UNSUPPORTED_KIND",
-        );
-
-
-      default: {
-        const exhaustiveCheck:
-          never =
-          intake.kind;
-
-
-        void exhaustiveCheck;
-
-
-        throw new IntakeExecutorError(
-          "UNSUPPORTED_KIND",
-        );
-      }
-    }
-  }
-
-
-  /* -------------------------------------------------------
-   * Execution requires approval
-   * ---------------------------------------------------- */
-
-  if (
-    intake.status !==
-    "approved"
-  ) {
-    throw new IntakeExecutorError(
-      "INTAKE_NOT_APPROVED",
-    );
-  }
-
-
-  /* -------------------------------------------------------
-   * Exact deterministic dispatcher
-   * ---------------------------------------------------- */
-
+  /*
+   * Exact deterministic dispatcher.
+   *
+   * No table name, function name or action is selected from
+   * arbitrary AI strings.
+   */
   switch (
     intake.kind
   ) {
@@ -1533,11 +1395,19 @@ export async function executeIntakeItem(
 
 
     case "travel":
+      return executeTravelIntake(
+        safeId,
+        intake.proposed_payload,
+      );
+
+
     case "document":
       /*
-       * No deterministic domain executor exists yet.
+       * Private PDFs require a coordinated Storage +
+       * metadata pipeline.
        *
-       * Approval alone never grants generic write access.
+       * Approval must never fall through into a generic
+       * database executor.
        */
       throw new IntakeExecutorError(
         "UNSUPPORTED_KIND",
@@ -1577,7 +1447,9 @@ export function isIntakeKindExecutable(
     kind ===
       "plan" ||
     kind ===
-      "growth"
+      "growth" ||
+    kind ===
+      "travel"
   );
 }
 
@@ -1628,7 +1500,22 @@ export function getIntakeExecutionTarget(
 
 
     case "travel":
+      /*
+       * Travel has only one V2 structured action:
+       *
+       * create_trip
+       *      ↓
+       * trip
+       */
+      return "trip";
+
+
     case "document":
+      /*
+       * Document persistence uses private Storage plus
+       * PostgreSQL metadata and therefore has its own
+       * coordinated pipeline.
+       */
       return null;
 
 
@@ -1659,7 +1546,7 @@ export function getIntakeExecutionTarget(
  * memory_items
  *
  *
- * The original approved text becomes the memory fact.
+ * Original approved source text becomes the memory fact.
  */
 
 
@@ -1680,13 +1567,8 @@ export function getIntakeExecutionTarget(
  * budget_items
  *
  *
- * Currency safety:
- *
- * V1 financial rows do not contain their own currency.
- *
- * Therefore proposal currency must equal:
- *
- * profiles.default_currency
+ * Proposal currency is checked against the owner's LIFE OS
+ * profile by the PostgreSQL executor.
  */
 
 
@@ -1707,7 +1589,7 @@ export function getIntakeExecutionTarget(
  * projects
  *
  *
- * Linked goal ownership is revalidated by PostgreSQL.
+ * Linked goal ownership is verified by PostgreSQL.
  */
 
 
@@ -1726,88 +1608,94 @@ export function getIntakeExecutionTarget(
  * create_career_item
  *      ↓
  * career_items
- *
- *
- * Learning supports:
- *
- * course
- * certification
- * learning_path
- * masters
- * university_program
- * other
- *
- *
- * Career supports:
- *
- * current_role
- * target_role
- * skill
- * achievement
- * milestone
- * gap
  */
 
 
 /* =========================================================
- * 29. GROWTH RELATIONSHIP SAFETY
+ * 29. TRAVEL EXECUTION
  * ======================================================= */
 
 /**
- * Learning and career proposals may optionally contain:
+ * travel
  *
- * goal_id
- *
- *
- * PostgreSQL verifies:
- *
- * goal exists
- * AND
- * goal.user_id = auth.uid()
+ * create_trip
+ *      ↓
+ * execute_travel_intake()
+ *      ↓
+ * trips
  *
  *
- * An AI proposal cannot link a learning/career record to
- * another user's goal.
+ * Exact values:
+ *
+ * title
+ * destination
+ * start_date
+ * end_date
+ * status
+ * budget_total
+ * currency
+ * readiness_percent
+ * notes
+ *
+ *
+ * No AI inference occurs during execution.
  */
 
 
 /* =========================================================
- * 30. GROWTH DATE SAFETY
+ * 30. TRAVEL IDEMPOTENCY
  * ======================================================= */
 
 /**
- * Learning:
+ * execute_travel_intake()
  *
- * target_date >= start_date
- *
- * completed_date >= start_date
+ * locks the owned intake row.
  *
  *
- * Career:
+ * approved:
  *
- * target_date >= event_date
+ * creates one trip
+ * +
+ * marks intake applied
  *
  *
- * Invalid relationships are rejected before persistence.
+ * applied:
+ *
+ * returns the already-linked owned trip.
+ *
+ *
+ * It does not create a second trip.
  */
 
 
 /* =========================================================
- * 31. URL SAFETY
+ * 31. DOCUMENT PIPELINE SEPARATION
  * ======================================================= */
 
 /**
- * Learning URL and career evidence URL accept:
- *
- * http://
- * https://
+ * document remains intentionally outside this dispatcher.
  *
  *
- * They reject values such as:
+ * PDF persistence requires:
  *
- * javascript:
- * data:
- * file:
+ * authenticated owner
+ *      ↓
+ * validated PDF
+ *      ↓
+ * server-generated Storage path
+ *      ↓
+ * private Storage upload
+ *      ↓
+ * documents metadata insert
+ *      ↓
+ * rollback/cleanup if metadata fails
+ *
+ *
+ * That workflow belongs to:
+ *
+ * lib/travel-data.ts
+ *
+ * and the confirmation route.
  */
 
 
@@ -1816,16 +1704,13 @@ export function getIntakeExecutionTarget(
  * ======================================================= */
 
 /**
- * Example growth flow:
+ * Example Travel flow:
  *
- * User:
- *
- * "أبغي أبدأ ماجستير ذكاء اصطناعي"
- *
- *
+ * User input
+ *      ↓
  * AI structured output
  *      ↓
- * strictIntakePreviewSchema
+ * activeStrictIntakePreviewSchema
  *      ↓
  * exact values shown to user
  *      ↓
@@ -1833,16 +1718,16 @@ export function getIntakeExecutionTarget(
  *      ↓
  * proposed_payload
  *      ↓
- * growthIntakeProposalSchema
+ * travelIntakeProposalSchema
  *      ↓
- * execute_growth_intake()
+ * execute_travel_intake()
  *      ↓
  * PostgreSQL validation
  *      ↓
- * learning_items
+ * trips
  *
  *
- * No single AI response becomes authoritative.
+ * No single AI output is authoritative.
  */
 
 
@@ -1853,7 +1738,11 @@ export function getIntakeExecutionTarget(
 /**
  * Never:
  *
- * select table based on AI string
+ * choose tables from AI strings
+ *
+ * Never:
+ *
+ * choose RPC functions from AI strings
  *
  * Never:
  *
@@ -1865,7 +1754,7 @@ export function getIntakeExecutionTarget(
  *
  * Never:
  *
- * fallback unknown kinds into memory
+ * fallback unsupported input into another domain
  *
  *
  * Unsupported means:
@@ -1885,22 +1774,22 @@ export function getIntakeExecutionTarget(
  * execute_finance_intake()
  * execute_plan_intake()
  * execute_growth_intake()
+ * execute_travel_intake()
  *
  *
- * All are called using the normal authenticated Supabase
- * server client.
+ * All use the normal authenticated Supabase server client.
  *
  *
  * No:
  *
  * service_role
- * admin credentials
+ * admin credential
  * database password
  *
  *
  * Authorization remains:
  *
- * authenticated session
+ * verified authenticated session
  *      ↓
  * auth.uid()
  *      ↓
@@ -1921,16 +1810,17 @@ export function getIntakeExecutionTarget(
  * finance
  * plan
  * growth
+ * travel
  *
  *
- * returns the already-linked final entity.
+ * returns the existing final entity.
  *
  * It does not create another record.
  */
 
 
 /* =========================================================
- * 36. CURRENT EXECUTION MATRIX
+ * 36. CURRENT V2 EXECUTION MATRIX
  * ======================================================= */
 
 /**
@@ -1966,11 +1856,13 @@ export function getIntakeExecutionTarget(
  *
  *
  * travel
- *      → blocked
+ *
+ * create_trip
+ *      → trip ✅
  *
  *
  * document
- *      → blocked
+ *      → dedicated private document pipeline
  */
 
 
@@ -2002,5 +1894,10 @@ export function getIntakeExecutionTarget(
  *      ↓
  * Exact PostgreSQL Executor
  *      ↓
- * Final LIFE OS Fact
+ * RLS-Protected LIFE OS Fact
+ *
+ *
+ * Simple outside.
+ * Intelligent underneath.
+ * Private by default.
  */
