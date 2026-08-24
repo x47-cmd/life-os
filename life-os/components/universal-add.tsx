@@ -15,6 +15,7 @@ import type {
   IntakeKind,
   IntakePreview,
   IntakeTargetEntityType,
+  StructuredIntakeProposal,
 } from "@/lib/types";
 
 
@@ -22,22 +23,27 @@ import type {
  * LIFE OS V2
  * UNIVERSAL ADD
  *
- * Flow:
- *
  * User input
  *      ↓
  * AI preview
  *      ↓
- * User review
+ * exact structured proposal
  *      ↓
- * Explicit confirmation
+ * user reviews exact values
  *      ↓
- * Approved intake
+ * explicit confirmation
  *      ↓
- * Supported executor?
+ * approved intake
+ *      ↓
+ * deterministic executor
  *
- * YES → applied
- * NO  → remains approved safely
+ *
+ * Permanent UI rule:
+ *
+ * finance / plan / growth
+ *
+ * CANNOT be confirmed unless their exact structured proposal
+ * is visible to the user.
  * ======================================================= */
 
 
@@ -115,6 +121,14 @@ interface ConfirmApiResponse {
   execution?:
     IntakeExecutionState;
 
+  proposal?: {
+    structured:
+      boolean;
+
+    action:
+      string | null;
+  };
+
   message?:
     string;
 
@@ -136,7 +150,29 @@ interface ConfirmationState {
 
 
 /* =========================================================
- * 2. CONSTANTS
+ * 2. PROPOSAL REVIEW
+ * ======================================================= */
+
+interface ProposalReviewRow {
+  label:
+    string;
+
+  value:
+    string;
+}
+
+
+interface ProposalReview {
+  title:
+    string;
+
+  rows:
+    ProposalReviewRow[];
+}
+
+
+/* =========================================================
+ * 3. CONSTANTS
  * ======================================================= */
 
 const MAX_TEXT_LENGTH =
@@ -152,7 +188,7 @@ const PDF_MIME =
 
 
 /* =========================================================
- * 3. HELPERS
+ * 4. BASIC HELPERS
  * ======================================================= */
 
 function formatFileSize(
@@ -191,6 +227,69 @@ function formatFileSize(
   )} MB`;
 }
 
+
+function formatAmount(
+  amount:
+    number,
+
+  currency:
+    string,
+): string {
+  try {
+    return new Intl.NumberFormat(
+      "ar-AE",
+      {
+        style:
+          "currency",
+
+        currency,
+
+        maximumFractionDigits:
+          2,
+      },
+    ).format(
+      amount,
+    );
+  } catch {
+    return `${amount.toLocaleString(
+      "ar-AE",
+    )} ${currency}`;
+  }
+}
+
+
+function displayNullable(
+  value:
+    string |
+    number |
+    null |
+    undefined,
+
+  fallback:
+    string =
+      "غير محدد",
+): string {
+  if (
+    value ===
+      null ||
+    value ===
+      undefined ||
+    value ===
+      ""
+  ) {
+    return fallback;
+  }
+
+
+  return String(
+    value,
+  );
+}
+
+
+/* =========================================================
+ * 5. LABEL HELPERS
+ * ======================================================= */
 
 function getKindIcon(
   kind:
@@ -250,6 +349,301 @@ function getKindLabel(
 }
 
 
+function getFrequencyLabel(
+  value:
+    string,
+): string {
+  switch (
+    value
+  ) {
+    case "monthly":
+      return "شهري";
+
+    case "annual":
+      return "سنوي";
+
+    case "one_time":
+      return "مرة واحدة";
+
+    case "other":
+    default:
+      return "أخرى";
+  }
+}
+
+
+function getPriorityLabel(
+  value:
+    string,
+): string {
+  switch (
+    value
+  ) {
+    case "high":
+      return "عالية";
+
+    case "medium":
+      return "متوسطة";
+
+    case "low":
+    default:
+      return "منخفضة";
+  }
+}
+
+
+function getStatusLabel(
+  value:
+    string,
+): string {
+  switch (
+    value
+  ) {
+    case "planned":
+      return "مخطط";
+
+    case "active":
+      return "نشط";
+
+    case "paused":
+      return "متوقف مؤقتًا";
+
+    case "blocked":
+      return "متعطل";
+
+    case "completed":
+      return "مكتمل";
+
+    case "cancelled":
+      return "ملغي";
+
+    case "archived":
+      return "مؤرشف";
+
+    case "dropped":
+      return "متروك";
+
+    default:
+      return value;
+  }
+}
+
+
+function getBudgetItemTypeLabel(
+  value:
+    string,
+): string {
+  switch (
+    value
+  ) {
+    case "expense":
+      return "مصروف";
+
+    case "saving":
+      return "ادخار";
+
+    case "investment":
+      return "استثمار";
+
+    case "debt":
+      return "قرض / التزام";
+
+    default:
+      return value;
+  }
+}
+
+
+function getBudgetCategoryLabel(
+  value:
+    string,
+): string {
+  switch (
+    value
+  ) {
+    case "family":
+      return "العائلة";
+
+    case "housing":
+      return "السكن";
+
+    case "debt":
+      return "القروض";
+
+    case "transport":
+      return "النقل";
+
+    case "personal":
+      return "شخصي";
+
+    case "travel":
+      return "السفر";
+
+    case "emergency":
+      return "الطوارئ";
+
+    case "investments":
+      return "الاستثمارات";
+
+    case "education":
+      return "التعليم";
+
+    case "business":
+      return "البزنس";
+
+    case "other":
+    default:
+      return "أخرى";
+  }
+}
+
+
+function getGoalCategoryLabel(
+  value:
+    string,
+): string {
+  switch (
+    value
+  ) {
+    case "finance":
+      return "المال";
+
+    case "investments":
+      return "الاستثمارات";
+
+    case "career":
+      return "المسار المهني";
+
+    case "learning":
+      return "التطوير";
+
+    case "education":
+      return "التعليم";
+
+    case "business":
+      return "البزنس";
+
+    case "travel":
+      return "السفر";
+
+    case "fitness":
+      return "اللياقة";
+
+    case "personal":
+      return "شخصي";
+
+    case "other":
+    default:
+      return "أخرى";
+  }
+}
+
+
+function getProjectCategoryLabel(
+  value:
+    string,
+): string {
+  switch (
+    value
+  ) {
+    case "ai":
+      return "ذكاء اصطناعي";
+
+    case "career":
+      return "المسار المهني";
+
+    case "education":
+      return "التعليم";
+
+    case "finance":
+      return "المال";
+
+    case "investments":
+      return "الاستثمارات";
+
+    case "business":
+      return "البزنس";
+
+    case "travel":
+      return "السفر";
+
+    case "fitness":
+      return "اللياقة";
+
+    case "personal":
+      return "شخصي";
+
+    case "other":
+    default:
+      return "أخرى";
+  }
+}
+
+
+function getLearningTypeLabel(
+  value:
+    string,
+): string {
+  switch (
+    value
+  ) {
+    case "course":
+      return "دورة";
+
+    case "certification":
+      return "شهادة مهنية";
+
+    case "learning_path":
+      return "مسار تعليمي";
+
+    case "masters":
+      return "ماجستير";
+
+    case "university_program":
+      return "برنامج جامعي";
+
+    case "other":
+    default:
+      return "أخرى";
+  }
+}
+
+
+function getCareerTypeLabel(
+  value:
+    string,
+): string {
+  switch (
+    value
+  ) {
+    case "current_role":
+      return "الوظيفة الحالية";
+
+    case "target_role":
+      return "وظيفة مستهدفة";
+
+    case "skill":
+      return "مهارة";
+
+    case "achievement":
+      return "إنجاز";
+
+    case "milestone":
+      return "مرحلة مهنية";
+
+    case "gap":
+      return "فجوة تطوير";
+
+    default:
+      return value;
+  }
+}
+
+
+/* =========================================================
+ * 6. EXECUTION TARGET LABEL
+ * ======================================================= */
+
 function getExecutionTargetLabel(
   target:
     IntakeTargetEntityType |
@@ -302,7 +696,661 @@ function getExecutionTargetLabel(
 
 
 /* =========================================================
- * 4. COMPONENT
+ * 7. STRUCTURED KIND RULE
+ * ======================================================= */
+
+function requiresStructuredProposal(
+  kind:
+    IntakeKind,
+): boolean {
+  return (
+    kind ===
+      "finance" ||
+    kind ===
+      "plan" ||
+    kind ===
+      "growth"
+  );
+}
+
+
+/* =========================================================
+ * 8. PROPOSAL REVIEW BUILDER
+ * ======================================================= */
+
+function buildProposalReview(
+  proposal:
+    StructuredIntakeProposal,
+): ProposalReview {
+  switch (
+    proposal.action
+  ) {
+
+    /* -----------------------------------------------------
+     * INCOME
+     * -------------------------------------------------- */
+
+    case "create_income_source": {
+      const data =
+        proposal.data;
+
+
+      return {
+        title:
+          "مصدر دخل جديد",
+
+        rows: [
+          {
+            label:
+              "الاسم",
+
+            value:
+              data.name,
+          },
+          {
+            label:
+              "المبلغ",
+
+            value:
+              formatAmount(
+                data.amount,
+                data.currency,
+              ),
+          },
+          {
+            label:
+              "الدورية",
+
+            value:
+              getFrequencyLabel(
+                data.frequency,
+              ),
+          },
+          {
+            label:
+              "الدفعة القادمة",
+
+            value:
+              displayNullable(
+                data.next_expected_date,
+              ),
+          },
+          {
+            label:
+              "ملاحظات",
+
+            value:
+              displayNullable(
+                data.notes,
+                "لا توجد",
+              ),
+          },
+        ],
+      };
+    }
+
+
+    /* -----------------------------------------------------
+     * BUDGET ITEM
+     * -------------------------------------------------- */
+
+    case "create_budget_item": {
+      const data =
+        proposal.data;
+
+
+      return {
+        title:
+          "بند مالي جديد",
+
+        rows: [
+          {
+            label:
+              "الاسم",
+
+            value:
+              data.name,
+          },
+          {
+            label:
+              "النوع",
+
+            value:
+              getBudgetItemTypeLabel(
+                data.item_type,
+              ),
+          },
+          {
+            label:
+              "التصنيف",
+
+            value:
+              getBudgetCategoryLabel(
+                data.category,
+              ),
+          },
+          {
+            label:
+              "المبلغ",
+
+            value:
+              formatAmount(
+                data.amount,
+                data.currency,
+              ),
+          },
+          {
+            label:
+              "الدورية",
+
+            value:
+              getFrequencyLabel(
+                data.frequency,
+              ),
+          },
+          {
+            label:
+              "يوم الاستحقاق",
+
+            value:
+              data.due_day ===
+              null
+                ? "غير محدد"
+                : `يوم ${data.due_day}`,
+          },
+          {
+            label:
+              "ملاحظات",
+
+            value:
+              displayNullable(
+                data.notes,
+                "لا توجد",
+              ),
+          },
+        ],
+      };
+    }
+
+
+    /* -----------------------------------------------------
+     * GOAL
+     * -------------------------------------------------- */
+
+    case "create_goal": {
+      const data =
+        proposal.data;
+
+
+      return {
+        title:
+          "هدف جديد",
+
+        rows: [
+          {
+            label:
+              "العنوان",
+
+            value:
+              data.title,
+          },
+          {
+            label:
+              "التصنيف",
+
+            value:
+              getGoalCategoryLabel(
+                data.category,
+              ),
+          },
+          {
+            label:
+              "الحالة",
+
+            value:
+              getStatusLabel(
+                data.status,
+              ),
+          },
+          {
+            label:
+              "الأولوية",
+
+            value:
+              getPriorityLabel(
+                data.priority,
+              ),
+          },
+          {
+            label:
+              "التقدم",
+
+            value:
+              `${data.progress_percent}%`,
+          },
+          {
+            label:
+              "قيمة الهدف",
+
+            value:
+              displayNullable(
+                data.target_value,
+              ),
+          },
+          {
+            label:
+              "القيمة الحالية",
+
+            value:
+              displayNullable(
+                data.current_value,
+              ),
+          },
+          {
+            label:
+              "الوحدة",
+
+            value:
+              displayNullable(
+                data.unit,
+              ),
+          },
+          {
+            label:
+              "تاريخ الهدف",
+
+            value:
+              displayNullable(
+                data.target_date,
+              ),
+          },
+          {
+            label:
+              "الخطوة التالية",
+
+            value:
+              displayNullable(
+                data.next_action,
+              ),
+          },
+          {
+            label:
+              "الوصف",
+
+            value:
+              displayNullable(
+                data.description,
+                "لا يوجد",
+              ),
+          },
+        ],
+      };
+    }
+
+
+    /* -----------------------------------------------------
+     * PROJECT
+     * -------------------------------------------------- */
+
+    case "create_project": {
+      const data =
+        proposal.data;
+
+
+      return {
+        title:
+          "مشروع جديد",
+
+        rows: [
+          {
+            label:
+              "العنوان",
+
+            value:
+              data.title,
+          },
+          {
+            label:
+              "التصنيف",
+
+            value:
+              getProjectCategoryLabel(
+                data.category,
+              ),
+          },
+          {
+            label:
+              "الحالة",
+
+            value:
+              getStatusLabel(
+                data.status,
+              ),
+          },
+          {
+            label:
+              "الأولوية",
+
+            value:
+              getPriorityLabel(
+                data.priority,
+              ),
+          },
+          {
+            label:
+              "التقدم",
+
+            value:
+              `${data.progress_percent}%`,
+          },
+          {
+            label:
+              "تاريخ البداية",
+
+            value:
+              displayNullable(
+                data.start_date,
+              ),
+          },
+          {
+            label:
+              "تاريخ الهدف",
+
+            value:
+              displayNullable(
+                data.target_date,
+              ),
+          },
+          {
+            label:
+              "الخطوة التالية",
+
+            value:
+              displayNullable(
+                data.next_action,
+              ),
+          },
+          {
+            label:
+              "الهدف المرتبط",
+
+            value:
+              data.goal_id ??
+              "بدون ربط تلقائي",
+          },
+          {
+            label:
+              "الوصف",
+
+            value:
+              displayNullable(
+                data.description,
+                "لا يوجد",
+              ),
+          },
+        ],
+      };
+    }
+
+
+    /* -----------------------------------------------------
+     * LEARNING
+     * -------------------------------------------------- */
+
+    case "create_learning_item": {
+      const data =
+        proposal.data;
+
+
+      return {
+        title:
+          "عنصر تطوير جديد",
+
+        rows: [
+          {
+            label:
+              "العنوان",
+
+            value:
+              data.title,
+          },
+          {
+            label:
+              "الجهة",
+
+            value:
+              displayNullable(
+                data.provider,
+              ),
+          },
+          {
+            label:
+              "النوع",
+
+            value:
+              getLearningTypeLabel(
+                data.item_type,
+              ),
+          },
+          {
+            label:
+              "الحالة",
+
+            value:
+              getStatusLabel(
+                data.status,
+              ),
+          },
+          {
+            label:
+              "الأولوية",
+
+            value:
+              getPriorityLabel(
+                data.priority,
+              ),
+          },
+          {
+            label:
+              "التقدم",
+
+            value:
+              `${data.progress_percent}%`,
+          },
+          {
+            label:
+              "البداية",
+
+            value:
+              displayNullable(
+                data.start_date,
+              ),
+          },
+          {
+            label:
+              "الهدف",
+
+            value:
+              displayNullable(
+                data.target_date,
+              ),
+          },
+          {
+            label:
+              "الإكمال",
+
+            value:
+              displayNullable(
+                data.completed_date,
+              ),
+          },
+          {
+            label:
+              "التكلفة",
+
+            value:
+              data.cost ===
+              null
+                ? "غير محددة"
+                : formatAmount(
+                    data.cost,
+                    data.currency,
+                  ),
+          },
+          {
+            label:
+              "الرابط",
+
+            value:
+              displayNullable(
+                data.url,
+              ),
+          },
+          {
+            label:
+              "الهدف المرتبط",
+
+            value:
+              data.goal_id ??
+              "بدون ربط تلقائي",
+          },
+          {
+            label:
+              "ملاحظات",
+
+            value:
+              displayNullable(
+                data.notes,
+                "لا توجد",
+              ),
+          },
+        ],
+      };
+    }
+
+
+    /* -----------------------------------------------------
+     * CAREER
+     * -------------------------------------------------- */
+
+    case "create_career_item": {
+      const data =
+        proposal.data;
+
+
+      return {
+        title:
+          "عنصر مهني جديد",
+
+        rows: [
+          {
+            label:
+              "العنوان",
+
+            value:
+              data.title,
+          },
+          {
+            label:
+              "النوع",
+
+            value:
+              getCareerTypeLabel(
+                data.item_type,
+              ),
+          },
+          {
+            label:
+              "الحالة",
+
+            value:
+              getStatusLabel(
+                data.status,
+              ),
+          },
+          {
+            label:
+              "الأولوية",
+
+            value:
+              getPriorityLabel(
+                data.priority,
+              ),
+          },
+          {
+            label:
+              "التقييم",
+
+            value:
+              data.rating ===
+              null
+                ? "غير محدد"
+                : `${data.rating}`,
+          },
+          {
+            label:
+              "تاريخ الحدث",
+
+            value:
+              displayNullable(
+                data.event_date,
+              ),
+          },
+          {
+            label:
+              "تاريخ الهدف",
+
+            value:
+              displayNullable(
+                data.target_date,
+              ),
+          },
+          {
+            label:
+              "الدليل",
+
+            value:
+              displayNullable(
+                data.evidence_url,
+              ),
+          },
+          {
+            label:
+              "الهدف المرتبط",
+
+            value:
+              data.goal_id ??
+              "بدون ربط تلقائي",
+          },
+          {
+            label:
+              "الوصف",
+
+            value:
+              displayNullable(
+                data.description,
+                "لا يوجد",
+              ),
+          },
+          {
+            label:
+              "ملاحظات",
+
+            value:
+              displayNullable(
+                data.notes,
+                "لا توجد",
+              ),
+          },
+        ],
+      };
+    }
+  }
+}
+
+
+/* =========================================================
+ * 9. COMPONENT
  * ======================================================= */
 
 export function UniversalAdd() {
@@ -395,8 +1443,45 @@ export function UniversalAdd() {
     confirming;
 
 
+  const proposal =
+    preview?.proposal ??
+    null;
+
+
+  const proposalReview =
+    proposal
+      ? buildProposalReview(
+          proposal,
+        )
+      : null;
+
+
+  const structuredProposalRequired =
+    preview
+      ? requiresStructuredProposal(
+          preview.kind,
+        )
+      : false;
+
+
+  const structuredProposalMissing =
+    Boolean(
+      preview &&
+      structuredProposalRequired &&
+      !proposal,
+    );
+
+
+  const canConfirm =
+    Boolean(
+      preview &&
+      !structuredProposalMissing &&
+      !busy,
+    );
+
+
   /* =======================================================
-   * 5. RESET
+   * 10. RESET
    * ===================================================== */
 
   function resetIntake():
@@ -446,7 +1531,7 @@ export function UniversalAdd() {
 
 
   /* =======================================================
-   * 6. OPEN
+   * 11. OPEN / CLOSE
    * ===================================================== */
 
   function handleOpen():
@@ -472,10 +1557,6 @@ export function UniversalAdd() {
   }
 
 
-  /* =======================================================
-   * 7. CLOSE
-   * ===================================================== */
-
   function handleClose():
   void {
     if (
@@ -494,10 +1575,6 @@ export function UniversalAdd() {
   }
 
 
-  /* =======================================================
-   * 8. ADD ANOTHER
-   * ===================================================== */
-
   function handleAddAnother():
   void {
     resetIntake();
@@ -515,7 +1592,7 @@ export function UniversalAdd() {
 
 
   /* =======================================================
-   * 9. ESCAPE KEY
+   * 12. ESCAPE
    * ===================================================== */
 
   useEffect(
@@ -560,7 +1637,7 @@ export function UniversalAdd() {
       };
     },
 
-    // resetIntake only manages local state.
+    // Local modal state only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       open,
@@ -570,7 +1647,7 @@ export function UniversalAdd() {
 
 
   /* =======================================================
-   * 10. BODY SCROLL
+   * 13. BODY SCROLL
    * ===================================================== */
 
   useEffect(
@@ -605,7 +1682,7 @@ export function UniversalAdd() {
 
 
   /* =======================================================
-   * 11. FILE PICKER
+   * 14. FILE PICKER
    * ===================================================== */
 
   function handleFileChange(
@@ -707,10 +1784,6 @@ export function UniversalAdd() {
   }
 
 
-  /* =======================================================
-   * 12. REMOVE FILE
-   * ===================================================== */
-
   function handleRemoveFile():
   void {
     if (
@@ -750,7 +1823,7 @@ export function UniversalAdd() {
 
 
   /* =======================================================
-   * 13. ANALYZE
+   * 15. ANALYZE
    * ===================================================== */
 
   async function handleAnalyze(
@@ -899,7 +1972,7 @@ export function UniversalAdd() {
 
 
   /* =======================================================
-   * 14. EDIT
+   * 16. EDIT
    * ===================================================== */
 
   function handleEdit():
@@ -938,7 +2011,7 @@ export function UniversalAdd() {
 
 
   /* =======================================================
-   * 15. CONFIRM
+   * 17. CONFIRM
    * ===================================================== */
 
   async function handleConfirm():
@@ -947,6 +2020,26 @@ export function UniversalAdd() {
       !preview ||
       busy
     ) {
+      return;
+    }
+
+
+    /*
+     * HARD UI SAFETY BOUNDARY
+     *
+     * Finance / Plan / Growth cannot be confirmed without
+     * visible exact proposal values.
+     */
+    if (
+      requiresStructuredProposal(
+        preview.kind,
+      ) &&
+      !preview.proposal
+    ) {
+      setError(
+        "التفاصيل الدقيقة غير جاهزة للتأكيد. أعد التحليل بعد اكتمال تحديث LIFE OS.",
+      );
+
       return;
     }
 
@@ -1082,7 +2175,7 @@ export function UniversalAdd() {
 
 
   /* =======================================================
-   * 16. SUCCESS VIEW VALUES
+   * 18. SUCCESS VALUES
    * ===================================================== */
 
   const wasApplied =
@@ -1106,7 +2199,7 @@ export function UniversalAdd() {
 
 
   /* =======================================================
-   * 17. RENDER
+   * 19. RENDER
    * ===================================================== */
 
   return (
@@ -1241,7 +2334,7 @@ export function UniversalAdd() {
                 "min(720px, 100%)",
 
               maxHeight:
-                "min(760px, 92vh)",
+                "min(820px, 92vh)",
 
               overflowY:
                 "auto",
@@ -1434,15 +2527,15 @@ export function UniversalAdd() {
                     {wasApplied
                       ? confirmation.intake.kind ===
                         "note"
-                        ? "تم حفظ الملاحظة فعليًا داخل LIFE OS وربطها بسجل الإضافة."
+                        ? "تم حفظ الملاحظة فعليًا داخل LIFE OS."
                         : "تم تنفيذ الإضافة وحفظها فعليًا داخل LIFE OS."
                       : executionPending
-                        ? "موافقتك محفوظة بأمان، لكن التنفيذ النهائي ما اكتمل. ما يحتاج تعيد الإضافة من جديد."
+                        ? "موافقتك محفوظة بأمان، لكن التنفيذ النهائي ما اكتمل. ما يحتاج تعيد الإضافة."
                         : `تم اعتمادها ضمن ${getKindLabel(
                             confirmation
                               .intake
                               .kind,
-                          )}. التنفيذ النهائي لهذا النوع بيتفعل عند اكتمال الـExecutor الخاص فيه.`}
+                          )}.`}
                   </p>
 
 
@@ -1467,11 +2560,9 @@ export function UniversalAdd() {
                     <span
                       className="text-muted text-small"
                     >
-                      {
-                        wasApplied
-                          ? "تم التنفيذ"
-                          : "تم الاعتماد"
-                      }
+                      {wasApplied
+                        ? "تم التنفيذ"
+                        : "تم الاعتماد"}
                     </span>
 
 
@@ -1831,10 +2922,6 @@ export function UniversalAdd() {
                 </div>
 
 
-                {/* =========================================
-                 * ERROR
-                 * ======================================= */}
-
                 {error ? (
                   <p
                     role="alert"
@@ -1856,10 +2943,6 @@ export function UniversalAdd() {
                   </p>
                 ) : null}
 
-
-                {/* =========================================
-                 * ANALYZE
-                 * ======================================= */}
 
                 <div
                   style={{
@@ -1927,6 +3010,10 @@ export function UniversalAdd() {
                       "20px",
                   }}
                 >
+                  {/* =======================================
+                   * CLASSIFICATION
+                   * ===================================== */}
+
                   <div
                     className="space-between"
                     style={{
@@ -2008,6 +3095,10 @@ export function UniversalAdd() {
                   </div>
 
 
+                  {/* =======================================
+                   * SUMMARY
+                   * ===================================== */}
+
                   <div
                     style={{
                       marginTop:
@@ -2044,6 +3135,218 @@ export function UniversalAdd() {
                     </p>
                   </div>
 
+
+                  {/* =======================================
+                   * EXACT PROPOSAL REVIEW
+                   * ===================================== */}
+
+                  {proposalReview ? (
+                    <div
+                      style={{
+                        marginTop:
+                          "18px",
+
+                        padding:
+                          "16px",
+
+                        borderRadius:
+                          "18px",
+
+                        border:
+                          "1px solid var(--border, #e2e8f0)",
+
+                        background:
+                          "var(--surface-soft, #f8fafc)",
+                      }}
+                    >
+                      <div
+                        className="space-between"
+                        style={{
+                          alignItems:
+                            "center",
+
+                          gap:
+                            "12px",
+                        }}
+                      >
+                        <div>
+                          <span
+                            className="text-muted text-small"
+                          >
+                            راجع قبل التأكيد
+                          </span>
+
+                          <strong
+                            style={{
+                              display:
+                                "block",
+
+                              marginTop:
+                                "4px",
+
+                              fontSize:
+                                "15px",
+                            }}
+                          >
+                            {
+                              proposalReview.title
+                            }
+                          </strong>
+                        </div>
+
+
+                        <span
+                          className="badge badge--neutral"
+                        >
+                          القيم الدقيقة
+                        </span>
+                      </div>
+
+
+                      <div
+                        style={{
+                          marginTop:
+                            "14px",
+
+                          display:
+                            "grid",
+
+                          gap:
+                            "8px",
+                        }}
+                      >
+                        {proposalReview.rows.map(
+                          (
+                            row,
+                            index,
+                          ) => (
+                            <div
+                              key={`${row.label}-${index}`}
+                              style={{
+                                display:
+                                  "grid",
+
+                                gridTemplateColumns:
+                                  "minmax(90px, 0.8fr) minmax(0, 1.4fr)",
+
+                                gap:
+                                  "12px",
+
+                                alignItems:
+                                  "start",
+
+                                padding:
+                                  "9px 0",
+
+                                borderBottom:
+                                  index ===
+                                  proposalReview.rows.length -
+                                    1
+                                    ? "none"
+                                    : "1px solid var(--border, #e2e8f0)",
+                              }}
+                            >
+                              <span
+                                className="text-muted text-small"
+                              >
+                                {
+                                  row.label
+                                }
+                              </span>
+
+                              <strong
+                                style={{
+                                  fontSize:
+                                    "13px",
+
+                                  lineHeight:
+                                    1.65,
+
+                                  overflowWrap:
+                                    "anywhere",
+                                }}
+                              >
+                                {
+                                  row.value
+                                }
+                              </strong>
+                            </div>
+                          ),
+                        )}
+                      </div>
+
+
+                      <p
+                        className="text-muted text-small"
+                        style={{
+                          margin:
+                            "14px 0 0",
+
+                          lineHeight:
+                            1.65,
+                        }}
+                      >
+                        هذي هي القيم اللي بتعتمدها إذا ضغطت
+                        «تأكيد». راجعها قبل الموافقة.
+                      </p>
+                    </div>
+                  ) : null}
+
+
+                  {/* =======================================
+                   * STRUCTURED PROPOSAL MISSING
+                   * ===================================== */}
+
+                  {structuredProposalMissing ? (
+                    <div
+                      role="alert"
+                      style={{
+                        marginTop:
+                          "18px",
+
+                        padding:
+                          "14px 16px",
+
+                        borderRadius:
+                          "16px",
+
+                        border:
+                          "1px solid var(--border, #e2e8f0)",
+                      }}
+                    >
+                      <strong
+                        style={{
+                          display:
+                            "block",
+
+                          fontSize:
+                            "14px",
+                        }}
+                      >
+                        التفاصيل الدقيقة غير جاهزة
+                      </strong>
+
+                      <p
+                        className="text-muted text-small"
+                        style={{
+                          margin:
+                            "6px 0 0",
+
+                          lineHeight:
+                            1.65,
+                        }}
+                      >
+                        هذا النوع يحتاج عرض القيم الدقيقة قبل
+                        التأكيد، لذلك زر التأكيد متوقف مؤقتًا
+                        للحماية.
+                      </p>
+                    </div>
+                  ) : null}
+
+
+                  {/* =======================================
+                   * NEXT ACTION
+                   * ===================================== */}
 
                   <div
                     style={{
@@ -2088,6 +3391,10 @@ export function UniversalAdd() {
                   </div>
 
 
+                  {/* =======================================
+                   * AFTER CONFIRM
+                   * ===================================== */}
+
                   <div
                     style={{
                       marginTop:
@@ -2124,11 +3431,22 @@ export function UniversalAdd() {
                       {preview.kind ===
                       "note"
                         ? "الملاحظة جاهزة للتنفيذ والحفظ الفعلي."
-                        : "سيتم اعتمادها الآن، والتنفيذ الفعلي يبدأ بعد إضافة الـExecutor المخصص لهذا النوع."}
+                        : proposal
+                          ? "سيتم اعتماد القيم المعروضة أعلاه. التنفيذ النهائي يبدأ فقط عند وجود Executor محدد وآمن."
+                          : preview.kind ===
+                              "travel" ||
+                            preview.kind ===
+                              "document"
+                            ? "سيتم اعتماد الإضافة فقط. التنفيذ النهائي لهذا النوع غير مفعّل حاليًا."
+                            : "لن يتم التأكيد قبل ظهور القيم الدقيقة."}
                     </p>
                   </div>
                 </div>
 
+
+                {/* =========================================
+                 * ERROR
+                 * ======================================= */}
 
                 {error ? (
                   <p
@@ -2151,6 +3469,10 @@ export function UniversalAdd() {
                   </p>
                 ) : null}
 
+
+                {/* =========================================
+                 * ACTIONS
+                 * ======================================= */}
 
                 <div
                   style={{
@@ -2185,7 +3507,7 @@ export function UniversalAdd() {
                     type="button"
                     className="button button--primary"
                     disabled={
-                      busy
+                      !canConfirm
                     }
                     onClick={
                       handleConfirm
@@ -2193,7 +3515,9 @@ export function UniversalAdd() {
                   >
                     {confirming
                       ? "جاري الاعتماد..."
-                      : "تأكيد"}
+                      : structuredProposalMissing
+                        ? "بانتظار التفاصيل"
+                        : "تأكيد"}
                   </button>
                 </div>
 
@@ -2211,8 +3535,7 @@ export function UniversalAdd() {
                       1.6,
                   }}
                 >
-                  LIFE OS ما ينفذ إلا نوع عنده Executor
-                  محدد وآمن.
+                  ما يتم اعتماد أي قيمة مخفية عنك.
                 </p>
               </div>
             )}
@@ -2229,41 +3552,36 @@ export function UniversalAdd() {
  * ======================================================= */
 
 /**
- * UI now distinguishes:
+ * finance / plan / growth:
  *
- * approved
+ * AI proposes exact values
+ *      ↓
+ * UI displays exact values
+ *      ↓
+ * user reviews
+ *      ↓
+ * confirm becomes available
  *
- * from:
  *
- * applied
+ * If exact values are missing:
+ *
+ * confirm = BLOCKED
  *
  *
  * note:
  *
- * preview
+ * approved source
  *      ↓
- * confirm
- *      ↓
- * approved
- *      ↓
- * executor
- *      ↓
- * memory_item
- *      ↓
- * applied
+ * deterministic memory executor
  *
  *
- * unsupported kinds:
+ * travel / document:
  *
- * preview
- *      ↓
- * confirm
- *      ↓
- * approved
- *      ↓
- * STOP
+ * may be approved without structured proposal for now,
+ * but cannot create a final domain entity yet.
  *
  *
- * The user is never told something was saved to a final
- * domain when only approval happened.
+ * Permanent rule:
+ *
+ * Never approve hidden AI-generated values.
  */
