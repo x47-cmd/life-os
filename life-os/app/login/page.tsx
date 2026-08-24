@@ -16,6 +16,7 @@ import {
 
 import {
   APP_NAME,
+  DEFAULT_AUTHENTICATED_ROUTE,
 } from "@/lib/constants";
 
 import {
@@ -140,18 +141,27 @@ export default function LoginPage() {
   function enterLifeOS():
   void {
     /*
-     * Everyone goes through /onboarding first.
+     * V2 always resolves onboarding first.
      *
-     * The onboarding Server Component decides:
+     * /onboarding decides:
      *
      * profile missing
-     *      → show setup
+     *      → show first-time setup
      *
      * profile exists
-     *      → redirect /dashboard
+     *      → redirect to DEFAULT_AUTHENTICATED_ROUTE
      *
-     * This prevents client-side profile authorization logic.
+     *
+     * Prefetching the normal authenticated route keeps the
+     * returning-user transition fast while preserving the
+     * new onboarding decision boundary.
      */
+
+    router.prefetch(
+      DEFAULT_AUTHENTICATED_ROUTE,
+    );
+
+
     router.replace(
       AFTER_LOGIN_ROUTE,
     );
@@ -603,7 +613,7 @@ export default function LoginPage() {
  *      ↓
  * setup
  *      ↓
- * /dashboard
+ * DEFAULT_AUTHENTICATED_ROUTE
  *
  *
  * Returning user:
@@ -614,7 +624,7 @@ export default function LoginPage() {
  *      ↓
  * profile exists
  *      ↓
- * /dashboard
+ * DEFAULT_AUTHENTICATED_ROUTE
  */
 
 
@@ -663,7 +673,31 @@ export default function LoginPage() {
 
 
 /* =========================================================
- * 13. SECRET HANDLING
+ * 13. ROUTE COMPATIBILITY RULE
+ * ======================================================= */
+
+/**
+ * DEFAULT_AUTHENTICATED_ROUTE remains the canonical normal
+ * private destination for LIFE OS.
+ *
+ * V2 does not remove that route.
+ *
+ * Instead:
+ *
+ * Login
+ *      ↓
+ * /onboarding
+ *      ↓
+ * DEFAULT_AUTHENTICATED_ROUTE
+ *
+ *
+ * This preserves compatibility with existing LIFE OS routing
+ * and security tests while allowing first-time onboarding.
+ */
+
+
+/* =========================================================
+ * 14. SECRET HANDLING
  * ======================================================= */
 
 /**
@@ -678,7 +712,7 @@ export default function LoginPage() {
 
 
 /* =========================================================
- * 14. FINAL V2 LOGIN RULE
+ * 15. FINAL V2 LOGIN RULE
  * ======================================================= */
 
 /**
@@ -686,9 +720,17 @@ export default function LoginPage() {
  *
  * "Who are you?"
  *
+ *
  * Onboarding decides:
  *
  * "Is LIFE OS ready for you?"
  *
- * The dashboard should never be responsible for either.
+ *
+ * DEFAULT_AUTHENTICATED_ROUTE decides:
+ *
+ * "Where does the ready workspace begin?"
+ *
+ *
+ * The dashboard should never be responsible for
+ * authentication or first-time setup.
  */
