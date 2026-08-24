@@ -2790,9 +2790,15 @@ export const INTAKE_TARGET_ENTITY_TYPES = [
 
 
 /**
- * ACTIVE structured actions only.
+ * Active LIFE OS V2 structured proposal actions.
  *
- * create_trip is deliberately NOT here yet.
+ * Every action listed here has:
+ *
+ * - an exact TypeScript contract
+ * - runtime Zod validation
+ * - an exact-value review surface
+ *
+ * Listing an action here does NOT grant execution authority.
  */
 export const STRUCTURED_INTAKE_PROPOSAL_ACTIONS = [
   "create_income_source",
@@ -2801,14 +2807,13 @@ export const STRUCTURED_INTAKE_PROPOSAL_ACTIONS = [
   "create_project",
   "create_learning_item",
   "create_career_item",
+  "create_trip",
 ] as const;
 
 
 /**
- * Staged Travel action.
- *
- * Defined and validated, but not yet activated in the
- * master structured proposal union.
+ * Travel-specific action list retained for domain-specific
+ * validation and compatibility.
  */
 export const TRAVEL_INTAKE_PROPOSAL_ACTIONS = [
   "create_trip",
@@ -3646,23 +3651,20 @@ export const growthIntakeProposalSchema =
 
 
 /* =========================================================
- * 24A. STRUCTURED PROPOSAL — TRAVEL — STAGED
+ * 24A. STRUCTURED PROPOSAL — TRAVEL
  * ======================================================= */
 
 /**
- * Travel has its own complete validation contract now.
+ * Travel has a complete exact-value validation contract.
  *
- * IMPORTANT:
+ * The proposal is now part of the master structured proposal
+ * union.
  *
- * It is still deliberately excluded from:
+ * The older strict preview boundary remains temporarily
+ * rollout-compatible.
  *
- * structuredIntakeProposalSchema
- *
- * strictIntakePreviewSchema structured kinds
- *
- * executeIntakeItem()
- *
- * until the exact proposal is shown in Universal Add.
+ * The active V2 strict preview boundary below requires Travel
+ * to carry its exact create_trip proposal.
  */
 
 const tripProposalDataBaseSchema =
@@ -3760,7 +3762,7 @@ export const travelIntakeProposalSchema =
  * ======================================================= */
 
 /**
- * Example valid staged proposal:
+ * Example valid proposal:
  *
  * {
  *   version: 1,
@@ -3780,7 +3782,7 @@ export const travelIntakeProposalSchema =
  * }
  *
  *
- * Still NOT executable merely because this validates.
+ * Validation still does NOT equal execution.
  */
 
 
@@ -3789,13 +3791,17 @@ export const travelIntakeProposalSchema =
  * ======================================================= */
 
 /**
- * Active exact AI proposal actions.
+ * Active exact AI proposal actions:
  *
- * Travel is deliberately staged outside this union.
+ * finance
+ * plan
+ * growth
+ * travel
  *
- * Document is also deliberately absent.
  *
- * Note executes directly from approved source text.
+ * Document is deliberately absent.
+ *
+ * Note executes from approved source text.
  */
 export const structuredIntakeProposalSchema =
   z.union([
@@ -3805,33 +3811,33 @@ export const structuredIntakeProposalSchema =
     projectIntakeProposalSchema,
     learningIntakeProposalSchema,
     careerIntakeProposalSchema,
+    travelIntakeProposalSchema,
   ]);
 
 
 /* =========================================================
- * 25A. STRICT UNIVERSAL INTAKE PREVIEW
+ * 25A. STRICT UNIVERSAL INTAKE PREVIEW — TRANSITIONAL
  * ======================================================= */
 
 /**
- * ACTIVE structured kinds:
+ * This older boundary remains temporarily compatible with
+ * the previous rollout tests.
+ *
  *
  * finance
  * plan
  * growth
  *
- * require an exact structured proposal.
+ * require exact structured proposals.
  *
- *
- * Staged / non-structured kinds:
  *
  * travel
- * document
- * note
  *
- * must still contain proposal: null.
+ * may still carry proposal: null here temporarily.
  *
  *
- * Travel changes only after its review UI is ready.
+ * The active V2 runtime boundary below is stricter and
+ * requires Travel exact values.
  */
 export const strictIntakePreviewSchema =
   z
@@ -3934,7 +3940,7 @@ export const strictIntakePreviewSchema =
             ],
 
             message:
-              "هذا النوع لا يستخدم اقتراحًا منظمًا حاليًا.",
+              "هذا النوع لا يستخدم اقتراحًا منظمًا حاليًا في هذا الحد الانتقالي.",
           });
         }
       },
@@ -3952,24 +3958,180 @@ export type StrictIntakePreview =
 
 
 /* =========================================================
- * 25C. TRAVEL STAGING RULE
+ * 25C. ACTIVE V2 STRICT UNIVERSAL INTAKE PREVIEW
  * ======================================================= */
 
 /**
+ * This is the active V2 runtime boundary.
+ *
+ * Structured kinds:
+ *
+ * finance
+ * plan
+ * growth
+ * travel
+ *
+ * must contain an exact structured proposal.
+ *
+ *
+ * Non-structured kinds:
+ *
+ * document
+ * note
+ *
+ * must contain:
+ *
+ * proposal: null
+ *
+ *
+ * We keep the older strictIntakePreviewSchema temporarily
+ * during the rollout so existing tests/routes can migrate
+ * one boundary at a time without creating a red deployment.
+ */
+export const activeStrictIntakePreviewSchema =
+  z
+    .object({
+      kind:
+        intakeKindSchema,
+
+      label:
+        intakeLabelSchema,
+
+      title:
+        intakeTitleSchema,
+
+      summary:
+        intakeSummarySchema,
+
+      confidence:
+        intakeConfidenceSchema,
+
+      next_action:
+        intakeNextActionSchema,
+
+      proposal:
+        structuredIntakeProposalSchema
+          .nullable(),
+
+      requires_confirmation:
+        z.literal(
+          true,
+        ),
+    })
+    .strict()
+    .superRefine(
+      (
+        value,
+        context,
+      ) => {
+        const requiresProposal =
+          value.kind ===
+            "finance" ||
+          value.kind ===
+            "plan" ||
+          value.kind ===
+            "growth" ||
+          value.kind ===
+            "travel";
+
+
+        if (
+          requiresProposal
+        ) {
+          if (
+            value.proposal ===
+            null
+          ) {
+            context.addIssue({
+              code:
+                "custom",
+
+              path: [
+                "proposal",
+              ],
+
+              message:
+                "هذا النوع يحتاج اقتراحًا منظمًا قبل التأكيد.",
+            });
+
+
+            return;
+          }
+
+
+          if (
+            value.proposal.kind !==
+            value.kind
+          ) {
+            context.addIssue({
+              code:
+                "custom",
+
+              path: [
+                "proposal",
+                "kind",
+              ],
+
+              message:
+                "نوع الاقتراح لا يطابق تصنيف الإضافة.",
+            });
+          }
+
+
+          return;
+        }
+
+
+        if (
+          value.proposal !==
+          null
+        ) {
+          context.addIssue({
+            code:
+              "custom",
+
+            path: [
+              "proposal",
+            ],
+
+            message:
+              "هذا النوع لا يستخدم اقتراحًا منظمًا حاليًا.",
+          });
+        }
+      },
+    );
+
+
+export type ActiveStrictIntakePreview =
+  z.infer<
+    typeof activeStrictIntakePreviewSchema
+  >;
+
+
+/* =========================================================
+ * 25D. TRAVEL ACTIVE BOUNDARY RULE
+ * ======================================================= */
+
+/**
+ * Travel exact proposal contract:
+ *
  * travelIntakeProposalSchema
  *
- * = valid Travel proposal contract.
  *
+ * Master structured proposal union:
  *
  * structuredIntakeProposalSchema
  *
- * = active executable/reviewable proposal union.
+ *
+ * Active runtime review boundary:
+ *
+ * activeStrictIntakePreviewSchema
  *
  *
- * They remain separate for one reason:
+ * Together they guarantee:
  *
- * User must be able to see every exact Travel value before
- * Travel becomes confirmable.
+ * Travel cannot be confirmed at the active V2 boundary
+ * without visible exact trip values.
  */
 
 
@@ -4051,13 +4213,13 @@ export function validateStructuredProposalForIntakeKind(
 
 
 /* =========================================================
- * 26A. STAGED TRAVEL PROPOSAL VALIDATOR
+ * 26A. TRAVEL PROPOSAL VALIDATOR
  * ======================================================= */
 
 /**
- * This helper validates Travel values only.
+ * Domain-specific Travel proposal validator.
  *
- * It does NOT make Travel executable.
+ * Validation does NOT execute or persist the trip.
  */
 export function validateTravelIntakeProposal(
   proposal:
@@ -4125,37 +4287,47 @@ export function getStructuredProposalTarget(
   | "goal"
   | "project"
   | "learning_item"
-  | "career_item" {
+  | "career_item"
+  | "trip" {
   switch (
     proposal.action
   ) {
     case "create_income_source":
       return "income_source";
 
+
     case "create_budget_item":
       return "budget_item";
+
 
     case "create_goal":
       return "goal";
 
+
     case "create_project":
       return "project";
+
 
     case "create_learning_item":
       return "learning_item";
 
+
     case "create_career_item":
       return "career_item";
+
+
+    case "create_trip":
+      return "trip";
   }
 }
 
 
 /* =========================================================
- * 27A. STAGED TRAVEL EXECUTION TARGET
+ * 27A. TRAVEL EXECUTION TARGET
  * ======================================================= */
 
 /**
- * This is only a deterministic mapping helper.
+ * Travel-specific deterministic mapping helper.
  *
  * It does not execute anything.
  */
@@ -5441,7 +5613,7 @@ export function getFirstValidationError(
  * ======================================================= */
 
 /**
- * Travel proposal values are now validated exactly:
+ * Travel proposal values are validated exactly:
  *
  * title
  * destination
@@ -5464,7 +5636,9 @@ export function getFirstValidationError(
  * unknown object fields = rejected
  *
  *
- * But validation alone does not activate Travel execution.
+ * Travel is now part of the active structured proposal union.
+ *
+ * Validation still does not grant execution.
  */
 
 
@@ -5559,18 +5733,18 @@ export function getFirstValidationError(
  * ======================================================= */
 
 /**
- * finance / plan / growth:
+ * finance / plan / growth / travel:
  *
  * structuredIntakeProposalSchema
  *
- * validates the active structured proposal.
+ * validates the exact structured proposal.
  *
  *
- * travel:
+ * Travel additionally has:
  *
  * travelIntakeProposalSchema
  *
- * validates the staged Travel proposal separately.
+ * for its domain-specific contract.
  *
  *
  * Neither validation grants a database write.
@@ -5628,12 +5802,17 @@ export function getFirstValidationError(
  *
  * strictIntakePreviewSchema:
  *
- * = active exact structured AI preview.
+ * = rollout-compatible strict preview.
+ *
+ *
+ * activeStrictIntakePreviewSchema:
+ *
+ * = active V2 exact structured AI preview.
  *
  *
  * travelIntakeProposalSchema:
  *
- * = staged Travel contract only.
+ * = exact Travel proposal contract.
  *
  *
  * intakeItemInsertSchema:
@@ -5656,15 +5835,14 @@ export function getFirstValidationError(
  * Travel database ✅
  * Private Storage ✅
  * Travel validation ✅
+ * Universal Add Travel exact-value review ✅
+ * Travel added to structured proposal union ✅
+ * Active strict Travel preview boundary ✅
  *
  *
  * Still required:
  *
- * AI preview schema output
- *      ↓
- * Universal Add Travel review UI
- *      ↓
- * Travel added to active structured union
+ * AI preview create_trip output
  *      ↓
  * confirmation
  *      ↓
