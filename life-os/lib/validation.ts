@@ -2600,12 +2600,23 @@ export const intakeErrorCodeSchema =
 /**
  * Transitional preview schema.
  *
- * `proposal` is optional here ONLY so the currently deployed
- * preview API remains compatible during the one-file-at-a-
- * time V2 rollout.
+ * IMPORTANT:
  *
- * The strict runtime schema is defined after the Structured
- * Proposal master union below.
+ * This schema deliberately DOES NOT expose the structured
+ * proposal yet.
+ *
+ * The currently deployed preview API still returns the
+ * original V2 preview shape, and IntakePreview.proposal is
+ * optional at the TypeScript boundary.
+ *
+ * The authoritative structured preview schema is defined
+ * later, after all Structured Proposal schemas exist.
+ *
+ * Next migration step:
+ *
+ * preview API
+ *      ↓
+ * strictIntakePreviewSchema
  */
 export const intakePreviewSchema =
   z
@@ -2628,26 +2639,13 @@ export const intakePreviewSchema =
       next_action:
         intakeNextActionSchema,
 
-      /**
-       * Transitional compatibility boundary.
-       *
-       * Exact structured validation happens through:
-       *
-       * strictIntakePreviewSchema
-       *
-       * once the upgraded preview API is connected.
-       */
-      proposal:
-        jsonObjectSchema
-          .nullable()
-          .optional(),
-
       requires_confirmation:
         z.literal(
           true,
         ),
     })
     .strict();
+
 
 /* =========================================================
  * 22. STRUCTURED PROPOSAL — FINANCE
@@ -3274,6 +3272,7 @@ export const structuredIntakeProposalSchema =
     careerIntakeProposalSchema,
   ]);
 
+
 /* =========================================================
  * 25A. STRICT UNIVERSAL INTAKE PREVIEW
  * ======================================================= */
@@ -3488,6 +3487,8 @@ export type StrictIntakePreview =
  * intakePreviewSchema
  *
  * = temporary backwards-compatible boundary.
+ *
+ * It intentionally has NO proposal property.
  *
  *
  * strictIntakePreviewSchema
@@ -5039,17 +5040,22 @@ export function getFirstValidationError(
 /**
  * intakePreviewSchema:
  *
- * validates an AI interpretation.
+ * = transitional legacy-compatible AI preview.
+ *
+ *
+ * strictIntakePreviewSchema:
+ *
+ * = V2 exact structured AI preview.
  *
  *
  * structuredIntakeProposalSchema:
  *
- * validates exact proposed values.
+ * = exact proposed values.
  *
  *
  * intakeItemInsertSchema:
  *
- * validates the durable proposal record.
+ * = durable proposal record.
  *
  *
  * None automatically creates:
