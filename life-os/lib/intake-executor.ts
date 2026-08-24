@@ -9,10 +9,13 @@ import {
 import type {
   IntakeKind,
   IntakeTargetEntityType,
+  JsonObject,
   UUID,
 } from "@/lib/types";
 
 import {
+  financeIntakeProposalSchema,
+  getStructuredProposalTarget,
   uuidSchema,
 } from "@/lib/validation";
 
@@ -38,10 +41,13 @@ import {
  *   → execute_note_intake()
  *   → memory_items
  *
+ * finance
+ *   → execute_finance_intake()
+ *   → income_sources OR budget_items
+ *
  *
  * Unsupported for now:
  *
- * finance
  * plan
  * travel
  * growth
@@ -86,6 +92,9 @@ export type IntakeExecutorErrorCode =
   | "INTAKE_NOT_APPROVED"
   | "INTAKE_CANCELLED"
   | "INTAKE_FAILED"
+  | "INVALID_PROPOSAL"
+  | "PROFILE_REQUIRED"
+  | "FINANCE_CURRENCY_MISMATCH"
   | "UNSUPPORTED_KIND"
   | "INVALID_EXECUTOR_RESULT"
   | "EXECUTION_CONFLICT"
@@ -124,6 +133,15 @@ export class IntakeExecutorError extends Error {
 
         INTAKE_FAILED:
           "تعذر تنفيذ الإضافة سابقًا وتحتاج مراجعة.",
+
+        INVALID_PROPOSAL:
+          "القيم المعتمدة للإضافة غير صالحة للتنفيذ.",
+
+        PROFILE_REQUIRED:
+          "أكمل إعداد حساب LIFE OS قبل تنفيذ الإضافة المالية.",
+
+        FINANCE_CURRENCY_MISMATCH:
+          "عملة الإضافة لا تطابق العملة الأساسية في LIFE OS.",
 
         UNSUPPORTED_KIND:
           "هذا النوع غير جاهز للتنفيذ الآمن حاليًا.",
@@ -196,8 +214,8 @@ function isRecord(
  * ======================================================= */
 
 /**
- * PostgreSQL may return one of our controlled LIFE_OS_*
- * exception codes.
+ * PostgreSQL may return controlled LIFE_OS_* exception
+ * codes from one of our deterministic executors.
  *
  * Raw database messages are NEVER returned to the UI.
  */
@@ -211,6 +229,10 @@ function mapExecutorError(
     "";
 
 
+  /* -------------------------------------------------------
+   * Intake ownership / existence
+   * ---------------------------------------------------- */
+
   if (
     message.includes(
       "LIFE_OS_INTAKE_NOT_FOUND",
@@ -221,6 +243,10 @@ function mapExecutorError(
     );
   }
 
+
+  /* -------------------------------------------------------
+   * Approval
+   * ---------------------------------------------------- */
 
   if (
     message.includes(
@@ -236,6 +262,43 @@ function mapExecutorError(
   }
 
 
+  /* -------------------------------------------------------
+   * Profile
+   * ---------------------------------------------------- */
+
+  if (
+    message.includes(
+      "LIFE_OS_PROFILE_REQUIRED",
+    )
+  ) {
+    return new IntakeExecutorError(
+      "PROFILE_REQUIRED",
+    );
+  }
+
+
+  /* -------------------------------------------------------
+   * Finance currency safety
+   * ---------------------------------------------------- */
+
+  if (
+    message.includes(
+      "LIFE_OS_FINANCE_CURRENCY_MISMATCH",
+    ) ||
+    message.includes(
+      "LIFE_OS_PROFILE_CURRENCY_INVALID",
+    )
+  ) {
+    return new IntakeExecutorError(
+      "FINANCE_CURRENCY_MISMATCH",
+    );
+  }
+
+
+  /* -------------------------------------------------------
+   * Unsupported kind
+   * ---------------------------------------------------- */
+
   if (
     message.includes(
       "LIFE_OS_UNSUPPORTED_INTAKE_KIND",
@@ -247,16 +310,83 @@ function mapExecutorError(
   }
 
 
+  /* -------------------------------------------------------
+   * Conflicts
+   * ---------------------------------------------------- */
+
   if (
     message.includes(
       "LIFE_OS_INTAKE_APPLY_CONFLICT",
     ) ||
     message.includes(
       "LIFE_OS_INTAKE_TARGET_CONFLICT",
+    ) ||
+    message.includes(
+      "LIFE_OS_FINANCE_TARGET_CONFLICT",
     )
   ) {
     return new IntakeExecutorError(
       "EXECUTION_CONFLICT",
+    );
+  }
+
+
+  /* -------------------------------------------------------
+   * Structured finance proposal rejection
+   * ---------------------------------------------------- */
+
+  if (
+    message.includes(
+      "LIFE_OS_FINANCE_PAYLOAD_",
+    ) ||
+    message.includes(
+      "LIFE_OS_FINANCE_VERSION_",
+    ) ||
+    message.includes(
+      "LIFE_OS_FINANCE_PROPOSAL_KIND_",
+    ) ||
+    message.includes(
+      "LIFE_OS_FINANCE_ACTION_",
+    ) ||
+    message.includes(
+      "LIFE_OS_FINANCE_DATA_",
+    ) ||
+    message.includes(
+      "LIFE_OS_FINANCE_NAME_",
+    ) ||
+    message.includes(
+      "LIFE_OS_FINANCE_AMOUNT_",
+    ) ||
+    message.includes(
+      "LIFE_OS_FINANCE_CURRENCY_INVALID",
+    ) ||
+    message.includes(
+      "LIFE_OS_FINANCE_FREQUENCY_",
+    ) ||
+    message.includes(
+      "LIFE_OS_FINANCE_NOTES_",
+    ) ||
+    message.includes(
+      "LIFE_OS_FINANCE_INCOME_",
+    ) ||
+    message.includes(
+      "LIFE_OS_FINANCE_BUDGET_",
+    ) ||
+    message.includes(
+      "LIFE_OS_FINANCE_DATE_",
+    ) ||
+    message.includes(
+      "LIFE_OS_FINANCE_CATEGORY_",
+    ) ||
+    message.includes(
+      "LIFE_OS_FINANCE_ITEM_TYPE_",
+    ) ||
+    message.includes(
+      "LIFE_OS_FINANCE_DUE_DAY_",
+    )
+  ) {
+    return new IntakeExecutorError(
+      "INVALID_PROPOSAL",
     );
   }
 
@@ -284,7 +414,27 @@ interface NoteExecutorResult {
 
 
 /* =========================================================
- * 8. PARSE NOTE RPC RESULT
+ * 8. FINANCE RPC RESULT
+ * ======================================================= */
+
+interface FinanceExecutorResult {
+  intake_id:
+    UUID;
+
+  target_entity_type:
+    "income_source" |
+    "budget_item";
+
+  target_entity_id:
+    UUID;
+
+  intake_status:
+    "applied";
+}
+
+
+/* =========================================================
+ * 9. PARSE NOTE RPC RESULT
  * ======================================================= */
 
 function parseNoteExecutorResult(
@@ -357,7 +507,93 @@ function parseNoteExecutorResult(
 
 
 /* =========================================================
- * 9. EXECUTE NOTE
+ * 10. PARSE FINANCE RPC RESULT
+ * ======================================================= */
+
+function parseFinanceExecutorResult(
+  value:
+    unknown,
+): FinanceExecutorResult {
+  if (
+    !Array.isArray(
+      value,
+    ) ||
+    value.length !==
+      1
+  ) {
+    throw new IntakeExecutorError(
+      "INVALID_EXECUTOR_RESULT",
+    );
+  }
+
+
+  const row =
+    value[0];
+
+
+  if (
+    !isRecord(
+      row,
+    )
+  ) {
+    throw new IntakeExecutorError(
+      "INVALID_EXECUTOR_RESULT",
+    );
+  }
+
+
+  const intakeIdValidation =
+    uuidSchema.safeParse(
+      row.intake_id,
+    );
+
+
+  const targetIdValidation =
+    uuidSchema.safeParse(
+      row.target_entity_id,
+    );
+
+
+  const targetType =
+    row.target_entity_type;
+
+
+  if (
+    !intakeIdValidation.success ||
+    !targetIdValidation.success ||
+    (
+      targetType !==
+        "income_source" &&
+      targetType !==
+        "budget_item"
+    ) ||
+    row.intake_status !==
+      "applied"
+  ) {
+    throw new IntakeExecutorError(
+      "INVALID_EXECUTOR_RESULT",
+    );
+  }
+
+
+  return {
+    intake_id:
+      intakeIdValidation.data,
+
+    target_entity_type:
+      targetType,
+
+    target_entity_id:
+      targetIdValidation.data,
+
+    intake_status:
+      "applied",
+  };
+}
+
+
+/* =========================================================
+ * 11. EXECUTE NOTE
  * ======================================================= */
 
 async function executeNoteIntake(
@@ -369,17 +605,19 @@ async function executeNoteIntake(
 
 
   /*
-   * The PostgreSQL function:
+   * PostgreSQL function:
    *
    * public.execute_note_intake(uuid)
    *
-   * is:
    *
-   * - SECURITY INVOKER
-   * - authenticated only
-   * - RLS protected
-   * - atomic
-   * - idempotent
+   * Guarantees:
+   *
+   * SECURITY INVOKER
+   * authenticated only
+   * RLS protected
+   * approval required
+   * atomic
+   * idempotent
    */
   const {
     data,
@@ -409,12 +647,10 @@ async function executeNoteIntake(
     );
 
 
-  /*
-   * Defensive consistency check:
-   *
-   * Database must return the exact intake id that was
-   * requested.
-   */
+  /* -------------------------------------------------------
+   * Defensive intake consistency
+   * ---------------------------------------------------- */
+
   if (
     result.intake_id !==
     intakeId
@@ -445,7 +681,197 @@ async function executeNoteIntake(
 
 
 /* =========================================================
- * 10. MAIN DISPATCHER
+ * 12. VALIDATE FINANCE PROPOSAL
+ * ======================================================= */
+
+/**
+ * The browser already reviewed the proposal.
+ *
+ * The confirmation API already validated the proposal.
+ *
+ * PostgreSQL validates the proposal again.
+ *
+ *
+ * This TypeScript validation exists as an additional
+ * dispatcher boundary so the finance RPC is never called
+ * for an arbitrary JSON payload.
+ */
+function validateFinanceProposal(
+  proposedPayload:
+    JsonObject,
+) {
+  const validation =
+    financeIntakeProposalSchema
+      .safeParse(
+        proposedPayload,
+      );
+
+
+  if (
+    !validation.success
+  ) {
+    throw new IntakeExecutorError(
+      "INVALID_PROPOSAL",
+    );
+  }
+
+
+  return validation.data;
+}
+
+
+/* =========================================================
+ * 13. EXECUTE FINANCE
+ * ======================================================= */
+
+async function executeFinanceIntake(
+  intakeId:
+    UUID,
+
+  proposedPayload:
+    JsonObject,
+): Promise<IntakeExecutionResult> {
+
+  /* -------------------------------------------------------
+   * Validate exact reviewed proposal before RPC
+   * ---------------------------------------------------- */
+
+  const proposal =
+    validateFinanceProposal(
+      proposedPayload,
+    );
+
+
+  const expectedTarget =
+    getStructuredProposalTarget(
+      proposal,
+    );
+
+
+  if (
+    expectedTarget !==
+      "income_source" &&
+    expectedTarget !==
+      "budget_item"
+  ) {
+    throw new IntakeExecutorError(
+      "INVALID_PROPOSAL",
+    );
+  }
+
+
+  const supabase =
+    await createClient();
+
+
+  /*
+   * PostgreSQL function:
+   *
+   * public.execute_finance_intake(uuid)
+   *
+   *
+   * Guarantees:
+   *
+   * SECURITY INVOKER
+   * authenticated only
+   * RLS protected
+   * finance kind only
+   * proposal version 1 only
+   * explicit action allowlist
+   * exact payload shape
+   * profile currency validation
+   * atomic write
+   * idempotent retry
+   */
+  const {
+    data,
+    error,
+  } =
+    await supabase.rpc(
+      "execute_finance_intake",
+      {
+        p_intake_id:
+          intakeId,
+      },
+    );
+
+
+  if (
+    error
+  ) {
+    throw mapExecutorError(
+      error,
+    );
+  }
+
+
+  const result =
+    parseFinanceExecutorResult(
+      data,
+    );
+
+
+  /* -------------------------------------------------------
+   * Defensive intake consistency
+   * ---------------------------------------------------- */
+
+  if (
+    result.intake_id !==
+    intakeId
+  ) {
+    throw new IntakeExecutorError(
+      "INVALID_EXECUTOR_RESULT",
+    );
+  }
+
+
+  /* -------------------------------------------------------
+   * Defensive target consistency
+   * ---------------------------------------------------- */
+  /*
+   * Example:
+   *
+   * create_income_source
+   *
+   * MUST return:
+   *
+   * income_source
+   *
+   *
+   * It may never unexpectedly return budget_item.
+   */
+
+  if (
+    result.target_entity_type !==
+    expectedTarget
+  ) {
+    throw new IntakeExecutorError(
+      "INVALID_EXECUTOR_RESULT",
+    );
+  }
+
+
+  return {
+    intake_id:
+      result.intake_id,
+
+    kind:
+      "finance",
+
+    status:
+      "applied",
+
+    target_entity_type:
+      result.target_entity_type,
+
+    target_entity_id:
+      result.target_entity_id,
+  };
+}
+
+
+/* =========================================================
+ * 14. MAIN DISPATCHER
  * ======================================================= */
 
 export async function executeIntakeItem(
@@ -538,25 +964,52 @@ export async function executeIntakeItem(
     "applied"
   ) {
     /*
-     * Only NOTE has a verified idempotent executor today.
+     * NOTE and FINANCE both have idempotent PostgreSQL
+     * executors.
      *
-     * Calling it again is safe because the PostgreSQL
-     * function returns the existing memory item instead of
-     * creating another one.
+     * Calling either one again must return the existing
+     * linked entity instead of creating a duplicate.
      */
-    if (
-      intake.kind ===
-      "note"
+
+    switch (
+      intake.kind
     ) {
-      return executeNoteIntake(
-        safeId,
-      );
+      case "note":
+        return executeNoteIntake(
+          safeId,
+        );
+
+
+      case "finance":
+        return executeFinanceIntake(
+          safeId,
+          intake.proposed_payload,
+        );
+
+
+      case "plan":
+      case "travel":
+      case "growth":
+      case "document":
+        throw new IntakeExecutorError(
+          "UNSUPPORTED_KIND",
+        );
+
+
+      default: {
+        const exhaustiveCheck:
+          never =
+          intake.kind;
+
+
+        void exhaustiveCheck;
+
+
+        throw new IntakeExecutorError(
+          "UNSUPPORTED_KIND",
+        );
+      }
     }
-
-
-    throw new IntakeExecutorError(
-      "UNSUPPORTED_KIND",
-    );
   }
 
 
@@ -588,6 +1041,12 @@ export async function executeIntakeItem(
 
 
     case "finance":
+      return executeFinanceIntake(
+        safeId,
+        intake.proposed_payload,
+      );
+
+
     case "plan":
     case "travel":
     case "growth":
@@ -599,7 +1058,7 @@ export async function executeIntakeItem(
        * invent a domain write.
        *
        * Each category receives its own deterministic
-       * executor later.
+       * executor.
        */
       throw new IntakeExecutorError(
         "UNSUPPORTED_KIND",
@@ -611,7 +1070,7 @@ export async function executeIntakeItem(
        * Compile-time exhaustiveness protection.
        *
        * If IntakeKind gains a new value later, TypeScript
-       * should force this dispatcher to be reviewed.
+       * forces this dispatcher to be reviewed.
        */
       const exhaustiveCheck:
         never =
@@ -630,14 +1089,15 @@ export async function executeIntakeItem(
 
 
 /* =========================================================
- * 11. SAFE SUPPORT CHECK
+ * 15. SAFE SUPPORT CHECK
  * ======================================================= */
 
 /**
- * Useful for future UI/API layers.
- *
  * This function does not read the database and does not
  * execute anything.
+ *
+ * It only answers whether LIFE OS has an explicit
+ * deterministic executor for the intake kind.
  */
 export function isIntakeKindExecutable(
   kind:
@@ -645,13 +1105,15 @@ export function isIntakeKindExecutable(
 ): boolean {
   return (
     kind ===
-    "note"
+      "note" ||
+    kind ===
+      "finance"
   );
 }
 
 
 /* =========================================================
- * 12. EXECUTION TARGET
+ * 16. EXECUTION TARGET
  * ======================================================= */
 
 export function getIntakeExecutionTarget(
@@ -666,6 +1128,27 @@ export function getIntakeExecutionTarget(
 
 
     case "finance":
+      /*
+       * Finance has two possible exact targets:
+       *
+       * create_income_source
+       *      → income_source
+       *
+       * create_budget_item
+       *      → budget_item
+       *
+       *
+       * Kind alone is insufficient to select one.
+       *
+       * Use:
+       *
+       * getStructuredProposalTarget(proposal)
+       *
+       * when the exact proposal is available.
+       */
+      return null;
+
+
     case "plan":
     case "travel":
     case "growth":
@@ -689,7 +1172,94 @@ export function getIntakeExecutionTarget(
 
 
 /* =========================================================
- * 13. NO AI INSIDE EXECUTION
+ * 17. FINANCE EXECUTION MATRIX
+ * ======================================================= */
+
+/**
+ * finance
+ *
+ * create_income_source
+ *      ↓
+ * income_sources
+ *
+ *
+ * create_budget_item
+ *      ↓
+ * budget_items
+ *
+ *
+ * No other finance action is executable.
+ */
+
+
+/* =========================================================
+ * 18. CURRENCY SAFETY
+ * ======================================================= */
+
+/**
+ * V1:
+ *
+ * income_sources
+ * budget_items
+ *
+ * do not store a per-record currency.
+ *
+ *
+ * Therefore:
+ *
+ * proposal currency
+ *
+ * MUST equal:
+ *
+ * profiles.default_currency
+ *
+ *
+ * Example:
+ *
+ * profile:
+ * AED
+ *
+ * proposal:
+ * 1000 USD
+ *
+ *
+ * Result:
+ *
+ * REJECT
+ *
+ *
+ * Never silently store:
+ *
+ * 1000
+ *
+ * as though it meant AED.
+ */
+
+
+/* =========================================================
+ * 19. DOUBLE VALIDATION
+ * ======================================================= */
+
+/**
+ * Finance structured proposal is validated:
+ *
+ * AI Structured Output
+ *      ↓
+ * strictIntakePreviewSchema
+ *      ↓
+ * Confirm API
+ *      ↓
+ * financeIntakeProposalSchema here
+ *      ↓
+ * PostgreSQL execute_finance_intake()
+ *
+ *
+ * No single AI-produced JSON object becomes authoritative.
+ */
+
+
+/* =========================================================
+ * 20. NO AI INSIDE EXECUTION
  * ======================================================= */
 
 /**
@@ -706,17 +1276,17 @@ export function getIntakeExecutionTarget(
 
 
 /* =========================================================
- * 14. NO ARBITRARY DOMAIN FALLBACK
+ * 21. NO ARBITRARY DOMAIN FALLBACK
  * ======================================================= */
 
 /**
- * Never implement logic such as:
+ * Never implement:
  *
  * if kind is unknown:
  *   save as memory
  *
  *
- * or:
+ * Never implement:
  *
  * ask AI what table to write to
  *
@@ -724,21 +1294,22 @@ export function getIntakeExecutionTarget(
  * Unsupported means:
  *
  * STOP.
- *
- * This protects personal financial and planning data from
- * incorrect AI classification.
  */
 
 
 /* =========================================================
- * 15. DATABASE SECURITY
+ * 22. DATABASE SECURITY
  * ======================================================= */
 
 /**
- * execute_note_intake() is called through the normal
- * authenticated Supabase server client.
+ * Both executors are called through the normal authenticated
+ * Supabase server client:
  *
- * It does NOT use:
+ * execute_note_intake()
+ * execute_finance_intake()
+ *
+ *
+ * They do NOT use:
  *
  * service_role
  * admin credentials
@@ -753,24 +1324,62 @@ export function getIntakeExecutionTarget(
  *      ↓
  * RLS
  *      ↓
- * SECURITY INVOKER executor
+ * SECURITY INVOKER
  */
 
 
 /* =========================================================
- * 16. IDEMPOTENCY
+ * 23. IDEMPOTENCY
  * ======================================================= */
 
 /**
  * Calling executeIntakeItem() twice for the same successfully
- * applied note does not create two memory records.
+ * applied:
  *
- * PostgreSQL returns the existing linked memory_item.
+ * note
+ * finance
+ *
+ * does not create duplicate domain records.
+ *
+ *
+ * PostgreSQL returns the existing linked target.
  */
 
 
 /* =========================================================
- * 17. FINAL V2 RULE
+ * 24. CURRENT EXECUTION MATRIX
+ * ======================================================= */
+
+/**
+ * note
+ *      → memory_item ✅
+ *
+ *
+ * finance
+ *
+ * create_income_source
+ *      → income_source ✅
+ *
+ * create_budget_item
+ *      → budget_item ✅
+ *
+ *
+ * plan
+ *      → blocked
+ *
+ * travel
+ *      → blocked
+ *
+ * growth
+ *      → blocked
+ *
+ * document
+ *      → blocked
+ */
+
+
+/* =========================================================
+ * 25. FINAL V2 RULE
  * ======================================================= */
 
 /**
@@ -787,28 +1396,9 @@ export function getIntakeExecutionTarget(
  * implemented for this intake kind."
  *
  *
- * Current execution matrix:
- *
- * note
- *      → memory_item ✅
- *
- * finance
- *      → blocked
- *
- * plan
- *      → blocked
- *
- * travel
- *      → blocked
- *
- * growth
- *      → blocked
- *
- * document
- *      → blocked
- *
- *
  * AI Suggests
+ *      ↓
+ * Exact Values
  *      ↓
  * User Reviews
  *      ↓
@@ -816,5 +1406,7 @@ export function getIntakeExecutionTarget(
  *      ↓
  * Deterministic Dispatcher
  *      ↓
- * Exact Executor
+ * Exact PostgreSQL Executor
+ *      ↓
+ * Final LIFE OS Fact
  */
