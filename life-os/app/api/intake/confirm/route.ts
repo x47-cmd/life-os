@@ -1083,3 +1083,100 @@ export async function GET() {
  *
  * memory_items insert
  *      +
+ * intake_items applied state
+ *
+ *
+ * Either both succeed:
+ *
+ * or both roll back.
+ */
+
+
+/* =========================================================
+ * 18. FILE RULE
+ * ======================================================= */
+
+/**
+ * PDF binary data is still NOT permanently stored by this
+ * endpoint.
+ *
+ * Only:
+ *
+ * name
+ * MIME
+ * size
+ *
+ * are persisted in intake_items.
+ *
+ *
+ * Private Supabase Storage arrives with the document layer.
+ */
+
+
+/* =========================================================
+ * 19. TRUST BOUNDARY
+ * ======================================================= */
+
+/**
+ * Browser preview data is validated again.
+ *
+ * Source data is validated again.
+ *
+ * User ownership comes from the authenticated session.
+ *
+ * Domain execution is selected from server-side code.
+ *
+ *
+ * The browser cannot send:
+ *
+ * table name
+ * RPC name
+ * SQL
+ * user_id
+ * executor name
+ */
+
+
+/* =========================================================
+ * 20. NO RETRY DUPLICATION
+ * ======================================================= */
+
+/**
+ * Once explicit confirmation succeeds, an execution problem
+ * returns the already-approved intake rather than pretending
+ * the entire confirmation failed.
+ *
+ * This prevents the UI from encouraging a second Confirm
+ * submission that could create another proposal.
+ */
+
+
+/* =========================================================
+ * 21. FINAL V2 RULE
+ * ======================================================= */
+
+/**
+ * AI Suggests
+ *      ↓
+ * User Reviews
+ *      ↓
+ * User Approves
+ *      ↓
+ * Server Dispatcher
+ *      ↓
+ * Supported?
+ *
+ * NO
+ *      ↓
+ * remain approved safely
+ *
+ * YES
+ *      ↓
+ * deterministic executor
+ *      ↓
+ * final LIFE OS entity
+ *
+ *
+ * Simple outside.
+ * Intelligent underneath.
+ */
