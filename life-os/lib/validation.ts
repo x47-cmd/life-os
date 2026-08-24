@@ -2597,6 +2597,16 @@ export const intakeErrorCodeSchema =
  * 21. UNIVERSAL INTAKE PREVIEW
  * ======================================================= */
 
+/**
+ * Transitional preview schema.
+ *
+ * `proposal` is optional here ONLY so the currently deployed
+ * preview API remains compatible during the one-file-at-a-
+ * time V2 rollout.
+ *
+ * The strict runtime schema is defined after the Structured
+ * Proposal master union below.
+ */
 export const intakePreviewSchema =
   z
     .object({
@@ -2618,13 +2628,26 @@ export const intakePreviewSchema =
       next_action:
         intakeNextActionSchema,
 
+      /**
+       * Transitional compatibility boundary.
+       *
+       * Exact structured validation happens through:
+       *
+       * strictIntakePreviewSchema
+       *
+       * once the upgraded preview API is connected.
+       */
+      proposal:
+        jsonObjectSchema
+          .nullable()
+          .optional(),
+
       requires_confirmation:
         z.literal(
           true,
         ),
     })
     .strict();
-
 
 /* =========================================================
  * 22. STRUCTURED PROPOSAL — FINANCE
