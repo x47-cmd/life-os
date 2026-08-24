@@ -4,6 +4,8 @@
  * V1 foundation
  * +
  * V2 Universal Intake
+ * +
+ * V2 Structured Proposals
  *
  * This file defines the shared TypeScript domain model used across:
  *
@@ -14,6 +16,7 @@
  * - AI context
  * - AI tools
  * - Universal Intake
+ * - Structured Proposals
  * - Decision Simulator
  * - Opportunity Engine
  *
@@ -24,6 +27,8 @@
  * - No secrets.
  * - Database facts remain separate from AI interpretations.
  * - AI proposals are never authoritative before user approval.
+ * - Structured proposals describe exact possible actions.
+ * - Structured proposals do not grant execution authority.
  */
 
 
@@ -31,15 +36,25 @@
  * 1. GENERIC TYPES
  * ======================================================= */
 
-export type UUID = string;
+export type UUID =
+  string;
 
-export type ISODate = string;
 
-export type ISODateTime = string;
+export type ISODate =
+  string;
 
-export type CurrencyCode = string;
 
-export type Nullable<T> = T | null;
+export type ISODateTime =
+  string;
+
+
+export type CurrencyCode =
+  string;
+
+
+export type Nullable<T> =
+  T | null;
+
 
 export type JsonPrimitive =
   | string
@@ -47,15 +62,19 @@ export type JsonPrimitive =
   | boolean
   | null;
 
+
 export type JsonValue =
   | JsonPrimitive
   | JsonValue[]
   | {
-      [key: string]: JsonValue;
+      [key: string]:
+        JsonValue;
     };
 
+
 export type JsonObject = {
-  [key: string]: JsonValue;
+  [key: string]:
+    JsonValue;
 };
 
 
@@ -289,11 +308,473 @@ export type IntakeTargetEntityType =
 
 
 /* =========================================================
+ * 4A. STRUCTURED PROPOSAL CORE
+ * ======================================================= */
+
+/**
+ * Proposal payload version.
+ *
+ * If the proposal contract changes later, a new version can
+ * be introduced without silently changing old approved
+ * intake records.
+ */
+export type IntakeProposalVersion =
+  1;
+
+
+/* =========================================================
+ * 4B. FINANCE STRUCTURED PROPOSALS
+ * ======================================================= */
+
+export type FinanceProposalAction =
+  | "create_income_source"
+  | "create_budget_item";
+
+
+/**
+ * Exact proposed IncomeSource.
+ *
+ * Currency is included for human review even though the V1
+ * income_sources table currently relies on the user's normal
+ * LIFE OS currency context rather than storing currency on
+ * each income row.
+ */
+export interface FinanceIncomeSourceProposalData
+  extends JsonObject {
+
+  name:
+    string;
+
+  amount:
+    number;
+
+  currency:
+    CurrencyCode;
+
+  frequency:
+    Frequency;
+
+  next_expected_date:
+    Nullable<ISODate>;
+
+  notes:
+    Nullable<string>;
+}
+
+
+export interface FinanceIncomeSourceProposal
+  extends JsonObject {
+
+  version:
+    IntakeProposalVersion;
+
+  kind:
+    "finance";
+
+  action:
+    "create_income_source";
+
+  data:
+    FinanceIncomeSourceProposalData;
+}
+
+
+/**
+ * Exact proposed BudgetItem.
+ */
+export interface FinanceBudgetItemProposalData
+  extends JsonObject {
+
+  name:
+    string;
+
+  category:
+    BudgetCategory;
+
+  item_type:
+    BudgetItemType;
+
+  amount:
+    number;
+
+  currency:
+    CurrencyCode;
+
+  frequency:
+    Frequency;
+
+  due_day:
+    Nullable<number>;
+
+  notes:
+    Nullable<string>;
+}
+
+
+export interface FinanceBudgetItemProposal
+  extends JsonObject {
+
+  version:
+    IntakeProposalVersion;
+
+  kind:
+    "finance";
+
+  action:
+    "create_budget_item";
+
+  data:
+    FinanceBudgetItemProposalData;
+}
+
+
+export type FinanceIntakeProposal =
+  | FinanceIncomeSourceProposal
+  | FinanceBudgetItemProposal;
+
+
+/* =========================================================
+ * 4C. PLAN STRUCTURED PROPOSALS
+ * ======================================================= */
+
+export type PlanProposalAction =
+  | "create_goal"
+  | "create_project";
+
+
+export interface GoalProposalData
+  extends JsonObject {
+
+  title:
+    string;
+
+  category:
+    GoalCategory;
+
+  description:
+    Nullable<string>;
+
+  target_value:
+    Nullable<number>;
+
+  current_value:
+    Nullable<number>;
+
+  unit:
+    Nullable<string>;
+
+  progress_percent:
+    number;
+
+  target_date:
+    Nullable<ISODate>;
+
+  priority:
+    Priority;
+
+  status:
+    GoalStatus;
+
+  next_action:
+    Nullable<string>;
+
+  sort_order:
+    number;
+}
+
+
+export interface GoalIntakeProposal
+  extends JsonObject {
+
+  version:
+    IntakeProposalVersion;
+
+  kind:
+    "plan";
+
+  action:
+    "create_goal";
+
+  data:
+    GoalProposalData;
+}
+
+
+export interface ProjectProposalData
+  extends JsonObject {
+
+  goal_id:
+    Nullable<UUID>;
+
+  title:
+    string;
+
+  description:
+    Nullable<string>;
+
+  category:
+    ProjectCategory;
+
+  status:
+    ProjectStatus;
+
+  progress_percent:
+    number;
+
+  priority:
+    Priority;
+
+  start_date:
+    Nullable<ISODate>;
+
+  target_date:
+    Nullable<ISODate>;
+
+  next_action:
+    Nullable<string>;
+}
+
+
+export interface ProjectIntakeProposal
+  extends JsonObject {
+
+  version:
+    IntakeProposalVersion;
+
+  kind:
+    "plan";
+
+  action:
+    "create_project";
+
+  data:
+    ProjectProposalData;
+}
+
+
+export type PlanIntakeProposal =
+  | GoalIntakeProposal
+  | ProjectIntakeProposal;
+
+
+/* =========================================================
+ * 4D. GROWTH STRUCTURED PROPOSALS
+ * ======================================================= */
+
+export type GrowthProposalAction =
+  | "create_learning_item"
+  | "create_career_item";
+
+
+export interface LearningProposalData
+  extends JsonObject {
+
+  goal_id:
+    Nullable<UUID>;
+
+  title:
+    string;
+
+  provider:
+    Nullable<string>;
+
+  item_type:
+    LearningItemType;
+
+  status:
+    LearningStatus;
+
+  priority:
+    Priority;
+
+  progress_percent:
+    number;
+
+  start_date:
+    Nullable<ISODate>;
+
+  target_date:
+    Nullable<ISODate>;
+
+  completed_date:
+    Nullable<ISODate>;
+
+  url:
+    Nullable<string>;
+
+  cost:
+    Nullable<number>;
+
+  currency:
+    CurrencyCode;
+
+  notes:
+    Nullable<string>;
+}
+
+
+export interface LearningIntakeProposal
+  extends JsonObject {
+
+  version:
+    IntakeProposalVersion;
+
+  kind:
+    "growth";
+
+  action:
+    "create_learning_item";
+
+  data:
+    LearningProposalData;
+}
+
+
+export interface CareerProposalData
+  extends JsonObject {
+
+  goal_id:
+    Nullable<UUID>;
+
+  item_type:
+    CareerItemType;
+
+  title:
+    string;
+
+  description:
+    Nullable<string>;
+
+  status:
+    CareerStatus;
+
+  priority:
+    Priority;
+
+  rating:
+    Nullable<number>;
+
+  event_date:
+    Nullable<ISODate>;
+
+  target_date:
+    Nullable<ISODate>;
+
+  evidence_url:
+    Nullable<string>;
+
+  notes:
+    Nullable<string>;
+}
+
+
+export interface CareerIntakeProposal
+  extends JsonObject {
+
+  version:
+    IntakeProposalVersion;
+
+  kind:
+    "growth";
+
+  action:
+    "create_career_item";
+
+  data:
+    CareerProposalData;
+}
+
+
+export type GrowthIntakeProposal =
+  | LearningIntakeProposal
+  | CareerIntakeProposal;
+
+
+/* =========================================================
+ * 4E. STRUCTURED PROPOSAL UNION
+ * ======================================================= */
+
+/**
+ * Only domains with an explicitly defined proposal contract
+ * belong here.
+ *
+ * travel
+ * document
+ *
+ * are intentionally excluded until their real domain schema
+ * exists.
+ *
+ * note already has a deterministic executor that uses the
+ * approved source directly and does not require an AI-created
+ * structured proposal.
+ */
+export type StructuredIntakeProposal =
+  | FinanceIntakeProposal
+  | PlanIntakeProposal
+  | GrowthIntakeProposal;
+
+
+/**
+ * Actions currently understood by the structured proposal
+ * contract.
+ */
+export type StructuredIntakeProposalAction =
+  | FinanceProposalAction
+  | PlanProposalAction
+  | GrowthProposalAction;
+
+
+/* =========================================================
+ * 4F. STRUCTURED PROPOSAL SAFETY MODEL
+ * ======================================================= */
+
+/**
+ * Example:
+ *
+ * {
+ *   version: 1,
+ *   kind: "finance",
+ *   action: "create_income_source",
+ *   data: {
+ *     name: "الراتب",
+ *     amount: 30000,
+ *     currency: "AED",
+ *     frequency: "monthly",
+ *     next_expected_date: null,
+ *     notes: null
+ *   }
+ * }
+ *
+ *
+ * This means:
+ *
+ * "LIFE OS proposes creating this exact record."
+ *
+ *
+ * It does NOT mean:
+ *
+ * "The record may now be written."
+ *
+ *
+ * Execution still requires:
+ *
+ * validated proposal
+ *      ↓
+ * user review
+ *      ↓
+ * explicit user approval
+ *      ↓
+ * exact deterministic executor
+ */
+
+
+/* =========================================================
  * 5. PROFILE
  * ======================================================= */
 
 export interface Profile {
-  user_id: UUID;
+  user_id:
+    UUID;
 
   display_name:
     Nullable<string>;
@@ -1399,6 +1880,9 @@ export interface AuditLogInsert {
  * LIFE OS write occurs.
  *
  * This is not a database fact.
+ *
+ * The structured proposal will be added to this preview
+ * contract only after its validation schema is introduced.
  */
 export interface IntakePreview {
   kind:
@@ -1430,6 +1914,10 @@ export interface IntakePreview {
 
 /**
  * Durable V2 proposal record.
+ *
+ * proposed_payload may contain one of the validated
+ * StructuredIntakeProposal objects after the structured
+ * proposal pipeline is connected.
  *
  * Lifecycle:
  *
@@ -2096,7 +2584,8 @@ export type AIToolName =
  * ======================================================= */
 
 export interface AIToolResult<
-  TData = JsonValue,
+  TData =
+    JsonValue,
 > {
   tool:
     AIToolName;
@@ -2359,7 +2848,8 @@ export interface StatusMessage {
  * ======================================================= */
 
 export type OperationResult<
-  TData = undefined,
+  TData =
+    undefined,
 > =
   | {
       success:
@@ -2550,13 +3040,57 @@ export type AuditAction =
 
 
 /* =========================================================
- * 46. UNIVERSAL INTAKE SAFETY RULE
+ * 46. STRUCTURED PROPOSAL RULE
+ * ======================================================= */
+
+/**
+ * Structured proposal:
+ *
+ * = exact proposed action
+ * + exact proposed values
+ *
+ *
+ * Example:
+ *
+ * "راتبي 30,000"
+ *
+ * should eventually produce:
+ *
+ * kind:
+ * finance
+ *
+ * action:
+ * create_income_source
+ *
+ * amount:
+ * 30000
+ *
+ * currency:
+ * AED
+ *
+ * frequency:
+ * monthly
+ *
+ *
+ * rather than only:
+ *
+ * "هذا تحديث مالي."
+ */
+
+
+/* =========================================================
+ * 47. UNIVERSAL INTAKE SAFETY RULE
  * ======================================================= */
 
 /**
  * IntakePreview
  *
  * = AI interpretation shown to the user.
+ *
+ *
+ * StructuredIntakeProposal
+ *
+ * = exact proposed domain operation shown to the user.
  *
  *
  * IntakeItem
@@ -2566,12 +3100,17 @@ export type AuditAction =
  *
  * Domain entity
  *
- * = actual LIFE OS fact created only after confirmation.
+ * = actual LIFE OS fact created only after confirmation and
+ * successful deterministic execution.
  *
  *
  * Never treat:
  *
  * IntakePreview
+ *
+ * or:
+ *
+ * StructuredIntakeProposal
  *
  * as:
  *
@@ -2580,7 +3119,7 @@ export type AuditAction =
 
 
 /* =========================================================
- * 47. OWNERSHIP RULE
+ * 48. OWNERSHIP RULE
  * ======================================================= */
 
 /**
@@ -2595,7 +3134,30 @@ export type AuditAction =
 
 
 /* =========================================================
- * 48. FINAL TYPE SAFETY RULE
+ * 49. STRUCTURED PROPOSAL VERSIONING
+ * ======================================================= */
+
+/**
+ * Every structured proposal carries:
+ *
+ * version: 1
+ *
+ *
+ * If the proposal format changes later:
+ *
+ * do NOT reinterpret an existing approved V1 proposal using
+ * a new schema.
+ *
+ * Introduce:
+ *
+ * version: 2
+ *
+ * and keep old execution semantics explicit.
+ */
+
+
+/* =========================================================
+ * 50. FINAL TYPE SAFETY RULE
  * ======================================================= */
 
 /**
@@ -2609,6 +3171,9 @@ export type AuditAction =
  * - AI cannot create arbitrary database operations.
  * - Universal Intake proposals require explicit user review.
  * - AI classification alone never becomes a permanent fact.
+ * - Structured proposal values must be shown before write.
+ * - Structured proposal action must map to an exact executor.
+ * - Unsupported proposal actions stop safely.
  * - Sensitive execution remains server-controlled.
  *
  *
@@ -2616,9 +3181,11 @@ export type AuditAction =
  *
  * AI Suggests
  *      ↓
- * User Reviews
+ * User Reviews Exact Values
  *      ↓
  * User Approves
+ *      ↓
+ * Deterministic Executor
  *      ↓
  * System Executes
  */
