@@ -311,13 +311,6 @@ export type IntakeTargetEntityType =
  * 4A. STRUCTURED PROPOSAL CORE
  * ======================================================= */
 
-/**
- * Proposal payload version.
- *
- * If the proposal contract changes later, a new version can
- * be introduced without silently changing old approved
- * intake records.
- */
 export type IntakeProposalVersion =
   1;
 
@@ -331,14 +324,6 @@ export type FinanceProposalAction =
   | "create_budget_item";
 
 
-/**
- * Exact proposed IncomeSource.
- *
- * Currency is included for human review even though the V1
- * income_sources table currently relies on the user's normal
- * LIFE OS currency context rather than storing currency on
- * each income row.
- */
 export interface FinanceIncomeSourceProposalData
   extends JsonObject {
 
@@ -379,9 +364,6 @@ export interface FinanceIncomeSourceProposal
 }
 
 
-/**
- * Exact proposed BudgetItem.
- */
 export interface FinanceBudgetItemProposalData
   extends JsonObject {
 
@@ -694,30 +676,12 @@ export type GrowthIntakeProposal =
  * 4E. STRUCTURED PROPOSAL UNION
  * ======================================================= */
 
-/**
- * Only domains with an explicitly defined proposal contract
- * belong here.
- *
- * travel
- * document
- *
- * are intentionally excluded until their real domain schema
- * exists.
- *
- * note already has a deterministic executor that uses the
- * approved source directly and does not require an AI-created
- * structured proposal.
- */
 export type StructuredIntakeProposal =
   | FinanceIntakeProposal
   | PlanIntakeProposal
   | GrowthIntakeProposal;
 
 
-/**
- * Actions currently understood by the structured proposal
- * contract.
- */
 export type StructuredIntakeProposalAction =
   | FinanceProposalAction
   | PlanProposalAction
@@ -729,42 +693,18 @@ export type StructuredIntakeProposalAction =
  * ======================================================= */
 
 /**
- * Example:
+ * Structured proposals describe an exact proposed domain
+ * operation.
  *
- * {
- *   version: 1,
- *   kind: "finance",
- *   action: "create_income_source",
- *   data: {
- *     name: "الراتب",
- *     amount: 30000,
- *     currency: "AED",
- *     frequency: "monthly",
- *     next_expected_date: null,
- *     notes: null
- *   }
- * }
+ * They are still untrusted until:
  *
- *
- * This means:
- *
- * "LIFE OS proposes creating this exact record."
- *
- *
- * It does NOT mean:
- *
- * "The record may now be written."
- *
- *
- * Execution still requires:
- *
- * validated proposal
+ * schema validation
  *      ↓
  * user review
  *      ↓
- * explicit user approval
+ * explicit approval
  *      ↓
- * exact deterministic executor
+ * deterministic executor
  */
 
 
@@ -1876,13 +1816,17 @@ export interface AuditLogInsert {
  * ======================================================= */
 
 /**
- * AI understanding shown to the user BEFORE any permanent
- * LIFE OS write occurs.
+ * AI interpretation shown BEFORE a permanent domain write.
  *
- * This is not a database fact.
+ * `proposal` contains the exact structured action and values
+ * when LIFE OS supports structured extraction for that kind.
  *
- * The structured proposal will be added to this preview
- * contract only after its validation schema is introduced.
+ * During the V2 rollout this property remains optional so
+ * existing preview producers continue to type-check until
+ * the preview API is upgraded in the next step.
+ *
+ * Runtime validation will become authoritative once the API
+ * starts emitting this field.
  */
 export interface IntakePreview {
   kind:
@@ -1903,6 +1847,21 @@ export interface IntakePreview {
   next_action:
     string;
 
+  /**
+   * finance / plan / growth:
+   *
+   * eventually contains the exact validated proposal.
+   *
+   * travel / document / note:
+   *
+   * currently null or omitted because they do not yet use
+   * the structured proposal pipeline.
+   */
+  proposal?:
+    Nullable<
+      StructuredIntakeProposal
+    >;
+
   requires_confirmation:
     true;
 }
@@ -1915,9 +1874,8 @@ export interface IntakePreview {
 /**
  * Durable V2 proposal record.
  *
- * proposed_payload may contain one of the validated
- * StructuredIntakeProposal objects after the structured
- * proposal pipeline is connected.
+ * proposed_payload can contain the exact structured proposal
+ * that the user reviewed and approved.
  *
  * Lifecycle:
  *
@@ -1996,11 +1954,6 @@ export interface IntakeItem {
 }
 
 
-/**
- * Insert input deliberately does NOT accept user_id.
- *
- * The authenticated server identity owns the record.
- */
 export interface IntakeItemInsert {
   kind:
     IntakeKind;
@@ -3056,25 +3009,19 @@ export type AuditAction =
  *
  * should eventually produce:
  *
- * kind:
- * finance
- *
- * action:
- * create_income_source
- *
- * amount:
- * 30000
- *
- * currency:
- * AED
- *
- * frequency:
- * monthly
- *
- *
- * rather than only:
- *
- * "هذا تحديث مالي."
+ * {
+ *   version: 1,
+ *   kind: "finance",
+ *   action: "create_income_source",
+ *   data: {
+ *     name: "الراتب",
+ *     amount: 30000,
+ *     currency: "AED",
+ *     frequency: "monthly",
+ *     next_expected_date: null,
+ *     notes: null
+ *   }
+ * }
  */
 
 
@@ -3088,9 +3035,9 @@ export type AuditAction =
  * = AI interpretation shown to the user.
  *
  *
- * StructuredIntakeProposal
+ * IntakePreview.proposal
  *
- * = exact proposed domain operation shown to the user.
+ * = exact proposed domain operation and values.
  *
  *
  * IntakeItem
@@ -3102,19 +3049,6 @@ export type AuditAction =
  *
  * = actual LIFE OS fact created only after confirmation and
  * successful deterministic execution.
- *
- *
- * Never treat:
- *
- * IntakePreview
- *
- * or:
- *
- * StructuredIntakeProposal
- *
- * as:
- *
- * authoritative user data.
  */
 
 
@@ -3143,49 +3077,63 @@ export type AuditAction =
  * version: 1
  *
  *
- * If the proposal format changes later:
+ * If the format changes:
  *
- * do NOT reinterpret an existing approved V1 proposal using
- * a new schema.
+ * introduce a new proposal version.
  *
- * Introduce:
- *
- * version: 2
- *
- * and keep old execution semantics explicit.
+ * Never silently reinterpret an already-approved proposal.
  */
 
 
 /* =========================================================
- * 50. FINAL TYPE SAFETY RULE
+ * 50. ROLLOUT COMPATIBILITY RULE
  * ======================================================= */
 
 /**
- * LIFE OS domain rules:
+ * IntakePreview.proposal is temporarily optional at the
+ * TypeScript boundary only.
  *
- * - Database records include user ownership.
- * - Server derives user_id from authenticated identity.
- * - Audit logs are append-oriented.
- * - AI responses remain recommendations.
- * - Financial calculations remain deterministic.
- * - AI cannot create arbitrary database operations.
- * - Universal Intake proposals require explicit user review.
- * - AI classification alone never becomes a permanent fact.
- * - Structured proposal values must be shown before write.
- * - Structured proposal action must map to an exact executor.
- * - Unsupported proposal actions stop safely.
- * - Sensitive execution remains server-controlled.
+ * This keeps the current preview API compatible while the
+ * structured-output route is upgraded.
  *
+ * The next runtime layer will require:
  *
- * Permanent V2 rule:
+ * finance → structured finance proposal
+ * plan    → structured plan proposal
+ * growth  → structured growth proposal
  *
- * AI Suggests
+ * and will intentionally use:
+ *
+ * null
+ *
+ * for:
+ *
+ * note
+ * travel
+ * document
+ */
+
+
+/* =========================================================
+ * 51. FINAL TYPE SAFETY RULE
+ * ======================================================= */
+
+/**
+ * LIFE OS V2:
+ *
+ * User Input
+ *      ↓
+ * AI Interpretation
+ *      ↓
+ * Exact Structured Proposal
  *      ↓
  * User Reviews Exact Values
  *      ↓
  * User Approves
  *      ↓
  * Deterministic Executor
- *      ↓
- * System Executes
+ *
+ *
+ * AI classification alone is never enough to create a
+ * permanent LIFE OS fact.
  */
