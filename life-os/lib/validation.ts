@@ -63,6 +63,10 @@ import type {
  * V2 Universal Intake
  * +
  * V2 Structured Proposals
+ * +
+ * V2 Travel OS
+ * +
+ * V2 Private Documents
  *
  * Permanent rule:
  *
@@ -240,6 +244,53 @@ function normalizeAuditKey(
   return value
     .trim()
     .toLowerCase();
+}
+
+
+function isSafeStoragePath(
+  value:
+    string,
+): boolean {
+  if (
+    value.startsWith(
+      "/",
+    ) ||
+    value.endsWith(
+      "/",
+    ) ||
+    value.includes(
+      "\\",
+    )
+  ) {
+    return false;
+  }
+
+
+  const segments =
+    value.split(
+      "/",
+    );
+
+
+  if (
+    segments.length <
+    2
+  ) {
+    return false;
+  }
+
+
+  return segments.every(
+    (
+      segment,
+    ) =>
+      segment.length >
+        0 &&
+      segment !==
+        "." &&
+      segment !==
+        "..",
+  );
 }
 
 
@@ -935,10 +986,9 @@ export const investmentTransactionInsertSchema =
               code:
                 "custom",
 
-              path:
-                [
-                  "quantity",
-                ],
+              path: [
+                "quantity",
+              ],
 
               message:
                 "الكمية مطلوبة ويجب أن تكون أكبر من صفر لعمليات الشراء والبيع.",
@@ -958,10 +1008,9 @@ export const investmentTransactionInsertSchema =
               code:
                 "custom",
 
-              path:
-                [
-                  "unit_price",
-                ],
+              path: [
+                "unit_price",
+              ],
 
               message:
                 "سعر الوحدة مطلوب ويجب أن يكون أكبر من صفر لعمليات الشراء والبيع.",
@@ -1132,10 +1181,9 @@ export const projectInsertSchema =
             code:
               "custom",
 
-            path:
-              [
-                "target_date",
-              ],
+            path: [
+              "target_date",
+            ],
 
             message:
               "تاريخ الهدف لا يمكن أن يسبق تاريخ البداية.",
@@ -1164,10 +1212,9 @@ export const projectUpdateSchema =
             code:
               "custom",
 
-            path:
-              [
-                "target_date",
-              ],
+            path: [
+              "target_date",
+            ],
 
             message:
               "تاريخ الهدف لا يمكن أن يسبق تاريخ البداية.",
@@ -1251,10 +1298,9 @@ export const taskInsertSchema =
             code:
               "custom",
 
-            path:
-              [
-                "completed_at",
-              ],
+            path: [
+              "completed_at",
+            ],
 
             message:
               "وقت الإكمال مطلوب للمهمة المكتملة.",
@@ -1272,10 +1318,9 @@ export const taskInsertSchema =
             code:
               "custom",
 
-            path:
-              [
-                "completed_at",
-              ],
+            path: [
+              "completed_at",
+            ],
 
             message:
               "لا يمكن إضافة وقت إكمال لمهمة غير مكتملة.",
@@ -1304,10 +1349,9 @@ export const taskUpdateSchema =
             code:
               "custom",
 
-            path:
-              [
-                "status",
-              ],
+            path: [
+              "status",
+            ],
 
             message:
               "يجب إرسال حالة المهمة عند تغيير وقت الإكمال.",
@@ -1329,10 +1373,9 @@ export const taskUpdateSchema =
             code:
               "custom",
 
-            path:
-              [
-                "completed_at",
-              ],
+            path: [
+              "completed_at",
+            ],
 
             message:
               "وقت الإكمال مطلوب عند إكمال المهمة.",
@@ -1354,10 +1397,9 @@ export const taskUpdateSchema =
             code:
               "custom",
 
-            path:
-              [
-                "completed_at",
-              ],
+            path: [
+              "completed_at",
+            ],
 
             message:
               "المهمة غير المكتملة لا يمكن أن تحتوي وقت إكمال.",
@@ -1481,7 +1523,6 @@ function validateLearningDates(
       [
         "target_date",
       ],
-
       "تاريخ الهدف لا يمكن أن يسبق تاريخ البداية.",
     );
   }
@@ -1497,7 +1538,6 @@ function validateLearningDates(
       [
         "completed_date",
       ],
-
       "تاريخ الإكمال لا يمكن أن يسبق تاريخ البداية.",
     );
   }
@@ -1513,7 +1553,6 @@ export const learningItemInsertSchema =
       ) => {
         validateLearningDates(
           value,
-
           (
             path,
             message,
@@ -1543,7 +1582,6 @@ export const learningItemUpdateSchema =
       ) => {
         validateLearningDates(
           value,
-
           (
             path,
             message,
@@ -1646,10 +1684,9 @@ export const careerItemInsertSchema =
             code:
               "custom",
 
-            path:
-              [
-                "target_date",
-              ],
+            path: [
+              "target_date",
+            ],
 
             message:
               "تاريخ الهدف لا يمكن أن يسبق تاريخ الحدث.",
@@ -1678,10 +1715,9 @@ export const careerItemUpdateSchema =
             code:
               "custom",
 
-            path:
-              [
-                "target_date",
-              ],
+            path: [
+              "target_date",
+            ],
 
             message:
               "تاريخ الهدف لا يمكن أن يسبق تاريخ الحدث.",
@@ -1689,6 +1725,392 @@ export const careerItemUpdateSchema =
         }
       },
     );
+
+
+/* =========================================================
+ * 14A. TRAVEL OS — DOMAIN VALUES
+ * ======================================================= */
+
+export const TRIP_STATUSES = [
+  "planned",
+  "booked",
+  "active",
+  "completed",
+  "cancelled",
+] as const;
+
+
+export const DOCUMENT_CATEGORIES = [
+  "travel",
+  "education",
+  "career",
+  "finance",
+  "personal",
+  "general",
+  "other",
+] as const;
+
+
+export const DOCUMENT_STATUSES = [
+  "active",
+  "archived",
+] as const;
+
+
+export const PRIVATE_DOCUMENT_STORAGE_BUCKET =
+  "life-os-private-documents" as const;
+
+
+export const PRIVATE_DOCUMENT_MIME_TYPE =
+  "application/pdf" as const;
+
+
+export const PRIVATE_DOCUMENT_MAX_SIZE_BYTES =
+  15 * 1024 * 1024;
+
+
+/* =========================================================
+ * 14B. TRAVEL OS — TRIPS
+ * ======================================================= */
+
+export const tripStatusSchema =
+  z.enum(
+    TRIP_STATUSES,
+  );
+
+
+export const tripDestinationSchema =
+  z
+    .string()
+    .trim()
+    .min(
+      1,
+      "الوجهة مطلوبة.",
+    )
+    .max(
+      160,
+      "اسم الوجهة طويل جدًا.",
+    );
+
+
+const tripBaseSchema =
+  z
+    .object({
+      title:
+        titleSchema,
+
+      destination:
+        tripDestinationSchema,
+
+      start_date:
+        isoDateSchema
+          .nullable()
+          .optional(),
+
+      end_date:
+        isoDateSchema
+          .nullable()
+          .optional(),
+
+      status:
+        tripStatusSchema
+          .optional(),
+
+      budget_total:
+        moneySchema
+          .nullable()
+          .optional(),
+
+      currency:
+        currencyCodeSchema
+          .optional(),
+
+      readiness_percent:
+        progressPercentSchema
+          .optional(),
+
+      notes:
+        optionalNullableNotesSchema,
+    })
+    .strict();
+
+
+function validateTripDates(
+  value: {
+    start_date?:
+      string |
+      null;
+
+    end_date?:
+      string |
+      null;
+  },
+
+  addIssue: (
+    path:
+      string[],
+
+    message:
+      string,
+  ) => void,
+): void {
+  if (
+    !isDateRangeValid(
+      value.start_date,
+      value.end_date,
+    )
+  ) {
+    addIssue(
+      [
+        "end_date",
+      ],
+      "تاريخ نهاية الرحلة لا يمكن أن يسبق تاريخ البداية.",
+    );
+  }
+}
+
+
+export const tripInsertSchema =
+  tripBaseSchema
+    .superRefine(
+      (
+        value,
+        context,
+      ) => {
+        validateTripDates(
+          value,
+          (
+            path,
+            message,
+          ) => {
+            context.addIssue({
+              code:
+                "custom",
+
+              path,
+
+              message,
+            });
+          },
+        );
+      },
+    );
+
+
+export const tripUpdateSchema =
+  tripBaseSchema
+    .partial()
+    .strict()
+    .superRefine(
+      (
+        value,
+        context,
+      ) => {
+        validateTripDates(
+          value,
+          (
+            path,
+            message,
+          ) => {
+            context.addIssue({
+              code:
+                "custom",
+
+              path,
+
+              message,
+            });
+          },
+        );
+      },
+    );
+
+
+/* =========================================================
+ * 14C. PRIVATE DOCUMENTS
+ * ======================================================= */
+
+export const documentCategorySchema =
+  z.enum(
+    DOCUMENT_CATEGORIES,
+  );
+
+
+export const documentStatusSchema =
+  z.enum(
+    DOCUMENT_STATUSES,
+  );
+
+
+export const documentFileNameSchema =
+  z
+    .string()
+    .trim()
+    .min(
+      1,
+      "اسم الملف مطلوب.",
+    )
+    .max(
+      255,
+      "اسم الملف طويل جدًا.",
+    )
+    .refine(
+      (
+        value,
+      ) =>
+        !value.includes(
+          "/",
+        ) &&
+        !value.includes(
+          "\\",
+        ),
+
+      "اسم الملف لا يمكن أن يحتوي مسارًا.",
+    )
+    .refine(
+      (
+        value,
+      ) =>
+        value
+          .toLowerCase()
+          .endsWith(
+            ".pdf",
+          ),
+
+      "يسمح حاليًا بملفات PDF فقط.",
+    );
+
+
+export const documentMimeTypeSchema =
+  z.literal(
+    PRIVATE_DOCUMENT_MIME_TYPE,
+  );
+
+
+export const documentFileSizeSchema =
+  z
+    .number()
+    .finite()
+    .int()
+    .positive(
+      "حجم الملف غير صالح.",
+    )
+    .max(
+      PRIVATE_DOCUMENT_MAX_SIZE_BYTES,
+      "حجم ملف PDF أكبر من 15 MB.",
+    );
+
+
+export const documentStorageBucketSchema =
+  z.literal(
+    PRIVATE_DOCUMENT_STORAGE_BUCKET,
+  );
+
+
+export const documentStoragePathSchema =
+  z
+    .string()
+    .trim()
+    .min(
+      1,
+      "مسار الملف مطلوب.",
+    )
+    .max(
+      1_024,
+      "مسار الملف طويل جدًا.",
+    )
+    .refine(
+      isSafeStoragePath,
+      "مسار الملف الخاص غير صالح.",
+    );
+
+
+/**
+ * Metadata schema only.
+ *
+ * This does NOT upload a PDF.
+ *
+ * Ownership is not accepted here.
+ *
+ * user_id must be derived by authenticated server code.
+ */
+export const documentInsertSchema =
+  z
+    .object({
+      trip_id:
+        uuidSchema
+          .nullable()
+          .optional(),
+
+      title:
+        titleSchema,
+
+      category:
+        documentCategorySchema
+          .optional(),
+
+      file_name:
+        documentFileNameSchema,
+
+      mime_type:
+        documentMimeTypeSchema
+          .optional(),
+
+      file_size_bytes:
+        documentFileSizeSchema,
+
+      storage_bucket:
+        documentStorageBucketSchema
+          .optional(),
+
+      storage_path:
+        documentStoragePathSchema,
+
+      status:
+        documentStatusSchema
+          .optional(),
+
+      notes:
+        optionalNullableNotesSchema,
+    })
+    .strict();
+
+
+/**
+ * Generic metadata updates intentionally cannot modify:
+ *
+ * file_name
+ * mime_type
+ * file_size_bytes
+ * storage_bucket
+ * storage_path
+ *
+ * File replacement requires a coordinated Storage operation.
+ */
+export const documentUpdateSchema =
+  z
+    .object({
+      trip_id:
+        uuidSchema
+          .nullable()
+          .optional(),
+
+      title:
+        titleSchema
+          .optional(),
+
+      category:
+        documentCategorySchema
+          .optional(),
+
+      status:
+        documentStatusSchema
+          .optional(),
+
+      notes:
+        optionalNullableNotesSchema,
+    })
+    .strict();
 
 
 /* =========================================================
@@ -1835,7 +2257,6 @@ function validateRecommendationRelationship(
       [
         "related_entity_id",
       ],
-
       "نوع العنصر ومعرّفه يجب أن يوجدا معًا أو يكونا فارغين معًا.",
     );
   }
@@ -1851,7 +2272,6 @@ export const aiRecommendationInsertSchema =
       ) => {
         validateRecommendationRelationship(
           value,
-
           (
             path,
             message,
@@ -1888,10 +2308,9 @@ export const aiRecommendationInsertSchema =
             code:
               "custom",
 
-            path:
-              [
-                "reviewed_at",
-              ],
+            path: [
+              "reviewed_at",
+            ],
 
             message:
               "التوصية الجديدة لا يجب أن تحتوي وقت مراجعة.",
@@ -1909,10 +2328,9 @@ export const aiRecommendationInsertSchema =
             code:
               "custom",
 
-            path:
-              [
-                "reviewed_at",
-              ],
+            path: [
+              "reviewed_at",
+            ],
 
             message:
               "وقت المراجعة مطلوب للتوصية التي تمت مراجعتها.",
@@ -1943,7 +2361,6 @@ export const aiRecommendationUpdateSchema =
         ) {
           validateRecommendationRelationship(
             value,
-
             (
               path,
               message,
@@ -1971,10 +2388,9 @@ export const aiRecommendationUpdateSchema =
             code:
               "custom",
 
-            path:
-              [
-                "status",
-              ],
+            path: [
+              "status",
+            ],
 
             message:
               "يجب إرسال حالة التوصية عند تغيير وقت المراجعة.",
@@ -1994,10 +2410,9 @@ export const aiRecommendationUpdateSchema =
             code:
               "custom",
 
-            path:
-              [
-                "reviewed_at",
-              ],
+            path: [
+              "reviewed_at",
+            ],
 
             message:
               "التوصية الجديدة لا يجب أن تحتوي وقت مراجعة.",
@@ -2021,10 +2436,9 @@ export const aiRecommendationUpdateSchema =
             code:
               "custom",
 
-            path:
-              [
-                "reviewed_at",
-              ],
+            path: [
+              "reviewed_at",
+            ],
 
             message:
               "وقت المراجعة مطلوب عند تغيير حالة التوصية.",
@@ -2149,7 +2563,6 @@ export const auditMetadataSchema =
               ) => {
                 inspectValue(
                   item,
-
                   [
                     ...path,
                     index,
@@ -2193,11 +2606,10 @@ export const auditMetadataSchema =
                     code:
                       "custom",
 
-                    path:
-                      [
-                        ...path,
-                        key,
-                      ],
+                    path: [
+                      ...path,
+                      key,
+                    ],
 
                     message:
                       "هذا المفتاح غير مسموح داخل سجل التدقيق.",
@@ -2207,7 +2619,6 @@ export const auditMetadataSchema =
 
                 inspectValue(
                   childValue,
-
                   [
                     ...path,
                     key,
@@ -2243,10 +2654,9 @@ export const auditMetadataSchema =
                 code:
                   "custom",
 
-                path:
-                  [
-                    key,
-                  ],
+                path: [
+                  key,
+                ],
 
                 message:
                   "هذا المفتاح غير مسموح داخل سجل التدقيق.",
@@ -2256,7 +2666,6 @@ export const auditMetadataSchema =
 
             inspectValue(
               value,
-
               [
                 key,
               ],
@@ -2329,10 +2738,9 @@ export const auditLogInsertSchema =
             code:
               "custom",
 
-            path:
-              [
-                "entity_type",
-              ],
+            path: [
+              "entity_type",
+            ],
 
             message:
               "نوع العنصر مطلوب عند وجود معرّف العنصر.",
@@ -2381,6 +2789,11 @@ export const INTAKE_TARGET_ENTITY_TYPES = [
 ] as const;
 
 
+/**
+ * ACTIVE structured actions only.
+ *
+ * create_trip is deliberately NOT here yet.
+ */
 export const STRUCTURED_INTAKE_PROPOSAL_ACTIONS = [
   "create_income_source",
   "create_budget_item",
@@ -2388,6 +2801,17 @@ export const STRUCTURED_INTAKE_PROPOSAL_ACTIONS = [
   "create_project",
   "create_learning_item",
   "create_career_item",
+] as const;
+
+
+/**
+ * Staged Travel action.
+ *
+ * Defined and validated, but not yet activated in the
+ * master structured proposal union.
+ */
+export const TRAVEL_INTAKE_PROPOSAL_ACTIONS = [
+  "create_trip",
 ] as const;
 
 
@@ -2448,6 +2872,12 @@ export const intakeTargetEntityTypeSchema =
 export const structuredIntakeProposalActionSchema =
   z.enum(
     STRUCTURED_INTAKE_PROPOSAL_ACTIONS,
+  );
+
+
+export const travelIntakeProposalActionSchema =
+  z.enum(
+    TRAVEL_INTAKE_PROPOSAL_ACTIONS,
   );
 
 
@@ -2594,29 +3024,13 @@ export const intakeErrorCodeSchema =
 
 
 /* =========================================================
- * 21. UNIVERSAL INTAKE PREVIEW
+ * 21. UNIVERSAL INTAKE PREVIEW — TRANSITIONAL
  * ======================================================= */
 
 /**
- * Transitional preview schema.
+ * Backwards-compatible preview boundary.
  *
- * IMPORTANT:
- *
- * This schema deliberately DOES NOT expose the structured
- * proposal yet.
- *
- * The currently deployed preview API still returns the
- * original V2 preview shape, and IntakePreview.proposal is
- * optional at the TypeScript boundary.
- *
- * The authoritative structured preview schema is defined
- * later, after all Structured Proposal schemas exist.
- *
- * Next migration step:
- *
- * preview API
- *      ↓
- * strictIntakePreviewSchema
+ * It deliberately contains no proposal field.
  */
 export const intakePreviewSchema =
   z
@@ -2655,12 +3069,6 @@ const financeProposalCurrencySchema =
   currencyCodeSchema;
 
 
-/**
- * Exact proposed income source.
- *
- * All values are REQUIRED because these are the exact values
- * shown to the user before approval.
- */
 export const financeIncomeSourceProposalDataSchema =
   z
     .object({
@@ -2711,16 +3119,6 @@ export const financeIncomeSourceProposalSchema =
     .strict();
 
 
-/**
- * Exact proposed budget item.
- *
- * Used for:
- *
- * expense
- * saving
- * investment allocation
- * debt payment
- */
 export const financeBudgetItemProposalDataSchema =
   z
     .object({
@@ -2956,10 +3354,9 @@ export const projectProposalDataSchema =
             code:
               "custom",
 
-            path:
-              [
-                "target_date",
-              ],
+            path: [
+              "target_date",
+            ],
 
             message:
               "تاريخ الهدف لا يمكن أن يسبق تاريخ البداية.",
@@ -3084,7 +3481,6 @@ export const learningProposalDataSchema =
       ) => {
         validateLearningDates(
           value,
-
           (
             path,
             message,
@@ -3203,10 +3599,9 @@ export const careerProposalDataSchema =
             code:
               "custom",
 
-            path:
-              [
-                "target_date",
-              ],
+            path: [
+              "target_date",
+            ],
 
             message:
               "تاريخ الهدف لا يمكن أن يسبق تاريخ الحدث.",
@@ -3251,16 +3646,156 @@ export const growthIntakeProposalSchema =
 
 
 /* =========================================================
- * 25. STRUCTURED PROPOSAL — MASTER UNION
+ * 24A. STRUCTURED PROPOSAL — TRAVEL — STAGED
  * ======================================================= */
 
 /**
- * These are the only exact AI proposal actions LIFE OS
- * currently understands structurally.
+ * Travel has its own complete validation contract now.
  *
- * travel/document are deliberately absent.
+ * IMPORTANT:
  *
- * note already executes directly from the approved source.
+ * It is still deliberately excluded from:
+ *
+ * structuredIntakeProposalSchema
+ *
+ * strictIntakePreviewSchema structured kinds
+ *
+ * executeIntakeItem()
+ *
+ * until the exact proposal is shown in Universal Add.
+ */
+
+const tripProposalDataBaseSchema =
+  z
+    .object({
+      title:
+        titleSchema,
+
+      destination:
+        tripDestinationSchema,
+
+      start_date:
+        isoDateSchema
+          .nullable(),
+
+      end_date:
+        isoDateSchema
+          .nullable(),
+
+      status:
+        tripStatusSchema,
+
+      budget_total:
+        moneySchema
+          .nullable(),
+
+      currency:
+        currencyCodeSchema,
+
+      readiness_percent:
+        progressPercentSchema,
+
+      notes:
+        notesSchema
+          .nullable(),
+    })
+    .strict();
+
+
+export const tripProposalDataSchema =
+  tripProposalDataBaseSchema
+    .superRefine(
+      (
+        value,
+        context,
+      ) => {
+        if (
+          !isDateRangeValid(
+            value.start_date,
+            value.end_date,
+          )
+        ) {
+          context.addIssue({
+            code:
+              "custom",
+
+            path: [
+              "end_date",
+            ],
+
+            message:
+              "تاريخ نهاية الرحلة لا يمكن أن يسبق تاريخ البداية.",
+          });
+        }
+      },
+    );
+
+
+export const travelIntakeProposalSchema =
+  z
+    .object({
+      version:
+        z.literal(
+          1,
+        ),
+
+      kind:
+        z.literal(
+          "travel",
+        ),
+
+      action:
+        z.literal(
+          "create_trip",
+        ),
+
+      data:
+        tripProposalDataSchema,
+    })
+    .strict();
+
+
+/* =========================================================
+ * 24B. TRAVEL PROPOSAL SAFETY
+ * ======================================================= */
+
+/**
+ * Example valid staged proposal:
+ *
+ * {
+ *   version: 1,
+ *   kind: "travel",
+ *   action: "create_trip",
+ *   data: {
+ *     title: "رحلة سلوفينيا",
+ *     destination: "Slovenia",
+ *     start_date: "2027-01-09",
+ *     end_date: "2027-01-16",
+ *     status: "planned",
+ *     budget_total: 12000,
+ *     currency: "AED",
+ *     readiness_percent: 0,
+ *     notes: null
+ *   }
+ * }
+ *
+ *
+ * Still NOT executable merely because this validates.
+ */
+
+
+/* =========================================================
+ * 25. STRUCTURED PROPOSAL — ACTIVE MASTER UNION
+ * ======================================================= */
+
+/**
+ * Active exact AI proposal actions.
+ *
+ * Travel is deliberately staged outside this union.
+ *
+ * Document is also deliberately absent.
+ *
+ * Note executes directly from approved source text.
  */
 export const structuredIntakeProposalSchema =
   z.union([
@@ -3278,26 +3813,25 @@ export const structuredIntakeProposalSchema =
  * ======================================================= */
 
 /**
- * Authoritative V2 preview contract.
- *
- * Structured kinds:
+ * ACTIVE structured kinds:
  *
  * finance
  * plan
  * growth
  *
- * MUST contain an exact structured proposal.
+ * require an exact structured proposal.
  *
  *
- * Non-structured kinds:
+ * Staged / non-structured kinds:
  *
- * note
  * travel
  * document
+ * note
  *
- * MUST contain:
+ * must still contain proposal: null.
  *
- * proposal: null
+ *
+ * Travel changes only after its review UI is ready.
  */
 export const strictIntakePreviewSchema =
   z
@@ -3335,11 +3869,6 @@ export const strictIntakePreviewSchema =
         value,
         context,
       ) => {
-
-        /* -------------------------------------------------
-         * STRUCTURED KINDS REQUIRE A PROPOSAL
-         * ----------------------------------------------- */
-
         if (
           value.kind ===
             "finance" ||
@@ -3356,10 +3885,9 @@ export const strictIntakePreviewSchema =
               code:
                 "custom",
 
-              path:
-                [
-                  "proposal",
-                ],
+              path: [
+                "proposal",
+              ],
 
               message:
                 "هذا النوع يحتاج اقتراحًا منظمًا قبل التأكيد.",
@@ -3370,10 +3898,6 @@ export const strictIntakePreviewSchema =
           }
 
 
-          /* -----------------------------------------------
-           * KIND MUST MATCH PROPOSAL KIND
-           * --------------------------------------------- */
-
           if (
             value.proposal.kind !==
             value.kind
@@ -3382,11 +3906,10 @@ export const strictIntakePreviewSchema =
               code:
                 "custom",
 
-              path:
-                [
-                  "proposal",
-                  "kind",
-                ],
+              path: [
+                "proposal",
+                "kind",
+              ],
 
               message:
                 "نوع الاقتراح لا يطابق تصنيف الإضافة.",
@@ -3398,10 +3921,6 @@ export const strictIntakePreviewSchema =
         }
 
 
-        /* -------------------------------------------------
-         * NON-STRUCTURED KINDS MUST NOT INVENT A PROPOSAL
-         * ----------------------------------------------- */
-
         if (
           value.proposal !==
           null
@@ -3410,10 +3929,9 @@ export const strictIntakePreviewSchema =
             code:
               "custom",
 
-            path:
-              [
-                "proposal",
-              ],
+            path: [
+              "proposal",
+            ],
 
             message:
               "هذا النوع لا يستخدم اقتراحًا منظمًا حاليًا.",
@@ -3434,75 +3952,24 @@ export type StrictIntakePreview =
 
 
 /* =========================================================
- * 25C. PREVIEW PROPOSAL RULE
+ * 25C. TRAVEL STAGING RULE
  * ======================================================= */
 
 /**
- * Valid:
+ * travelIntakeProposalSchema
  *
- * finance
- * +
- * {
- *   version: 1,
- *   kind: "finance",
- *   action: "create_income_source",
- *   data: ...
- * }
+ * = valid Travel proposal contract.
  *
  *
- * Invalid:
+ * structuredIntakeProposalSchema
  *
- * finance
- * +
- * null
+ * = active executable/reviewable proposal union.
  *
  *
- * Invalid:
+ * They remain separate for one reason:
  *
- * finance
- * +
- * plan proposal
- *
- *
- * Valid:
- *
- * note
- * +
- * null
- *
- *
- * Invalid:
- *
- * note
- * +
- * finance proposal
- */
-
-
-/* =========================================================
- * 25D. TWO-PHASE ROLLOUT RULE
- * ======================================================= */
-
-/**
- * intakePreviewSchema
- *
- * = temporary backwards-compatible boundary.
- *
- * It intentionally has NO proposal property.
- *
- *
- * strictIntakePreviewSchema
- *
- * = authoritative V2 structured preview boundary.
- *
- *
- * The next API upgrade switches AI output validation to:
- *
- * strictIntakePreviewSchema
- *
- *
- * Once all preview consumers are migrated, the transitional
- * schema can be retired.
+ * User must be able to see every exact Travel value before
+ * Travel becomes confirmable.
  */
 
 
@@ -3510,18 +3977,6 @@ export type StrictIntakePreview =
  * 26. STRUCTURED PROPOSAL — KIND CONSISTENCY
  * ======================================================= */
 
-/**
- * Validates that a structured proposal belongs to the same
- * Universal Intake classification.
- *
- * Example:
- *
- * intake.kind = finance
- *
- * cannot carry:
- *
- * proposal.kind = plan
- */
 export function validateStructuredProposalForIntakeKind(
   intakeKind:
     "finance" |
@@ -3596,6 +4051,66 @@ export function validateStructuredProposalForIntakeKind(
 
 
 /* =========================================================
+ * 26A. STAGED TRAVEL PROPOSAL VALIDATOR
+ * ======================================================= */
+
+/**
+ * This helper validates Travel values only.
+ *
+ * It does NOT make Travel executable.
+ */
+export function validateTravelIntakeProposal(
+  proposal:
+    unknown,
+):
+  | {
+      success:
+        true;
+
+      data:
+        z.infer<
+          typeof travelIntakeProposalSchema
+        >;
+    }
+  | {
+      success:
+        false;
+
+      error:
+        string;
+    } {
+  const validation =
+    travelIntakeProposalSchema.safeParse(
+      proposal,
+    );
+
+
+  if (
+    !validation.success
+  ) {
+    return {
+      success:
+        false,
+
+      error:
+        getFirstValidationError(
+          validation.error,
+        ),
+    };
+  }
+
+
+  return {
+    success:
+      true,
+
+    data:
+      validation.data,
+  };
+}
+
+
+/* =========================================================
  * 27. STRUCTURED PROPOSAL — EXECUTION TARGET
  * ======================================================= */
 
@@ -3631,6 +4146,31 @@ export function getStructuredProposalTarget(
 
     case "create_career_item":
       return "career_item";
+  }
+}
+
+
+/* =========================================================
+ * 27A. STAGED TRAVEL EXECUTION TARGET
+ * ======================================================= */
+
+/**
+ * This is only a deterministic mapping helper.
+ *
+ * It does not execute anything.
+ */
+export function getTravelProposalTarget(
+  proposal:
+    z.infer<
+      typeof travelIntakeProposalSchema
+    >,
+):
+  "trip" {
+  switch (
+    proposal.action
+  ) {
+    case "create_trip":
+      return "trip";
   }
 }
 
@@ -3745,7 +4285,6 @@ function validateIntakeSource(
       [
         "source_text",
       ],
-
       "يجب وجود نص أو ملف PDF.",
     );
   }
@@ -3759,7 +4298,6 @@ function validateIntakeSource(
       [
         "source_file_name",
       ],
-
       "بيانات ملف PDF يجب أن تكون مكتملة.",
     );
   }
@@ -3800,7 +4338,6 @@ function validateIntakeTarget(
       [
         "target_entity_id",
       ],
-
       "نوع العنصر الناتج ومعرّفه يجب أن يوجدا معًا.",
     );
   }
@@ -3854,7 +4391,6 @@ function validateIntakeLifecycle(
       [
         "approved_at",
       ],
-
       "وقت الموافقة مطلوب لهذه الحالة.",
     );
   }
@@ -3870,7 +4406,6 @@ function validateIntakeLifecycle(
       [
         "applied_at",
       ],
-
       "وقت التنفيذ مطلوب عند اكتمال التنفيذ.",
     );
   }
@@ -3886,7 +4421,6 @@ function validateIntakeLifecycle(
       [
         "approved_at",
       ],
-
       "المعاينة غير المعتمدة لا يجب أن تحتوي وقت موافقة.",
     );
   }
@@ -3984,7 +4518,6 @@ export const intakeItemInsertSchema =
       ) => {
         validateIntakeSource(
           value,
-
           (
             path,
             message,
@@ -4003,7 +4536,6 @@ export const intakeItemInsertSchema =
 
         validateIntakeTarget(
           value,
-
           (
             path,
             message,
@@ -4022,7 +4554,6 @@ export const intakeItemInsertSchema =
 
         validateIntakeLifecycle(
           value,
-
           (
             path,
             message,
@@ -4096,10 +4627,9 @@ export const intakeItemUpdateSchema =
                 code:
                   "custom",
 
-                path:
-                  [
-                    "source_file_name",
-                  ],
+                path: [
+                  "source_file_name",
+                ],
 
                 message:
                   "عند تغيير بيانات الملف يجب إرسال اسم الملف ونوعه وحجمه معًا.",
@@ -4121,7 +4651,6 @@ export const intakeItemUpdateSchema =
         ) {
           validateIntakeTarget(
             value,
-
             (
               path,
               message,
@@ -4161,10 +4690,9 @@ export const intakeItemUpdateSchema =
               code:
                 "custom",
 
-              path:
-                [
-                  "status",
-                ],
+              path: [
+                "status",
+              ],
 
               message:
                 "يجب إرسال حالة الـIntake عند تغيير وقت الموافقة.",
@@ -4182,10 +4710,9 @@ export const intakeItemUpdateSchema =
               code:
                 "custom",
 
-              path:
-                [
-                  "status",
-                ],
+              path: [
+                "status",
+              ],
 
               message:
                 "يجب إرسال حالة الـIntake عند تغيير وقت التنفيذ.",
@@ -4199,7 +4726,6 @@ export const intakeItemUpdateSchema =
           ) {
             validateIntakeLifecycle(
               value,
-
               (
                 path,
                 message,
@@ -4213,7 +4739,6 @@ export const intakeItemUpdateSchema =
                   message,
                 });
               },
-
               value.status,
             );
           }
@@ -4449,10 +4974,9 @@ export const decisionSimulationInputSchema =
             code:
               "custom",
 
-            path:
-              [
-                "proposed_target_date",
-              ],
+            path: [
+              "proposed_target_date",
+            ],
 
             message:
               "تاريخ الهدف لا يمكن أن يسبق تاريخ البداية.",
@@ -4638,10 +5162,9 @@ export const decisionSimulationResultSchema =
             code:
               "custom",
 
-            path:
-              [
-                "scenarios",
-              ],
+            path: [
+              "scenarios",
+            ],
 
             message:
               "معرّفات سيناريوهات القرار يجب أن تكون فريدة.",
@@ -4660,10 +5183,9 @@ export const decisionSimulationResultSchema =
             code:
               "custom",
 
-            path:
-              [
-                "recommended_scenario_id",
-              ],
+            path: [
+              "recommended_scenario_id",
+            ],
 
             message:
               "السيناريو الموصى به غير موجود ضمن السيناريوهات.",
@@ -4879,10 +5401,9 @@ export const dateRangeSchema =
             code:
               "custom",
 
-            path:
-              [
-                "to",
-              ],
+            path: [
+              "to",
+            ],
 
             message:
               "تاريخ النهاية لا يمكن أن يسبق تاريخ البداية.",
@@ -4916,11 +5437,66 @@ export function getFirstValidationError(
 
 
 /* =========================================================
- * 46. STRUCTURED PROPOSAL SECURITY RULE
+ * 46. TRAVEL VALIDATION RULE
  * ======================================================= */
 
 /**
- * Structured proposal schemas accept ONLY:
+ * Travel proposal values are now validated exactly:
+ *
+ * title
+ * destination
+ * start_date
+ * end_date
+ * status
+ * budget_total
+ * currency
+ * readiness_percent
+ * notes
+ *
+ *
+ * Rules:
+ *
+ * end_date >= start_date
+ * budget_total >= 0
+ * currency = 3 uppercase letters
+ * readiness = integer 0..100
+ * status = explicit allowlist
+ * unknown object fields = rejected
+ *
+ *
+ * But validation alone does not activate Travel execution.
+ */
+
+
+/* =========================================================
+ * 47. PRIVATE DOCUMENT RULE
+ * ======================================================= */
+
+/**
+ * Private document metadata validates:
+ *
+ * PDF extension
+ * application/pdf
+ * file size <= 15 MB
+ * fixed private bucket
+ * safe Storage path
+ *
+ *
+ * PostgreSQL and Storage RLS additionally enforce:
+ *
+ * object owner path begins with auth.uid()
+ *
+ *
+ * The AI/browser does not get to choose permanent ownership.
+ */
+
+
+/* =========================================================
+ * 48. STRUCTURED PROPOSAL SECURITY RULE
+ * ======================================================= */
+
+/**
+ * Active structured proposal schemas accept ONLY:
  *
  * exact supported action
  * exact supported fields
@@ -4942,7 +5518,7 @@ export function getFirstValidationError(
 
 
 /* =========================================================
- * 47. EXACT VALUES RULE
+ * 49. EXACT VALUES RULE
  * ======================================================= */
 
 /**
@@ -4979,18 +5555,25 @@ export function getFirstValidationError(
 
 
 /* =========================================================
- * 48. PROPOSAL ≠ EXECUTION
+ * 50. PROPOSAL ≠ EXECUTION
  * ======================================================= */
 
 /**
- * structuredIntakeProposalSchema validates:
+ * finance / plan / growth:
  *
- * what LIFE OS proposes.
+ * structuredIntakeProposalSchema
+ *
+ * validates the active structured proposal.
  *
  *
- * It does NOT authorize:
+ * travel:
  *
- * a database write.
+ * travelIntakeProposalSchema
+ *
+ * validates the staged Travel proposal separately.
+ *
+ *
+ * Neither validation grants a database write.
  *
  *
  * Execution still requires:
@@ -5006,7 +5589,7 @@ export function getFirstValidationError(
 
 
 /* =========================================================
- * 49. UNIVERSAL INTAKE SECURITY RULE
+ * 51. UNIVERSAL INTAKE SECURITY RULE
  * ======================================================= */
 
 /**
@@ -5034,7 +5617,7 @@ export function getFirstValidationError(
 
 
 /* =========================================================
- * 50. PREVIEW ≠ DATABASE FACT
+ * 52. PREVIEW ≠ DATABASE FACT
  * ======================================================= */
 
 /**
@@ -5045,12 +5628,12 @@ export function getFirstValidationError(
  *
  * strictIntakePreviewSchema:
  *
- * = V2 exact structured AI preview.
+ * = active exact structured AI preview.
  *
  *
- * structuredIntakeProposalSchema:
+ * travelIntakeProposalSchema:
  *
- * = exact proposed values.
+ * = staged Travel contract only.
  *
  *
  * intakeItemInsertSchema:
@@ -5058,20 +5641,42 @@ export function getFirstValidationError(
  * = durable proposal record.
  *
  *
- * None automatically creates:
- *
- * income
- * expense
- * investment
- * goal
- * project
- * learning item
- * career item
+ * None automatically creates a domain fact.
  */
 
 
 /* =========================================================
- * 51. FILE SECURITY RULE
+ * 53. TRAVEL ACTIVATION ORDER
+ * ======================================================= */
+
+/**
+ * Current:
+ *
+ * Travel types ✅
+ * Travel database ✅
+ * Private Storage ✅
+ * Travel validation ✅
+ *
+ *
+ * Still required:
+ *
+ * AI preview schema output
+ *      ↓
+ * Universal Add Travel review UI
+ *      ↓
+ * Travel added to active structured union
+ *      ↓
+ * confirmation
+ *      ↓
+ * deterministic Travel executor
+ *
+ *
+ * We intentionally do NOT skip these boundaries.
+ */
+
+
+/* =========================================================
+ * 54. FILE SECURITY RULE
  * ======================================================= */
 
 /**
@@ -5083,11 +5688,20 @@ export function getFirstValidationError(
  *
  *
  * PDF binary content is not stored inside intake_items.
+ *
+ *
+ * Permanent private documents use:
+ *
+ * Supabase Storage
+ *
+ * bucket:
+ *
+ * life-os-private-documents
  */
 
 
 /* =========================================================
- * 52. FINAL SECURITY RULE
+ * 55. FINAL SECURITY RULE
  * ======================================================= */
 
 /**
@@ -5112,4 +5726,5 @@ export function getFirstValidationError(
  *
  * Simple outside.
  * Intelligent underneath.
+ * Private by default.
  */
