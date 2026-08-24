@@ -1,46 +1,36 @@
-"use client";
-
 import {
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
-
-import type {
-  FormEvent,
-} from "react";
-
-import {
-  useRouter,
+  redirect,
 } from "next/navigation";
 
 import {
-  APP_NAME,
+  getAuthenticationState,
+} from "@/lib/auth";
+
+import {
+  getProfile,
+} from "@/lib/data";
+
+import {
+  DEFAULT_AUTHENTICATED_ROUTE,
+  LOGIN_ROUTE,
 } from "@/lib/constants";
-
-import {
-  createClient,
-} from "@/lib/supabase/client";
-
-import {
-  loginInputSchema,
-} from "@/lib/validation";
 
 
 /* =========================================================
  * LIFE OS V2
- * LOGIN
+ * ROOT ROUTER
  *
- * Flow:
+ * /
+ *      ↓
  *
- * Email + Password
- *      ↓
- * Supabase Auth
- *      ↓
- * /onboarding
- *      ↓
- * No profile → setup
- * Existing profile → dashboard
+ * No session
+ *      → /login
+ *
+ * Authenticated + no profile
+ *      → /onboarding
+ *
+ * Authenticated + profile
+ *      → /dashboard
  * ======================================================= */
 
 
@@ -48,647 +38,207 @@ import {
  * 1. ROUTES
  * ======================================================= */
 
-const AFTER_LOGIN_ROUTE =
+const ONBOARDING_ROUTE =
   "/onboarding";
 
 
 /* =========================================================
- * 2. AUTH FLOW
+ * 2. ROOT ENTRY
  * ======================================================= */
 
-type AuthFlow =
-  | "checking"
-  | "login";
-
-
-/* =========================================================
- * 3. SAFE USER MESSAGES
- * ======================================================= */
-
-const AUTH_MESSAGES = {
-  loginFailed:
-    "تعذر تسجيل الدخول. تحقق من البيانات وحاول مرة أخرى.",
-
-  authCheckFailed:
-    "تعذر التحقق من حالة الدخول. حاول تسجيل الدخول مرة أخرى.",
-
-  invalidLogin:
-    "أدخل البريد الإلكتروني وكلمة المرور بشكل صحيح.",
-} as const;
-
-
-/* =========================================================
- * 4. LOGIN PAGE
- * ======================================================= */
-
-export default function LoginPage() {
-  const router =
-    useRouter();
-
-
-  const supabase =
-    useMemo(
-      () =>
-        createClient(),
-      [],
-    );
-
-
-  const [
-    flow,
-    setFlow,
-  ] =
-    useState<AuthFlow>(
-      "checking",
-    );
-
-
-  const [
-    email,
-    setEmail,
-  ] =
-    useState("");
-
-
-  const [
-    password,
-    setPassword,
-  ] =
-    useState("");
-
-
-  const [
-    isBusy,
-    setIsBusy,
-  ] =
-    useState(false);
-
-
-  const [
-    errorMessage,
-    setErrorMessage,
-  ] =
-    useState<string | null>(
-      null,
-    );
-
-
-  /* =======================================================
-   * 5. ENTER LIFE OS V2
-   * ===================================================== */
-
-  function enterLifeOS():
-  void {
-    /*
-     * Everyone goes through /onboarding first.
-     *
-     * The onboarding Server Component decides:
-     *
-     * profile missing
-     *      → show setup
-     *
-     * profile exists
-     *      → redirect /dashboard
-     *
-     * This prevents client-side profile authorization logic.
-     */
-    router.replace(
-      AFTER_LOGIN_ROUTE,
-    );
-
-
-    router.refresh();
-  }
-
-
-  /* =======================================================
-   * 6. INITIAL AUTH CHECK
-   * ===================================================== */
-
-  useEffect(
-    () => {
-      let active =
-        true;
-
-
-      async function initialize():
-      Promise<void> {
-        try {
-          const {
-            data,
-            error,
-          } =
-            await supabase.auth
-              .getUser();
-
-
-          if (
-            !active
-          ) {
-            return;
-          }
-
-
-          /*
-           * Already authenticated.
-           *
-           * Do not guess on the client whether onboarding has
-           * been completed.
-           *
-           * Let /onboarding resolve that on the server.
-           */
-          if (
-            !error &&
-            data.user
-          ) {
-            enterLifeOS();
-
-            return;
-          }
-
-
-          setFlow(
-            "login",
-          );
-        } catch {
-          if (
-            !active
-          ) {
-            return;
-          }
-
-
-          setErrorMessage(
-            AUTH_MESSAGES
-              .authCheckFailed,
-          );
-
-
-          setFlow(
-            "login",
-          );
-        }
-      }
-
-
-      void initialize();
-
-
-      return () => {
-        active =
-          false;
-      };
-    },
-
-    // Supabase client and router remain stable for the
-    // lifetime of this page.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
-
-
-  /* =======================================================
-   * 7. PASSWORD LOGIN
-   * ===================================================== */
-
-  async function handleLogin(
-    event:
-      FormEvent<HTMLFormElement>,
-  ):
-  Promise<void> {
-    event.preventDefault();
-
-
-    if (
-      isBusy
-    ) {
-      return;
-    }
-
-
-    setErrorMessage(
-      null,
-    );
-
-
-    const normalizedEmail =
-      email
-        .trim()
-        .toLowerCase();
-
-
-    const validation =
-      loginInputSchema.safeParse({
-        email:
-          normalizedEmail,
-
-        password,
-      });
-
-
-    if (
-      !validation.success
-    ) {
-      setErrorMessage(
-        AUTH_MESSAGES
-          .invalidLogin,
-      );
-
-      return;
-    }
-
-
-    setIsBusy(
-      true,
-    );
-
-
-    try {
-      const {
-        data,
-        error,
-      } =
-        await supabase.auth
-          .signInWithPassword({
-            email:
-              normalizedEmail,
-
-            password,
-          });
-
-
-      /*
-       * Never expose raw Supabase authentication errors.
-       */
-      if (
-        error ||
-        !data.user ||
-        !data.session
-      ) {
-        setErrorMessage(
-          AUTH_MESSAGES
-            .loginFailed,
-        );
-
-        return;
-      }
-
-
-      /*
-       * Password is no longer needed after successful login.
-       */
-      setPassword(
-        "",
-      );
-
-
-      /*
-       * V2 onboarding router decides whether this is:
-       *
-       * first setup
-       *
-       * or:
-       *
-       * normal returning user.
-       */
-      enterLifeOS();
-    } catch {
-      setErrorMessage(
-        AUTH_MESSAGES
-          .loginFailed,
-      );
-    } finally {
-      setIsBusy(
-        false,
-      );
-    }
-  }
-
-
-  /* =======================================================
-   * 8. CHECKING SCREEN
-   * ===================================================== */
+export default async function HomePage():
+Promise<never> {
+  const auth =
+    await getAuthenticationState();
+
+
+  /* -------------------------------------------------------
+   * NOT AUTHENTICATED
+   * ---------------------------------------------------- */
 
   if (
-    flow ===
-    "checking"
+    !auth.authenticated ||
+    !auth.identity
   ) {
-    return (
-      <main className="auth-page">
-        <section
-          className="auth-card"
-          aria-live="polite"
-        >
-          <div className="auth-brand">
-
-            <div
-              className="auth-brand__mark"
-              aria-hidden="true"
-            >
-              L
-            </div>
-
-
-            <h1 className="auth-brand__title">
-              {APP_NAME}
-            </h1>
-
-
-            <p className="auth-brand__subtitle">
-              جارٍ التحقق من حالة الدخول...
-            </p>
-
-          </div>
-        </section>
-      </main>
+    redirect(
+      LOGIN_ROUTE,
     );
   }
 
 
-  /* =======================================================
-   * 9. LOGIN SCREEN
-   * ===================================================== */
+  /* -------------------------------------------------------
+   * AUTHENTICATED
+   * ---------------------------------------------------- */
 
-  return (
-    <main className="auth-page">
-      <section className="auth-card">
-
-        {/* ===============================================
-         * BRAND
-         * ============================================= */}
-
-        <div className="auth-brand">
-
-          <div
-            className="auth-brand__mark"
-            aria-hidden="true"
-          >
-            L
-          </div>
+  const profile =
+    await getProfile();
 
 
-          <h1 className="auth-brand__title">
-            {APP_NAME}
-          </h1>
+  /* -------------------------------------------------------
+   * FIRST-TIME SETUP
+   * ---------------------------------------------------- */
+
+  if (
+    !profile
+  ) {
+    redirect(
+      ONBOARDING_ROUTE,
+    );
+  }
 
 
-          <p className="auth-brand__subtitle">
-            حياتك. خططك. قراراتك.
-          </p>
+  /* -------------------------------------------------------
+   * READY
+   * ---------------------------------------------------- */
 
-        </div>
-
-
-        {/* ===============================================
-         * ERROR
-         * ============================================= */}
-
-        {errorMessage ? (
-          <div
-            className="alert alert--negative"
-            role="alert"
-          >
-            {errorMessage}
-          </div>
-        ) : null}
-
-
-        {/* ===============================================
-         * LOGIN FORM
-         * ============================================= */}
-
-        <form
-          className="form"
-          onSubmit={
-            handleLogin
-          }
-        >
-
-          <div className="form-field">
-
-            <label
-              className="form-label"
-              htmlFor="life-os-email"
-            >
-              البريد الإلكتروني
-            </label>
-
-
-            <input
-              id="life-os-email"
-              className="input ltr"
-              type="email"
-              inputMode="email"
-              autoComplete="username"
-              autoCapitalize="none"
-              spellCheck={false}
-              required
-              value={
-                email
-              }
-              disabled={
-                isBusy
-              }
-              onChange={(
-                event,
-              ) => {
-                setEmail(
-                  event.target.value,
-                );
-
-
-                if (
-                  errorMessage
-                ) {
-                  setErrorMessage(
-                    null,
-                  );
-                }
-              }}
-            />
-
-          </div>
-
-
-          <div className="form-field">
-
-            <label
-              className="form-label"
-              htmlFor="life-os-password"
-            >
-              كلمة المرور
-            </label>
-
-
-            <input
-              id="life-os-password"
-              className="input ltr"
-              type="password"
-              autoComplete="current-password"
-              required
-              value={
-                password
-              }
-              disabled={
-                isBusy
-              }
-              onChange={(
-                event,
-              ) => {
-                setPassword(
-                  event.target.value,
-                );
-
-
-                if (
-                  errorMessage
-                ) {
-                  setErrorMessage(
-                    null,
-                  );
-                }
-              }}
-            />
-
-          </div>
-
-
-          <button
-            type="submit"
-            className="button button--primary button--full"
-            disabled={
-              isBusy
-            }
-          >
-            {isBusy
-              ? "جارٍ تسجيل الدخول..."
-              : "تسجيل الدخول"}
-          </button>
-
-        </form>
-
-
-        {/* ===============================================
-         * PRIVATE WORKSPACE NOTE
-         * ============================================= */}
-
-        <p
-          className="text-subtle text-small text-center"
-          style={{
-            margin:
-              "18px 0 0",
-          }}
-        >
-          LIFE OS مساحة شخصية خاصة.
-        </p>
-
-      </section>
-    </main>
+  redirect(
+    DEFAULT_AUTHENTICATED_ROUTE,
   );
 }
 
 
 /* =========================================================
- * 10. V2 LOGIN FLOW
+ * 3. SERVER-ONLY RULE
  * ======================================================= */
 
 /**
- * New user:
+ * Root routing stays entirely server-side.
  *
- * Login
+ * No:
+ *
+ * "use client"
+ *
+ * No browser-side profile lookup.
+ *
+ * No private user information is rendered here.
+ */
+
+
+/* =========================================================
+ * 4. V2 ROUTING FLOW
+ * ======================================================= */
+
+/**
+ * First visit:
+ *
+ * /
+ *      ↓
+ * session?
+ *
+ *
+ * No
+ *      ↓
+ * /login
+ *
+ *
+ * Yes
+ *      ↓
+ * profile?
+ *
+ *
+ * No
  *      ↓
  * /onboarding
- *      ↓
- * profile missing
- *      ↓
- * setup
- *      ↓
- * /dashboard
  *
  *
- * Returning user:
- *
- * Login
- *      ↓
- * /onboarding
- *      ↓
- * profile exists
+ * Yes
  *      ↓
  * /dashboard
  */
 
 
 /* =========================================================
- * 11. SECURITY BOUNDARY
+ * 5. RESPONSIBILITY RULE
  * ======================================================= */
 
 /**
- * Login establishes authentication only.
+ * Authentication answers:
  *
- * It does NOT determine database ownership.
+ * "Who is this?"
  *
  *
- * Protection remains:
+ * Profile answers:
  *
- * Supabase Auth
+ * "Has LIFE OS been initialized?"
+ *
+ *
+ * Dashboard answers:
+ *
+ * "What matters now?"
+ *
+ *
+ * Each layer has one responsibility.
+ */
+
+
+/* =========================================================
+ * 6. SECURITY RULE
+ * ======================================================= */
+
+/**
+ * Profile existence is checked through the authenticated
+ * LIFE OS data layer.
+ *
+ * The browser cannot supply:
+ *
+ * - user_id
+ * - destination
+ * - onboarding state
+ *
+ *
+ * Ownership remains:
+ *
+ * verified Supabase identity
  *      ↓
- * Verified JWT
- *      ↓
- * Server-side identity
+ * server data layer
  *      ↓
  * PostgreSQL RLS
- *      ↓
- * Row ownership
  */
 
 
 /* =========================================================
- * 12. CLIENT DATA RULE
+ * 7. NO OPEN REDIRECT
  * ======================================================= */
 
 /**
- * The browser does NOT ask:
+ * LIFE OS does not accept:
  *
- * "Does this user have a profile?"
+ * ?next=
+ * ?redirect=
+ * external destinations
  *
- * That decision belongs to:
  *
- * /onboarding
- *
- * on the server.
- *
- * This keeps V2 routing simple and avoids duplicating
- * sensitive data logic inside the login client.
+ * All destinations are application-controlled.
  */
 
 
 /* =========================================================
- * 13. SECRET HANDLING
+ * 8. FAILURE BEHAVIOR
  * ======================================================= */
 
 /**
- * Password:
+ * If profile retrieval fails because the session or data
+ * layer is invalid, the data layer is responsible for
+ * surfacing that failure.
  *
- * - exists only temporarily in component state
- * - is cleared after successful login
- * - is never stored in LIFE OS tables
- * - is never logged
- * - is never sent to OpenAI
+ * LIFE OS must not silently treat a database error as:
+ *
+ * "new user"
+ *
+ * Missing profile and failed profile lookup are different
+ * states.
  */
 
 
 /* =========================================================
- * 14. FINAL V2 LOGIN RULE
+ * 9. FINAL V2 RULE
  * ======================================================= */
 
 /**
- * Authentication decides:
+ * Opening LIFE OS should require zero navigation decisions.
  *
- * "Who are you?"
+ * The system decides the correct entry point automatically.
  *
- * Onboarding decides:
- *
- * "Is LIFE OS ready for you?"
- *
- * The dashboard should never be responsible for either.
+ * Simple outside.
+ * Intelligent underneath.
  */
