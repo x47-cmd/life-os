@@ -16,6 +16,11 @@ import {
   isIntakeKindExecutable,
 } from "@/lib/intake-executor";
 
+import type {
+  IntakePreview,
+  StructuredIntakeProposal,
+} from "@/lib/types";
+
 import {
   getFirstValidationError,
   intakeFileMimeSchema,
@@ -23,6 +28,7 @@ import {
   intakeFileSizeSchema,
   intakePreviewSchema,
   intakeSourceTextSchema,
+  strictIntakePreviewSchema,
 } from "@/lib/validation";
 
 
@@ -30,28 +36,33 @@ import {
  * LIFE OS V2
  * UNIVERSAL INTAKE — CONFIRM API
  *
+ * Supports BOTH:
+ *
+ * 1. Transitional preview
+ *    - no structured proposal
+ *
+ * 2. Strict V2 preview
+ *    - exact structured proposal
+ *
+ *
+ * This allows safe one-file-at-a-time migration.
+ *
+ *
  * Flow:
  *
- * User reviews AI preview
+ * AI Preview
  *      ↓
- * User presses Confirm
+ * User Reviews
  *      ↓
- * Validate source + preview again
+ * User Confirms
  *      ↓
- * Create previewed intake
+ * Server validates preview again
  *      ↓
- * Explicitly approve intake
+ * Structured proposal persisted
  *      ↓
- * Dispatcher checks supported executor
+ * Intake approved
  *      ↓
- * note → memory_item
- *
- *
- * Unsupported kinds remain safely:
- *
- * approved
- *
- * until their deterministic executor exists.
+ * Exact executor if available
  * ======================================================= */
 
 
@@ -78,7 +89,7 @@ const MAX_MULTIPART_BYTES =
 
 
 const MAX_PREVIEW_JSON_LENGTH =
-  8_000;
+  12_000;
 
 
 /* =========================================================
@@ -95,7 +106,32 @@ const PRIVATE_RESPONSE_HEADERS = {
 
 
 /* =========================================================
- * 4. RESPONSE HELPERS
+ * 4. CONFIRMABLE PREVIEW
+ * ======================================================= */
+
+/**
+ * Internal normalized preview.
+ *
+ * Old preview:
+ *
+ * proposal = null
+ *
+ *
+ * New V2 preview:
+ *
+ * proposal = exact validated StructuredIntakeProposal
+ */
+interface ConfirmablePreview
+  extends IntakePreview {
+
+  proposal:
+    StructuredIntakeProposal |
+    null;
+}
+
+
+/* =========================================================
+ * 5. RESPONSE HELPERS
  * ======================================================= */
 
 function errorResponse(
@@ -123,7 +159,27 @@ function errorResponse(
 
 
 /* =========================================================
- * 5. SAME-ORIGIN PROTECTION
+ * 6. RECORD HELPER
+ * ======================================================= */
+
+function isRecord(
+  value:
+    unknown,
+): value is Record<string, unknown> {
+  return (
+    typeof value ===
+      "object" &&
+    value !==
+      null &&
+    !Array.isArray(
+      value,
+    )
+  );
+}
+
+
+/* =========================================================
+ * 7. SAME-ORIGIN PROTECTION
  * ======================================================= */
 
 function hasValidOrigin(
@@ -170,7 +226,7 @@ function hasValidOrigin(
 
 
 /* =========================================================
- * 6. CONTENT TYPE
+ * 8. CONTENT TYPE
  * ======================================================= */
 
 function isMultipartRequest(
@@ -199,7 +255,7 @@ function isMultipartRequest(
 
 
 /* =========================================================
- * 7. DECLARED REQUEST SIZE
+ * 9. DECLARED REQUEST SIZE
  * ======================================================= */
 
 function isDeclaredRequestTooLarge(
@@ -236,7 +292,7 @@ function isDeclaredRequestTooLarge(
 
 
 /* =========================================================
- * 8. TEXT NORMALIZATION
+ * 10. TEXT NORMALIZATION
  * ======================================================= */
 
 function normalizeText(
@@ -257,7 +313,7 @@ function normalizeText(
 
 
 /* =========================================================
- * 9. FILE NORMALIZATION
+ * 11. FILE NORMALIZATION
  * ======================================================= */
 
 function normalizeFile(
@@ -287,7 +343,7 @@ function normalizeFile(
 
 
 /* =========================================================
- * 10. PREVIEW FIELD
+ * 12. PREVIEW FIELD NORMALIZATION
  * ======================================================= */
 
 function normalizePreviewField(
@@ -320,7 +376,188 @@ function normalizePreviewField(
 
 
 /* =========================================================
- * 11. FILE VALIDATION
+ * 13. PREVIEW NORMALIZER
+ * ======================================================= */
+
+/**
+ * First try the authoritative V2 schema.
+ *
+ * If that fails because the request came from the currently
+ * deployed legacy preview API, try the transitional schema.
+ *
+ *
+ * IMPORTANT:
+ *
+ * A request containing a `proposal` property NEVER falls
+ * back to legacy validation.
+ *
+ * This prevents a malformed V2 proposal from bypassing the
+ * strict validator.
+ */
+function parseConfirmablePreview(
+  value:
+    unknown,
+):
+  | {
+      success:
+        true;
+
+      data:
+        ConfirmablePreview;
+    }
+  | {
+      success:
+        false;
+
+      error:
+        string;
+    } {
+
+  /* -------------------------------------------------------
+   * Strict V2
+   * ---------------------------------------------------- */
+
+  const strictValidation =
+    strictIntakePreviewSchema
+      .safeParse(
+        value,
+      );
+
+
+  if (
+    strictValidation.success
+  ) {
+    const preview =
+      strictValidation.data;
+
+
+    return {
+      success:
+        true,
+
+      data: {
+        kind:
+          preview.kind,
+
+        label:
+          preview.label,
+
+        title:
+          preview.title,
+
+        summary:
+          preview.summary,
+
+        confidence:
+          preview.confidence,
+
+        next_action:
+          preview.next_action,
+
+        proposal:
+          preview.proposal,
+
+        requires_confirmation:
+          true,
+      },
+    };
+  }
+
+
+  /* -------------------------------------------------------
+   * If proposal exists, strict validation is mandatory.
+   * ---------------------------------------------------- */
+
+  if (
+    isRecord(
+      value,
+    ) &&
+    Object.prototype.hasOwnProperty.call(
+      value,
+      "proposal",
+    )
+  ) {
+    return {
+      success:
+        false,
+
+      error:
+        getFirstValidationError(
+          strictValidation.error,
+        ),
+    };
+  }
+
+
+  /* -------------------------------------------------------
+   * Transitional preview
+   * ---------------------------------------------------- */
+
+  const legacyValidation =
+    intakePreviewSchema
+      .safeParse(
+        value,
+      );
+
+
+  if (
+    !legacyValidation.success
+  ) {
+    return {
+      success:
+        false,
+
+      error:
+        getFirstValidationError(
+          legacyValidation.error,
+        ),
+    };
+  }
+
+
+  const preview =
+    legacyValidation.data;
+
+
+  return {
+    success:
+      true,
+
+    data: {
+      kind:
+        preview.kind,
+
+      label:
+        preview.label,
+
+      title:
+        preview.title,
+
+      summary:
+        preview.summary,
+
+      confidence:
+        preview.confidence,
+
+      next_action:
+        preview.next_action,
+
+      /*
+       * Transitional previews were created before the
+       * structured proposal pipeline existed.
+       */
+      proposal:
+        null,
+
+      requires_confirmation:
+        true,
+    },
+  };
+}
+
+
+/* =========================================================
+ * 14. FILE VALIDATION
  * ======================================================= */
 
 function validateFile(
@@ -347,9 +584,10 @@ function validateFile(
    * ---------------------------------------------------- */
 
   const sizeValidation =
-    intakeFileSizeSchema.safeParse(
-      file.size,
-    );
+    intakeFileSizeSchema
+      .safeParse(
+        file.size,
+      );
 
 
   if (
@@ -378,9 +616,10 @@ function validateFile(
    * ---------------------------------------------------- */
 
   const nameValidation =
-    intakeFileNameSchema.safeParse(
-      file.name,
-    );
+    intakeFileNameSchema
+      .safeParse(
+        file.name,
+      );
 
 
   if (
@@ -406,9 +645,10 @@ function validateFile(
    * ---------------------------------------------------- */
 
   const mimeValidation =
-    intakeFileMimeSchema.safeParse(
-      file.type,
-    );
+    intakeFileMimeSchema
+      .safeParse(
+        file.type,
+      );
 
 
   if (
@@ -435,7 +675,7 @@ function validateFile(
 
 
 /* =========================================================
- * 12. POST
+ * 15. POST
  * ======================================================= */
 
 export async function POST(
@@ -574,7 +814,7 @@ export async function POST(
 
 
   /* -------------------------------------------------------
-   * Parse preview JSON
+   * Parse JSON
    * ---------------------------------------------------- */
 
   let parsedPreviewJson:
@@ -595,11 +835,11 @@ export async function POST(
 
 
   /* -------------------------------------------------------
-   * Shared preview validation
+   * Preview validation
    * ---------------------------------------------------- */
 
   const previewValidation =
-    intakePreviewSchema.safeParse(
+    parseConfirmablePreview(
       parsedPreviewJson,
     );
 
@@ -609,9 +849,7 @@ export async function POST(
   ) {
     return errorResponse(
       400,
-      getFirstValidationError(
-        previewValidation.error,
-      ),
+      previewValidation.error,
     );
   }
 
@@ -621,7 +859,7 @@ export async function POST(
 
 
   /* -------------------------------------------------------
-   * Source required
+   * Original source required
    * ---------------------------------------------------- */
 
   if (
@@ -645,9 +883,10 @@ export async function POST(
     0
   ) {
     const textValidation =
-      intakeSourceTextSchema.safeParse(
-        text,
-      );
+      intakeSourceTextSchema
+        .safeParse(
+          text,
+        );
 
 
     if (
@@ -688,7 +927,7 @@ export async function POST(
 
 
   /* -------------------------------------------------------
-   * Persist proposal
+   * Persist + approve
    * ---------------------------------------------------- */
 
   let approved:
@@ -703,7 +942,17 @@ export async function POST(
     /*
      * STEP 1
      *
-     * Persist the exact proposal the user reviewed.
+     * Create the durable intake proposal.
+     *
+     *
+     * Structured preview:
+     *
+     * proposed_payload = exact proposal reviewed by user
+     *
+     *
+     * Transitional preview:
+     *
+     * proposed_payload = {}
      */
     const created =
       await createIntakeItem({
@@ -743,11 +992,8 @@ export async function POST(
         next_action:
           preview.next_action,
 
-        /*
-         * Detailed deterministic domain payloads will be
-         * introduced with each dedicated executor.
-         */
         proposed_payload:
+          preview.proposal ??
           {},
       });
 
@@ -755,18 +1001,14 @@ export async function POST(
     /*
      * STEP 2
      *
-     * The current HTTP request represents the user's
-     * explicit confirmation.
+     * This request exists only because the user explicitly
+     * pressed Confirm.
      */
     approved =
       await approveIntakeItem(
         created.id,
       );
   } catch {
-    /*
-     * No executor is reached when proposal persistence or
-     * explicit approval fails.
-     */
     return errorResponse(
       500,
       "تعذر اعتماد الإضافة حاليًا. حاول مرة أخرى.",
@@ -774,9 +1016,9 @@ export async function POST(
   }
 
 
-  /* -------------------------------------------------------
-   * Unsupported kinds remain approved
-   * ---------------------------------------------------- */
+  /* =======================================================
+   * 16. NO EXECUTOR AVAILABLE
+   * ===================================================== */
 
   if (
     !isIntakeKindExecutable(
@@ -822,8 +1064,21 @@ export async function POST(
             "EXECUTOR_NOT_AVAILABLE",
         },
 
+        proposal: {
+          structured:
+            preview.proposal !==
+            null,
+
+          action:
+            preview.proposal
+              ? preview.proposal.action
+              : null,
+        },
+
         message:
-          "تم اعتماد الإضافة داخل LIFE OS. التنفيذ لهذا النوع بيتفعل بعد إضافة الـExecutor الخاص فيه.",
+          preview.proposal
+            ? "تم اعتماد القيم التي راجعتها وحفظ الاقتراح داخل LIFE OS. التنفيذ الفعلي لهذا النوع بيتفعل بعد إضافة الـExecutor الخاص فيه."
+            : "تم اعتماد الإضافة داخل LIFE OS. التنفيذ لهذا النوع بيتفعل بعد إضافة الـExecutor الخاص فيه.",
       },
       {
         status:
@@ -836,9 +1091,9 @@ export async function POST(
   }
 
 
-  /* -------------------------------------------------------
-   * Execute supported kind
-   * ---------------------------------------------------- */
+  /* =======================================================
+   * 17. EXECUTE SUPPORTED KIND
+   * ===================================================== */
 
   try {
     const execution =
@@ -889,6 +1144,17 @@ export async function POST(
             execution.target_entity_id,
         },
 
+        proposal: {
+          structured:
+            preview.proposal !==
+            null,
+
+          action:
+            preview.proposal
+              ? preview.proposal.action
+              : null,
+        },
+
         message:
           execution.kind ===
           "note"
@@ -905,23 +1171,13 @@ export async function POST(
     );
   } catch {
     /*
-     * IMPORTANT:
+     * Confirmation already succeeded.
      *
-     * The user's confirmation was already persisted.
+     * Never tell the client to create another proposal.
      *
-     * Therefore we do NOT return a generic failure that might
-     * encourage the browser to submit the same source again
-     * and create another intake proposal.
-     *
-     *
-     * The proposal remains:
-     *
-     * approved
-     *
-     * and can be safely retried later by a dedicated retry
-     * flow.
+     * The approved intake stays available for a controlled
+     * retry later.
      */
-
     return NextResponse.json(
       {
         ok:
@@ -961,16 +1217,21 @@ export async function POST(
             "EXECUTION_PENDING",
         },
 
+        proposal: {
+          structured:
+            preview.proposal !==
+            null,
+
+          action:
+            preview.proposal
+              ? preview.proposal.action
+              : null,
+        },
+
         message:
           "تم اعتماد الإضافة، لكن التنفيذ النهائي ما اكتمل. الإضافة محفوظة بأمان للمحاولة لاحقًا.",
       },
       {
-        /*
-         * 202 means:
-         *
-         * confirmation was accepted,
-         * execution is not fully complete.
-         */
         status:
           202,
 
@@ -983,7 +1244,7 @@ export async function POST(
 
 
 /* =========================================================
- * 13. GET IS NOT SUPPORTED
+ * 18. GET IS NOT SUPPORTED
  * ======================================================= */
 
 export async function GET() {
@@ -995,186 +1256,245 @@ export async function GET() {
 
 
 /* =========================================================
- * 14. CURRENT EXECUTION MATRIX
+ * 19. TRANSITIONAL COMPATIBILITY
+ * ======================================================= */
+
+/**
+ * CURRENT deployed preview:
+ *
+ * {
+ *   kind,
+ *   label,
+ *   title,
+ *   summary,
+ *   confidence,
+ *   next_action,
+ *   requires_confirmation
+ * }
+ *
+ *
+ * Accepted safely.
+ *
+ *
+ * NEW structured preview:
+ *
+ * {
+ *   kind,
+ *   label,
+ *   title,
+ *   summary,
+ *   confidence,
+ *   next_action,
+ *   proposal,
+ *   requires_confirmation
+ * }
+ *
+ *
+ * Also accepted safely.
+ */
+
+
+/* =========================================================
+ * 20. ANTI-DOWNGRADE RULE
+ * ======================================================= */
+
+/**
+ * Critical:
+ *
+ * If the browser sends a `proposal` property:
+ *
+ * strictIntakePreviewSchema MUST pass.
+ *
+ *
+ * We never do:
+ *
+ * invalid structured preview
+ *      ↓
+ * remove proposal
+ *      ↓
+ * accept as legacy
+ *
+ *
+ * That would be a validation downgrade vulnerability.
+ */
+
+
+/* =========================================================
+ * 21. STRUCTURED PAYLOAD STORAGE
+ * ======================================================= */
+
+/**
+ * New V2 structured proposals are persisted exactly inside:
+ *
+ * intake_items.proposed_payload
+ *
+ *
+ * Example:
+ *
+ * {
+ *   version: 1,
+ *   kind: "finance",
+ *   action: "create_income_source",
+ *   data: {
+ *     name: "الراتب",
+ *     amount: 30000,
+ *     currency: "AED",
+ *     frequency: "monthly",
+ *     next_expected_date: null,
+ *     notes: null
+ *   }
+ * }
+ *
+ *
+ * This records exactly what the user reviewed.
+ */
+
+
+/* =========================================================
+ * 22. PROPOSAL ≠ EXECUTION
+ * ======================================================= */
+
+/**
+ * Persisting:
+ *
+ * proposed_payload
+ *
+ * does NOT create:
+ *
+ * income source
+ * budget item
+ * goal
+ * project
+ * learning item
+ * career item
+ *
+ *
+ * Domain execution still requires its exact executor.
+ */
+
+
+/* =========================================================
+ * 23. CURRENT EXECUTION MATRIX
  * ======================================================= */
 
 /**
  * note
- *
- * approved
  *      ↓
- * executeIntakeItem()
- *      ↓
- * execute_note_intake()
- *      ↓
- * memory_items
- *      ↓
- * applied
+ * memory_item ✅
  *
  *
  * finance
+ *      ↓
+ * approved structured proposal
+ *      ↓
+ * executor pending
+ *
+ *
  * plan
- * travel
+ *      ↓
+ * approved structured proposal
+ *      ↓
+ * executor pending
+ *
+ *
  * growth
- * document
+ *      ↓
+ * approved structured proposal
+ *      ↓
+ * executor pending
  *
- * remain:
  *
+ * travel
+ *      ↓
  * approved
+ *      ↓
+ * travel domain pending
  *
- * until their exact deterministic executors exist.
+ *
+ * document
+ *      ↓
+ * approved
+ *      ↓
+ * private storage layer pending
  */
 
 
 /* =========================================================
- * 15. CONFIRMATION ≠ GENERIC WRITE AUTHORITY
+ * 24. SOURCE TRUST RULE
  * ======================================================= */
 
 /**
- * Confirming:
+ * Confirmation revalidates:
  *
- * "راتبي 30,000"
- *
- * does NOT grant AI permission to choose arbitrary tables.
- *
- *
- * It only allows:
- *
- * the explicitly implemented executor for that intake kind.
- */
-
-
-/* =========================================================
- * 16. PARTIAL FAILURE SAFETY
- * ======================================================= */
-
-/**
- * There are two separate boundaries:
+ * preview
+ * text
+ * PDF metadata
  *
  *
- * Boundary A:
+ * Browser cannot provide:
  *
- * proposal creation
- * +
- * explicit approval
- *
- *
- * Boundary B:
- *
- * deterministic execution
- *
- *
- * If Boundary B fails:
- *
- * the approved proposal remains available.
- *
- * It is not silently recreated.
- *
- * It is not treated as applied.
- */
-
-
-/* =========================================================
- * 17. NOTE EXECUTION SAFETY
- * ======================================================= */
-
-/**
- * Note execution itself is atomic inside PostgreSQL:
- *
- * memory_items insert
- *      +
- * intake_items applied state
- *
- *
- * Either both succeed:
- *
- * or both roll back.
- */
-
-
-/* =========================================================
- * 18. FILE RULE
- * ======================================================= */
-
-/**
- * PDF binary data is still NOT permanently stored by this
- * endpoint.
- *
- * Only:
- *
- * name
- * MIME
- * size
- *
- * are persisted in intake_items.
- *
- *
- * Private Supabase Storage arrives with the document layer.
- */
-
-
-/* =========================================================
- * 19. TRUST BOUNDARY
- * ======================================================= */
-
-/**
- * Browser preview data is validated again.
- *
- * Source data is validated again.
- *
- * User ownership comes from the authenticated session.
- *
- * Domain execution is selected from server-side code.
- *
- *
- * The browser cannot send:
- *
- * table name
- * RPC name
- * SQL
  * user_id
+ * table name
+ * SQL
+ * RPC name
  * executor name
  */
 
 
 /* =========================================================
- * 20. NO RETRY DUPLICATION
+ * 25. OWNERSHIP
  * ======================================================= */
 
 /**
- * Once explicit confirmation succeeds, an execution problem
- * returns the already-approved intake rather than pretending
- * the entire confirmation failed.
+ * user_id is never accepted from browser input.
  *
- * This prevents the UI from encouraging a second Confirm
- * submission that could create another proposal.
+ * Ownership comes from:
+ *
+ * authenticated Supabase session
+ *
+ * and is enforced again through:
+ *
+ * PostgreSQL RLS.
  */
 
 
 /* =========================================================
- * 21. FINAL V2 RULE
+ * 26. FILE RULE
+ * ======================================================= */
+
+/**
+ * PDF bytes are still temporary.
+ *
+ * intake_items stores only:
+ *
+ * filename
+ * MIME
+ * size
+ *
+ *
+ * Permanent PDFs will later move to private Supabase
+ * Storage.
+ */
+
+
+/* =========================================================
+ * 27. FINAL V2 RULE
  * ======================================================= */
 
 /**
  * AI Suggests
  *      ↓
+ * Exact Proposal
+ *      ↓
  * User Reviews
  *      ↓
  * User Approves
  *      ↓
- * Server Dispatcher
+ * Proposal Persisted
  *      ↓
- * Supported?
- *
- * NO
+ * Deterministic Executor
  *      ↓
- * remain approved safely
- *
- * YES
- *      ↓
- * deterministic executor
- *      ↓
- * final LIFE OS entity
+ * Final Domain Fact
  *
  *
  * Simple outside.
