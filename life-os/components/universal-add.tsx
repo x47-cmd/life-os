@@ -14,12 +14,15 @@ import type {
 import type {
   IntakeKind,
   IntakePreview,
+  IntakeTargetEntityType,
 } from "@/lib/types";
 
 
 /* =========================================================
  * LIFE OS V2
  * UNIVERSAL ADD
+ *
+ * Flow:
  *
  * User input
  *      ↓
@@ -29,9 +32,12 @@ import type {
  *      ↓
  * Explicit confirmation
  *      ↓
- * Approved intake proposal
+ * Approved intake
+ *      ↓
+ * Supported executor?
  *
- * Approval is NOT final domain execution.
+ * YES → applied
+ * NO  → remains approved safely
  * ======================================================= */
 
 
@@ -51,6 +57,11 @@ interface PreviewApiResponse {
 }
 
 
+type ConfirmedIntakeStatus =
+  | "approved"
+  | "applied";
+
+
 interface ConfirmedIntake {
   id:
     string;
@@ -62,10 +73,35 @@ interface ConfirmedIntake {
     string;
 
   status:
-    string;
+    ConfirmedIntakeStatus;
 
   approved_at:
     string | null;
+
+  target_entity_type:
+    IntakeTargetEntityType | null;
+
+  target_entity_id:
+    string | null;
+}
+
+
+interface IntakeExecutionState {
+  attempted:
+    boolean;
+
+  applied:
+    boolean;
+
+  reason?:
+    "EXECUTOR_NOT_AVAILABLE" |
+    "EXECUTION_PENDING";
+
+  target_entity_type?:
+    IntakeTargetEntityType;
+
+  target_entity_id?:
+    string;
 }
 
 
@@ -76,10 +112,25 @@ interface ConfirmApiResponse {
   intake?:
     ConfirmedIntake;
 
+  execution?:
+    IntakeExecutionState;
+
   message?:
     string;
 
   error?:
+    string;
+}
+
+
+interface ConfirmationState {
+  intake:
+    ConfirmedIntake;
+
+  execution:
+    IntakeExecutionState;
+
+  message:
     string;
 }
 
@@ -170,6 +221,86 @@ function getKindIcon(
 }
 
 
+function getKindLabel(
+  kind:
+    IntakeKind,
+): string {
+  switch (
+    kind
+  ) {
+    case "finance":
+      return "المال";
+
+    case "plan":
+      return "الخطط";
+
+    case "travel":
+      return "السفر";
+
+    case "growth":
+      return "التطوير";
+
+    case "document":
+      return "المستندات";
+
+    case "note":
+    default:
+      return "الملاحظات";
+  }
+}
+
+
+function getExecutionTargetLabel(
+  target:
+    IntakeTargetEntityType |
+    null,
+): string | null {
+  switch (
+    target
+  ) {
+    case "memory_item":
+      return "الذاكرة الشخصية";
+
+    case "income_source":
+      return "مصدر دخل";
+
+    case "budget_item":
+      return "بند مالي";
+
+    case "investment_asset":
+      return "أصل استثماري";
+
+    case "investment_transaction":
+      return "عملية استثمارية";
+
+    case "goal":
+      return "هدف";
+
+    case "project":
+      return "مشروع";
+
+    case "task":
+      return "مهمة";
+
+    case "learning_item":
+      return "عنصر تطوير";
+
+    case "career_item":
+      return "عنصر مهني";
+
+    case "trip":
+      return "رحلة";
+
+    case "document":
+      return "مستند";
+
+    case null:
+    default:
+      return null;
+  }
+}
+
+
 /* =========================================================
  * 4. COMPONENT
  * ======================================================= */
@@ -227,7 +358,7 @@ export function UniversalAdd() {
     confirmation,
     setConfirmation,
   ] =
-    useState<ConfirmedIntake | null>(
+    useState<ConfirmationState | null>(
       null,
     );
 
@@ -429,7 +560,7 @@ export function UniversalAdd() {
       };
     },
 
-    // resetIntake only manages local component state.
+    // resetIntake only manages local state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       open,
@@ -631,8 +762,7 @@ export function UniversalAdd() {
 
 
     if (
-      analyzing ||
-      confirming
+      busy
     ) {
       return;
     }
@@ -815,8 +945,7 @@ export function UniversalAdd() {
   Promise<void> {
     if (
       !preview ||
-      confirming ||
-      analyzing
+      busy
     ) {
       return;
     }
@@ -910,7 +1039,8 @@ export function UniversalAdd() {
       if (
         !response.ok ||
         !result.ok ||
-        !result.intake
+        !result.intake ||
+        !result.execution
       ) {
         throw new Error(
           result.error ??
@@ -919,9 +1049,17 @@ export function UniversalAdd() {
       }
 
 
-      setConfirmation(
-        result.intake,
-      );
+      setConfirmation({
+        intake:
+          result.intake,
+
+        execution:
+          result.execution,
+
+        message:
+          result.message ??
+          "تم اعتماد الإضافة داخل LIFE OS.",
+      });
 
 
       setError(
@@ -944,7 +1082,31 @@ export function UniversalAdd() {
 
 
   /* =======================================================
-   * 16. RENDER
+   * 16. SUCCESS VIEW VALUES
+   * ===================================================== */
+
+  const wasApplied =
+    confirmation?.execution.applied ===
+    true;
+
+
+  const executionPending =
+    confirmation?.execution.reason ===
+    "EXECUTION_PENDING";
+
+
+  const executionTargetLabel =
+    confirmation
+      ? getExecutionTargetLabel(
+          confirmation
+            .intake
+            .target_entity_type,
+        )
+      : null;
+
+
+  /* =======================================================
+   * 17. RENDER
    * ===================================================== */
 
   return (
@@ -1207,10 +1369,10 @@ export function UniversalAdd() {
                     aria-hidden="true"
                     style={{
                       width:
-                        "54px",
+                        "56px",
 
                       height:
-                        "54px",
+                        "56px",
 
                       margin:
                         "0 auto",
@@ -1231,7 +1393,11 @@ export function UniversalAdd() {
                         "26px",
                     }}
                   >
-                    ✓
+                    {wasApplied
+                      ? "✓"
+                      : executionPending
+                        ? "↻"
+                        : "✓"}
                   </div>
 
 
@@ -1244,7 +1410,11 @@ export function UniversalAdd() {
                         "20px",
                     }}
                   >
-                    تم الاعتماد ✓
+                    {wasApplied
+                      ? "تم الحفظ فعليًا ✓"
+                      : executionPending
+                        ? "تم الاعتماد — التنفيذ معلّق"
+                        : "تم الاعتماد ✓"}
                   </h3>
 
 
@@ -1255,16 +1425,24 @@ export function UniversalAdd() {
                         "8px auto 0",
 
                       maxWidth:
-                        "480px",
+                        "500px",
 
                       lineHeight:
                         1.75,
                     }}
                   >
-                    تم حفظه كإضافة معتمدة داخل LIFE OS.
-                    التنفيذ النهائي على المال أو الخطط أو
-                    السفر أو التطوير بيصير في طبقة التنفيذ
-                    الآمنة القادمة.
+                    {wasApplied
+                      ? confirmation.intake.kind ===
+                        "note"
+                        ? "تم حفظ الملاحظة فعليًا داخل LIFE OS وربطها بسجل الإضافة."
+                        : "تم تنفيذ الإضافة وحفظها فعليًا داخل LIFE OS."
+                      : executionPending
+                        ? "موافقتك محفوظة بأمان، لكن التنفيذ النهائي ما اكتمل. ما يحتاج تعيد الإضافة من جديد."
+                        : `تم اعتمادها ضمن ${getKindLabel(
+                            confirmation
+                              .intake
+                              .kind,
+                          )}. التنفيذ النهائي لهذا النوع بيتفعل عند اكتمال الـExecutor الخاص فيه.`}
                   </p>
 
 
@@ -1289,8 +1467,13 @@ export function UniversalAdd() {
                     <span
                       className="text-muted text-small"
                     >
-                      تم اعتماد
+                      {
+                        wasApplied
+                          ? "تم التنفيذ"
+                          : "تم الاعتماد"
+                      }
                     </span>
+
 
                     <div
                       style={{
@@ -1312,16 +1495,73 @@ export function UniversalAdd() {
                       >
                         {
                           getKindIcon(
-                            confirmation.kind,
+                            confirmation
+                              .intake
+                              .kind,
                           )
                         }
                       </span>
 
                       <strong>
-                        {confirmation.title}
+                        {
+                          confirmation
+                            .intake
+                            .title
+                        }
                       </strong>
                     </div>
+
+
+                    {executionTargetLabel ? (
+                      <p
+                        className="text-muted text-small"
+                        style={{
+                          margin:
+                            "8px 0 0",
+
+                          lineHeight:
+                            1.6,
+                        }}
+                      >
+                        المكان:{" "}
+                        {
+                          executionTargetLabel
+                        }
+                      </p>
+                    ) : null}
+
+
+                    {!wasApplied ? (
+                      <p
+                        className="text-muted text-small"
+                        style={{
+                          margin:
+                            "8px 0 0",
+
+                          lineHeight:
+                            1.6,
+                        }}
+                      >
+                        الحالة: معتمد وينتظر التنفيذ الآمن
+                      </p>
+                    ) : null}
                   </div>
+
+
+                  <p
+                    className="text-muted text-small"
+                    style={{
+                      margin:
+                        "14px 0 0",
+
+                      lineHeight:
+                        1.6,
+                    }}
+                  >
+                    {
+                      confirmation.message
+                    }
+                  </p>
                 </div>
 
 
@@ -1471,7 +1711,7 @@ export function UniversalAdd() {
 
 
                 {/* =========================================
-                 * FILE
+                 * FILE UPLOAD
                  * ======================================= */}
 
                 <div
@@ -1591,6 +1831,10 @@ export function UniversalAdd() {
                 </div>
 
 
+                {/* =========================================
+                 * ERROR
+                 * ======================================= */}
+
                 {error ? (
                   <p
                     role="alert"
@@ -1612,6 +1856,10 @@ export function UniversalAdd() {
                   </p>
                 ) : null}
 
+
+                {/* =========================================
+                 * ANALYZE
+                 * ======================================= */}
 
                 <div
                   style={{
@@ -1738,7 +1986,9 @@ export function UniversalAdd() {
                               0,
                           }}
                         >
-                          {preview.label}
+                          {
+                            preview.label
+                          }
                         </h3>
                       </div>
                     </div>
@@ -1747,10 +1997,12 @@ export function UniversalAdd() {
                     <span
                       className="badge badge--neutral"
                     >
-                      {Math.round(
-                        preview.confidence *
-                        100,
-                      )}
+                      {
+                        Math.round(
+                          preview.confidence *
+                          100,
+                        )
+                      }
                       %
                     </span>
                   </div>
@@ -1771,7 +2023,9 @@ export function UniversalAdd() {
                           "17px",
                       }}
                     >
-                      {preview.title}
+                      {
+                        preview.title
+                      }
                     </strong>
 
                     <p
@@ -1784,7 +2038,9 @@ export function UniversalAdd() {
                           1.75,
                       }}
                     >
-                      {preview.summary}
+                      {
+                        preview.summary
+                      }
                     </p>
                   </div>
 
@@ -1825,7 +2081,50 @@ export function UniversalAdd() {
                           600,
                       }}
                     >
-                      {preview.next_action}
+                      {
+                        preview.next_action
+                      }
+                    </p>
+                  </div>
+
+
+                  <div
+                    style={{
+                      marginTop:
+                        "14px",
+
+                      padding:
+                        "12px 14px",
+
+                      borderRadius:
+                        "14px",
+
+                      border:
+                        "1px solid var(--border, #e2e8f0)",
+                    }}
+                  >
+                    <span
+                      className="text-muted text-small"
+                    >
+                      بعد التأكيد
+                    </span>
+
+                    <p
+                      style={{
+                        margin:
+                          "5px 0 0",
+
+                        fontSize:
+                          "13px",
+
+                        lineHeight:
+                          1.65,
+                      }}
+                    >
+                      {preview.kind ===
+                      "note"
+                        ? "الملاحظة جاهزة للتنفيذ والحفظ الفعلي."
+                        : "سيتم اعتمادها الآن، والتنفيذ الفعلي يبدأ بعد إضافة الـExecutor المخصص لهذا النوع."}
                     </p>
                   </div>
                 </div>
@@ -1912,8 +2211,8 @@ export function UniversalAdd() {
                       1.6,
                   }}
                 >
-                  التأكيد يعتمد الاقتراح فقط؛ التنفيذ النهائي
-                  يتم بشكل منفصل وآمن.
+                  LIFE OS ما ينفذ إلا نوع عنده Executor
+                  محدد وآمن.
                 </p>
               </div>
             )}
@@ -1930,26 +2229,41 @@ export function UniversalAdd() {
  * ======================================================= */
 
 /**
- * Universal Add now supports:
+ * UI now distinguishes:
  *
- * input
- *      ↓
+ * approved
+ *
+ * from:
+ *
+ * applied
+ *
+ *
+ * note:
+ *
  * preview
  *      ↓
- * explicit confirmation
+ * confirm
  *      ↓
- * approved intake proposal
+ * approved
+ *      ↓
+ * executor
+ *      ↓
+ * memory_item
+ *      ↓
+ * applied
  *
  *
- * It still does NOT allow AI preview alone to mutate
- * permanent domain data.
+ * unsupported kinds:
+ *
+ * preview
+ *      ↓
+ * confirm
+ *      ↓
+ * approved
+ *      ↓
+ * STOP
  *
  *
- * AI Suggests
- *      ↓
- * User Reviews
- *      ↓
- * User Approves
- *      ↓
- * System Executes
+ * The user is never told something was saved to a final
+ * domain when only approval happened.
  */
