@@ -16,6 +16,7 @@ import type {
 import {
   financeIntakeProposalSchema,
   getStructuredProposalTarget,
+  planIntakeProposalSchema,
   uuidSchema,
 } from "@/lib/validation";
 
@@ -24,39 +25,23 @@ import {
  * LIFE OS V2
  * UNIVERSAL INTAKE EXECUTOR
  *
- * Purpose:
- *
- * approved intake
- *      ↓
- * TypeScript dispatcher
- *      ↓
- * exact deterministic executor
- *      ↓
- * final LIFE OS entity
- *
- *
  * Current support:
  *
  * note
- *   → execute_note_intake()
  *   → memory_items
  *
  * finance
- *   → execute_finance_intake()
- *   → income_sources OR budget_items
- *
- *
- * Unsupported for now:
+ *   → income_sources / budget_items
  *
  * plan
- * travel
+ *   → goals / projects
+ *
+ *
+ * Pending:
+ *
  * growth
+ * travel
  * document
- *
- *
- * Permanent rule:
- *
- * Never guess an executor.
  * ======================================================= */
 
 
@@ -83,7 +68,7 @@ export interface IntakeExecutionResult {
 
 
 /* =========================================================
- * 2. EXECUTOR ERROR CODES
+ * 2. ERROR CODES
  * ======================================================= */
 
 export type IntakeExecutorErrorCode =
@@ -175,7 +160,7 @@ export class IntakeExecutorError extends Error {
 
 
 /* =========================================================
- * 4. SAFE RPC ERROR SHAPE
+ * 4. RPC ERROR
  * ======================================================= */
 
 interface RpcErrorLike {
@@ -190,7 +175,7 @@ interface RpcErrorLike {
 
 
 /* =========================================================
- * 5. SAFE RECORD HELPER
+ * 5. RECORD HELPER
  * ======================================================= */
 
 function isRecord(
@@ -210,15 +195,9 @@ function isRecord(
 
 
 /* =========================================================
- * 6. MAP DATABASE ERROR
+ * 6. DATABASE ERROR MAPPING
  * ======================================================= */
 
-/**
- * PostgreSQL may return controlled LIFE_OS_* exception
- * codes from one of our deterministic executors.
- *
- * Raw database messages are NEVER returned to the UI.
- */
 function mapExecutorError(
   error:
     RpcErrorLike |
@@ -228,10 +207,6 @@ function mapExecutorError(
     error?.message ??
     "";
 
-
-  /* -------------------------------------------------------
-   * Intake ownership / existence
-   * ---------------------------------------------------- */
 
   if (
     message.includes(
@@ -243,10 +218,6 @@ function mapExecutorError(
     );
   }
 
-
-  /* -------------------------------------------------------
-   * Approval
-   * ---------------------------------------------------- */
 
   if (
     message.includes(
@@ -262,10 +233,6 @@ function mapExecutorError(
   }
 
 
-  /* -------------------------------------------------------
-   * Profile
-   * ---------------------------------------------------- */
-
   if (
     message.includes(
       "LIFE_OS_PROFILE_REQUIRED",
@@ -276,10 +243,6 @@ function mapExecutorError(
     );
   }
 
-
-  /* -------------------------------------------------------
-   * Finance currency safety
-   * ---------------------------------------------------- */
 
   if (
     message.includes(
@@ -295,10 +258,6 @@ function mapExecutorError(
   }
 
 
-  /* -------------------------------------------------------
-   * Unsupported kind
-   * ---------------------------------------------------- */
-
   if (
     message.includes(
       "LIFE_OS_UNSUPPORTED_INTAKE_KIND",
@@ -310,10 +269,6 @@ function mapExecutorError(
   }
 
 
-  /* -------------------------------------------------------
-   * Conflicts
-   * ---------------------------------------------------- */
-
   if (
     message.includes(
       "LIFE_OS_INTAKE_APPLY_CONFLICT",
@@ -323,6 +278,9 @@ function mapExecutorError(
     ) ||
     message.includes(
       "LIFE_OS_FINANCE_TARGET_CONFLICT",
+    ) ||
+    message.includes(
+      "LIFE_OS_PLAN_TARGET_CONFLICT",
     )
   ) {
     return new IntakeExecutorError(
@@ -331,10 +289,9 @@ function mapExecutorError(
   }
 
 
-  /* -------------------------------------------------------
-   * Structured finance proposal rejection
-   * ---------------------------------------------------- */
-
+  /*
+   * Finance proposal validation errors.
+   */
   if (
     message.includes(
       "LIFE_OS_FINANCE_PAYLOAD_",
@@ -391,6 +348,23 @@ function mapExecutorError(
   }
 
 
+  /*
+   * All controlled plan-validation failures use the
+   * LIFE_OS_PLAN_* namespace.
+   *
+   * Target conflicts were handled above first.
+   */
+  if (
+    message.includes(
+      "LIFE_OS_PLAN_",
+    )
+  ) {
+    return new IntakeExecutorError(
+      "INVALID_PROPOSAL",
+    );
+  }
+
+
   return new IntakeExecutorError(
     "EXECUTION_FAILED",
   );
@@ -434,7 +408,27 @@ interface FinanceExecutorResult {
 
 
 /* =========================================================
- * 9. PARSE NOTE RPC RESULT
+ * 9. PLAN RPC RESULT
+ * ======================================================= */
+
+interface PlanExecutorResult {
+  intake_id:
+    UUID;
+
+  target_entity_type:
+    "goal" |
+    "project";
+
+  target_entity_id:
+    UUID;
+
+  intake_status:
+    "applied";
+}
+
+
+/* =========================================================
+ * 10. PARSE NOTE RESULT
  * ======================================================= */
 
 function parseNoteExecutorResult(
@@ -507,7 +501,7 @@ function parseNoteExecutorResult(
 
 
 /* =========================================================
- * 10. PARSE FINANCE RPC RESULT
+ * 11. PARSE FINANCE RESULT
  * ======================================================= */
 
 function parseFinanceExecutorResult(
@@ -593,7 +587,93 @@ function parseFinanceExecutorResult(
 
 
 /* =========================================================
- * 11. EXECUTE NOTE
+ * 12. PARSE PLAN RESULT
+ * ======================================================= */
+
+function parsePlanExecutorResult(
+  value:
+    unknown,
+): PlanExecutorResult {
+  if (
+    !Array.isArray(
+      value,
+    ) ||
+    value.length !==
+      1
+  ) {
+    throw new IntakeExecutorError(
+      "INVALID_EXECUTOR_RESULT",
+    );
+  }
+
+
+  const row =
+    value[0];
+
+
+  if (
+    !isRecord(
+      row,
+    )
+  ) {
+    throw new IntakeExecutorError(
+      "INVALID_EXECUTOR_RESULT",
+    );
+  }
+
+
+  const intakeIdValidation =
+    uuidSchema.safeParse(
+      row.intake_id,
+    );
+
+
+  const targetIdValidation =
+    uuidSchema.safeParse(
+      row.target_entity_id,
+    );
+
+
+  const targetType =
+    row.target_entity_type;
+
+
+  if (
+    !intakeIdValidation.success ||
+    !targetIdValidation.success ||
+    (
+      targetType !==
+        "goal" &&
+      targetType !==
+        "project"
+    ) ||
+    row.intake_status !==
+      "applied"
+  ) {
+    throw new IntakeExecutorError(
+      "INVALID_EXECUTOR_RESULT",
+    );
+  }
+
+
+  return {
+    intake_id:
+      intakeIdValidation.data,
+
+    target_entity_type:
+      targetType,
+
+    target_entity_id:
+      targetIdValidation.data,
+
+    intake_status:
+      "applied",
+  };
+}
+
+
+/* =========================================================
+ * 13. EXECUTE NOTE
  * ======================================================= */
 
 async function executeNoteIntake(
@@ -604,21 +684,6 @@ async function executeNoteIntake(
     await createClient();
 
 
-  /*
-   * PostgreSQL function:
-   *
-   * public.execute_note_intake(uuid)
-   *
-   *
-   * Guarantees:
-   *
-   * SECURITY INVOKER
-   * authenticated only
-   * RLS protected
-   * approval required
-   * atomic
-   * idempotent
-   */
   const {
     data,
     error,
@@ -646,10 +711,6 @@ async function executeNoteIntake(
       data,
     );
 
-
-  /* -------------------------------------------------------
-   * Defensive intake consistency
-   * ---------------------------------------------------- */
 
   if (
     result.intake_id !==
@@ -681,21 +742,9 @@ async function executeNoteIntake(
 
 
 /* =========================================================
- * 12. VALIDATE FINANCE PROPOSAL
+ * 14. VALIDATE FINANCE PROPOSAL
  * ======================================================= */
 
-/**
- * The browser already reviewed the proposal.
- *
- * The confirmation API already validated the proposal.
- *
- * PostgreSQL validates the proposal again.
- *
- *
- * This TypeScript validation exists as an additional
- * dispatcher boundary so the finance RPC is never called
- * for an arbitrary JSON payload.
- */
 function validateFinanceProposal(
   proposedPayload:
     JsonObject,
@@ -721,7 +770,7 @@ function validateFinanceProposal(
 
 
 /* =========================================================
- * 13. EXECUTE FINANCE
+ * 15. EXECUTE FINANCE
  * ======================================================= */
 
 async function executeFinanceIntake(
@@ -731,11 +780,6 @@ async function executeFinanceIntake(
   proposedPayload:
     JsonObject,
 ): Promise<IntakeExecutionResult> {
-
-  /* -------------------------------------------------------
-   * Validate exact reviewed proposal before RPC
-   * ---------------------------------------------------- */
-
   const proposal =
     validateFinanceProposal(
       proposedPayload,
@@ -764,25 +808,6 @@ async function executeFinanceIntake(
     await createClient();
 
 
-  /*
-   * PostgreSQL function:
-   *
-   * public.execute_finance_intake(uuid)
-   *
-   *
-   * Guarantees:
-   *
-   * SECURITY INVOKER
-   * authenticated only
-   * RLS protected
-   * finance kind only
-   * proposal version 1 only
-   * explicit action allowlist
-   * exact payload shape
-   * profile currency validation
-   * atomic write
-   * idempotent retry
-   */
   const {
     data,
     error,
@@ -811,10 +836,6 @@ async function executeFinanceIntake(
     );
 
 
-  /* -------------------------------------------------------
-   * Defensive intake consistency
-   * ---------------------------------------------------- */
-
   if (
     result.intake_id !==
     intakeId
@@ -824,22 +845,6 @@ async function executeFinanceIntake(
     );
   }
 
-
-  /* -------------------------------------------------------
-   * Defensive target consistency
-   * ---------------------------------------------------- */
-  /*
-   * Example:
-   *
-   * create_income_source
-   *
-   * MUST return:
-   *
-   * income_source
-   *
-   *
-   * It may never unexpectedly return budget_item.
-   */
 
   if (
     result.target_entity_type !==
@@ -871,18 +876,168 @@ async function executeFinanceIntake(
 
 
 /* =========================================================
- * 14. MAIN DISPATCHER
+ * 16. VALIDATE PLAN PROPOSAL
+ * ======================================================= */
+
+function validatePlanProposal(
+  proposedPayload:
+    JsonObject,
+) {
+  const validation =
+    planIntakeProposalSchema
+      .safeParse(
+        proposedPayload,
+      );
+
+
+  if (
+    !validation.success
+  ) {
+    throw new IntakeExecutorError(
+      "INVALID_PROPOSAL",
+    );
+  }
+
+
+  return validation.data;
+}
+
+
+/* =========================================================
+ * 17. EXECUTE PLAN
+ * ======================================================= */
+
+async function executePlanIntake(
+  intakeId:
+    UUID,
+
+  proposedPayload:
+    JsonObject,
+): Promise<IntakeExecutionResult> {
+  /*
+   * Validate the exact proposal again before PostgreSQL.
+   */
+  const proposal =
+    validatePlanProposal(
+      proposedPayload,
+    );
+
+
+  const expectedTarget =
+    getStructuredProposalTarget(
+      proposal,
+    );
+
+
+  if (
+    expectedTarget !==
+      "goal" &&
+    expectedTarget !==
+      "project"
+  ) {
+    throw new IntakeExecutorError(
+      "INVALID_PROPOSAL",
+    );
+  }
+
+
+  const supabase =
+    await createClient();
+
+
+  /*
+   * PostgreSQL:
+   *
+   * execute_plan_intake(uuid)
+   *
+   * Supports exactly:
+   *
+   * create_goal
+   * create_project
+   */
+  const {
+    data,
+    error,
+  } =
+    await supabase.rpc(
+      "execute_plan_intake",
+      {
+        p_intake_id:
+          intakeId,
+      },
+    );
+
+
+  if (
+    error
+  ) {
+    throw mapExecutorError(
+      error,
+    );
+  }
+
+
+  const result =
+    parsePlanExecutorResult(
+      data,
+    );
+
+
+  /*
+   * RPC must return the same intake we asked it to execute.
+   */
+  if (
+    result.intake_id !==
+    intakeId
+  ) {
+    throw new IntakeExecutorError(
+      "INVALID_EXECUTOR_RESULT",
+    );
+  }
+
+
+  /*
+   * create_goal may only result in goal.
+   *
+   * create_project may only result in project.
+   */
+  if (
+    result.target_entity_type !==
+    expectedTarget
+  ) {
+    throw new IntakeExecutorError(
+      "INVALID_EXECUTOR_RESULT",
+    );
+  }
+
+
+  return {
+    intake_id:
+      result.intake_id,
+
+    kind:
+      "plan",
+
+    status:
+      "applied",
+
+    target_entity_type:
+      result.target_entity_type,
+
+    target_entity_id:
+      result.target_entity_id,
+  };
+}
+
+
+/* =========================================================
+ * 18. MAIN DISPATCHER
  * ======================================================= */
 
 export async function executeIntakeItem(
   id:
     UUID,
 ): Promise<IntakeExecutionResult> {
-
-  /* -------------------------------------------------------
-   * Validate id
-   * ---------------------------------------------------- */
-
   const idValidation =
     uuidSchema.safeParse(
       id,
@@ -902,10 +1057,6 @@ export async function executeIntakeItem(
     idValidation.data;
 
 
-  /* -------------------------------------------------------
-   * Fetch owned intake
-   * ---------------------------------------------------- */
-
   const intake =
     await getIntakeItem(
       safeId,
@@ -922,7 +1073,7 @@ export async function executeIntakeItem(
 
 
   /* -------------------------------------------------------
-   * Terminal / invalid states
+   * Terminal states
    * ---------------------------------------------------- */
 
   if (
@@ -964,13 +1115,9 @@ export async function executeIntakeItem(
     "applied"
   ) {
     /*
-     * NOTE and FINANCE both have idempotent PostgreSQL
-     * executors.
-     *
-     * Calling either one again must return the existing
-     * linked entity instead of creating a duplicate.
+     * All three currently supported executors are
+     * idempotent.
      */
-
     switch (
       intake.kind
     ) {
@@ -988,6 +1135,12 @@ export async function executeIntakeItem(
 
 
       case "plan":
+        return executePlanIntake(
+          safeId,
+          intake.proposed_payload,
+        );
+
+
       case "travel":
       case "growth":
       case "document":
@@ -1048,30 +1201,21 @@ export async function executeIntakeItem(
 
 
     case "plan":
+      return executePlanIntake(
+        safeId,
+        intake.proposed_payload,
+      );
+
+
     case "travel":
     case "growth":
     case "document":
-      /*
-       * Deliberate refusal.
-       *
-       * An approved AI classification is NOT enough to
-       * invent a domain write.
-       *
-       * Each category receives its own deterministic
-       * executor.
-       */
       throw new IntakeExecutorError(
         "UNSUPPORTED_KIND",
       );
 
 
     default: {
-      /*
-       * Compile-time exhaustiveness protection.
-       *
-       * If IntakeKind gains a new value later, TypeScript
-       * forces this dispatcher to be reviewed.
-       */
       const exhaustiveCheck:
         never =
         intake.kind;
@@ -1089,16 +1233,9 @@ export async function executeIntakeItem(
 
 
 /* =========================================================
- * 15. SAFE SUPPORT CHECK
+ * 19. EXECUTABLE SUPPORT CHECK
  * ======================================================= */
 
-/**
- * This function does not read the database and does not
- * execute anything.
- *
- * It only answers whether LIFE OS has an explicit
- * deterministic executor for the intake kind.
- */
 export function isIntakeKindExecutable(
   kind:
     IntakeKind,
@@ -1107,13 +1244,15 @@ export function isIntakeKindExecutable(
     kind ===
       "note" ||
     kind ===
-      "finance"
+      "finance" ||
+    kind ===
+      "plan"
   );
 }
 
 
 /* =========================================================
- * 16. EXECUTION TARGET
+ * 20. EXECUTION TARGET BY KIND
  * ======================================================= */
 
 export function getIntakeExecutionTarget(
@@ -1129,27 +1268,28 @@ export function getIntakeExecutionTarget(
 
     case "finance":
       /*
-       * Finance has two possible exact targets:
+       * finance has two possible targets:
        *
-       * create_income_source
-       *      → income_source
+       * income_source
+       * budget_item
        *
-       * create_budget_item
-       *      → budget_item
-       *
-       *
-       * Kind alone is insufficient to select one.
-       *
-       * Use:
-       *
-       * getStructuredProposalTarget(proposal)
-       *
-       * when the exact proposal is available.
+       * Proposal action selects the exact target.
        */
       return null;
 
 
     case "plan":
+      /*
+       * plan has two possible targets:
+       *
+       * goal
+       * project
+       *
+       * Proposal action selects the exact target.
+       */
+      return null;
+
+
     case "travel":
     case "growth":
     case "document":
@@ -1172,228 +1312,189 @@ export function getIntakeExecutionTarget(
 
 
 /* =========================================================
- * 17. FINANCE EXECUTION MATRIX
+ * 21. CURRENT EXECUTION MATRIX
  * ======================================================= */
 
 /**
+ * note
+ *      ↓
+ * memory_item ✅
+ *
+ *
  * finance
  *
  * create_income_source
  *      ↓
- * income_sources
- *
+ * income_source ✅
  *
  * create_budget_item
  *      ↓
- * budget_items
+ * budget_item ✅
  *
  *
- * No other finance action is executable.
+ * plan
+ *
+ * create_goal
+ *      ↓
+ * goal ✅
+ *
+ * create_project
+ *      ↓
+ * project ✅
+ *
+ *
+ * growth
+ *      ↓
+ * blocked
+ *
+ * travel
+ *      ↓
+ * blocked
+ *
+ * document
+ *      ↓
+ * blocked
  */
 
 
 /* =========================================================
- * 18. CURRENCY SAFETY
+ * 22. PROPOSAL TRUST
  * ======================================================= */
 
 /**
- * V1:
- *
- * income_sources
- * budget_items
- *
- * do not store a per-record currency.
+ * AI output is never trusted directly.
  *
  *
- * Therefore:
+ * Example Plan flow:
  *
- * proposal currency
- *
- * MUST equal:
- *
- * profiles.default_currency
- *
- *
- * Example:
- *
- * profile:
- * AED
- *
- * proposal:
- * 1000 USD
- *
- *
- * Result:
- *
- * REJECT
- *
- *
- * Never silently store:
- *
- * 1000
- *
- * as though it meant AED.
- */
-
-
-/* =========================================================
- * 19. DOUBLE VALIDATION
- * ======================================================= */
-
-/**
- * Finance structured proposal is validated:
- *
- * AI Structured Output
+ * OpenAI structured proposal
  *      ↓
  * strictIntakePreviewSchema
  *      ↓
- * Confirm API
+ * user sees exact values
  *      ↓
- * financeIntakeProposalSchema here
+ * explicit confirmation
  *      ↓
- * PostgreSQL execute_finance_intake()
- *
- *
- * No single AI-produced JSON object becomes authoritative.
+ * proposed_payload stored
+ *      ↓
+ * planIntakeProposalSchema
+ *      ↓
+ * execute_plan_intake()
+ *      ↓
+ * PostgreSQL validation again
+ *      ↓
+ * goals / projects
  */
 
 
 /* =========================================================
- * 20. NO AI INSIDE EXECUTION
+ * 23. RELATIONSHIP SAFETY
  * ======================================================= */
 
 /**
- * This module deliberately imports:
+ * A create_project proposal may contain:
+ *
+ * goal_id
+ *
+ *
+ * PostgreSQL verifies that:
+ *
+ * goal exists
+ * AND
+ * goal belongs to auth.uid()
+ *
+ *
+ * Therefore a proposal cannot link a project to another
+ * user's goal.
+ */
+
+
+/* =========================================================
+ * 24. NO AI DURING EXECUTION
+ * ======================================================= */
+
+/**
+ * This module imports:
  *
  * no OpenAI client
  * no prompts
  * no classification model
  *
  *
- * Execution receives an already reviewed intake and routes
- * it only to an explicitly supported deterministic executor.
+ * AI finishes its role before confirmation.
+ *
+ * Execution is deterministic.
  */
 
 
 /* =========================================================
- * 21. NO ARBITRARY DOMAIN FALLBACK
+ * 25. DATABASE SECURITY
  * ======================================================= */
 
 /**
- * Never implement:
- *
- * if kind is unknown:
- *   save as memory
- *
- *
- * Never implement:
- *
- * ask AI what table to write to
- *
- *
- * Unsupported means:
- *
- * STOP.
- */
-
-
-/* =========================================================
- * 22. DATABASE SECURITY
- * ======================================================= */
-
-/**
- * Both executors are called through the normal authenticated
- * Supabase server client:
+ * Executors:
  *
  * execute_note_intake()
  * execute_finance_intake()
+ * execute_plan_intake()
  *
  *
- * They do NOT use:
+ * are called through the normal authenticated Supabase
+ * server client.
+ *
+ *
+ * No:
  *
  * service_role
- * admin credentials
+ * admin key
  * database password
  *
  *
- * Therefore:
+ * Authorization:
  *
- * Auth session
+ * authenticated session
  *      ↓
  * auth.uid()
  *      ↓
- * RLS
+ * PostgreSQL RLS
  *      ↓
  * SECURITY INVOKER
  */
 
 
 /* =========================================================
- * 23. IDEMPOTENCY
+ * 26. IDEMPOTENCY
  * ======================================================= */
 
 /**
- * Calling executeIntakeItem() twice for the same successfully
- * applied:
+ * Repeating execution for an already applied:
  *
  * note
  * finance
- *
- * does not create duplicate domain records.
- *
- *
- * PostgreSQL returns the existing linked target.
- */
-
-
-/* =========================================================
- * 24. CURRENT EXECUTION MATRIX
- * ======================================================= */
-
-/**
- * note
- *      → memory_item ✅
- *
- *
- * finance
- *
- * create_income_source
- *      → income_source ✅
- *
- * create_budget_item
- *      → budget_item ✅
- *
- *
  * plan
- *      → blocked
  *
- * travel
- *      → blocked
+ * returns the existing target entity.
  *
- * growth
- *      → blocked
  *
- * document
- *      → blocked
+ * It does not create duplicates.
  */
 
 
 /* =========================================================
- * 25. FINAL V2 RULE
+ * 27. PERMANENT RULE
  * ======================================================= */
 
 /**
- * Approved
+ * Approved does NOT mean:
  *
- * does NOT mean:
- *
- * "AI may write anywhere."
+ * "AI can write anywhere."
  *
  *
- * Approved means:
+ * It means:
  *
- * "The system may attempt the exact executor explicitly
- * implemented for this intake kind."
+ * "The deterministic executor explicitly implemented for
+ * this exact intake kind may execute the exact reviewed
+ * proposal."
  *
  *
  * AI Suggests
