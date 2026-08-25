@@ -1,8 +1,9 @@
 {
   "name": "life-os",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "Private AI-powered personal operating system for managing goals, finance, investments, career, learning and life decisions.",
+  "type": "module",
+  "description": "Private AI-powered personal operating system for managing goals, finance, investments, career, learning, travel and life decisions.",
   "license": "UNLICENSED",
   "engines": {
     "node": "24.x"
@@ -13,7 +14,8 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "validate": "npm run lint && npm run typecheck && npm test && npm run build"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.4",
