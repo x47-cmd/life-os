@@ -1815,8 +1815,6 @@ export function UniversalAdd() {
       };
     },
 
-    // Local modal state only.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       open,
       busy,
