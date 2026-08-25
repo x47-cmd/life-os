@@ -3,12 +3,14 @@ import {
 } from "next/server";
 
 import {
-  requireAAL2UserId,
+  assertAuthenticatedIdentity,
 } from "@/lib/auth";
 
 import {
   approveIntakeItem,
   createIntakeItem,
+  getIntakeItem,
+  markIntakeItemApplied,
 } from "@/lib/intake-data";
 
 import {
@@ -16,53 +18,78 @@ import {
   isIntakeKindExecutable,
 } from "@/lib/intake-executor";
 
+import {
+  createClient,
+} from "@/lib/supabase/server";
+
+import {
+  uploadPrivatePdfDocument,
+} from "@/lib/travel-data";
+
 import type {
-  IntakePreview,
+  Document,
+  DocumentCategory,
+  IntakeTargetEntityType,
   StructuredIntakeProposal,
+  UUID,
 } from "@/lib/types";
 
 import {
+  activeStrictIntakePreviewSchema,
   getFirstValidationError,
   intakeFileMimeSchema,
   intakeFileNameSchema,
   intakeFileSizeSchema,
-  intakePreviewSchema,
   intakeSourceTextSchema,
-  strictIntakePreviewSchema,
+  type ActiveStrictIntakePreview,
 } from "@/lib/validation";
 
 
 /* =========================================================
  * LIFE OS V2
- * UNIVERSAL INTAKE — CONFIRM API
+ * UNIVERSAL INTAKE — FINAL CONFIRM API
  *
- * Supports BOTH:
- *
- * 1. Transitional preview
- *    - no structured proposal
- *
- * 2. Strict V2 preview
- *    - exact structured proposal
- *
- *
- * This allows safe one-file-at-a-time migration.
- *
- *
- * Flow:
- *
- * AI Preview
+ * AI preview
  *      ↓
- * User Reviews
+ * User reviews exact values
  *      ↓
- * User Confirms
+ * User explicitly confirms
  *      ↓
- * Server validates preview again
+ * Server validates everything again
  *      ↓
- * Structured proposal persisted
+ * Durable intake created
  *      ↓
- * Intake approved
+ * Intake explicitly approved
  *      ↓
- * Exact executor if available
+ *
+ * note
+ * finance
+ * plan
+ * growth
+ * travel
+ *      ↓
+ * deterministic executor
+ *
+ *
+ * document
+ *      ↓
+ * private PDF Storage
+ *      ↓
+ * documents metadata
+ *      ↓
+ * intake marked applied
+ *
+ *
+ * PDF attached to another supported kind:
+ *
+ * final domain record
+ *      +
+ * private PDF copy
+ *
+ *
+ * No public files.
+ * No service_role.
+ * No AI write authority.
  * ======================================================= */
 
 
@@ -77,7 +104,7 @@ export const dynamic =
   "force-dynamic";
 
 export const maxDuration =
-  30;
+  60;
 
 
 /* =========================================================
@@ -106,32 +133,81 @@ const PRIVATE_RESPONSE_HEADERS = {
 
 
 /* =========================================================
- * 4. CONFIRMABLE PREVIEW
+ * 4. RESPONSE TYPES
  * ======================================================= */
 
-/**
- * Internal normalized preview.
- *
- * Old preview:
- *
- * proposal = null
- *
- *
- * New V2 preview:
- *
- * proposal = exact validated StructuredIntakeProposal
- */
-interface ConfirmablePreview
-  extends IntakePreview {
+interface ConfirmedIntakeResponse {
+  id:
+    UUID;
 
-  proposal:
-    StructuredIntakeProposal |
+  kind:
+    ActiveStrictIntakePreview["kind"];
+
+  title:
+    string;
+
+  status:
+    "approved" |
+    "applied";
+
+  approved_at:
+    string |
+    null;
+
+  target_entity_type:
+    IntakeTargetEntityType |
+    null;
+
+  target_entity_id:
+    UUID |
     null;
 }
 
 
+interface ExecutionResponse {
+  attempted:
+    boolean;
+
+  applied:
+    boolean;
+
+  reason?:
+    "EXECUTION_PENDING" |
+    "EXECUTOR_NOT_AVAILABLE";
+
+  target_entity_type?:
+    IntakeTargetEntityType;
+
+  target_entity_id?:
+    UUID;
+}
+
+
+interface AttachmentResponse {
+  attempted:
+    boolean;
+
+  saved:
+    boolean;
+
+  document_id?:
+    UUID;
+
+  category?:
+    DocumentCategory;
+
+  linked_trip_id?:
+    UUID |
+    null;
+
+  reason?:
+    "NO_FILE" |
+    "DOCUMENT_UPLOAD_PENDING";
+}
+
+
 /* =========================================================
- * 5. RESPONSE HELPERS
+ * 5. ERROR RESPONSE
  * ======================================================= */
 
 function errorResponse(
@@ -159,21 +235,60 @@ function errorResponse(
 
 
 /* =========================================================
- * 6. RECORD HELPER
+ * 6. SUCCESS RESPONSE
  * ======================================================= */
 
-function isRecord(
-  value:
-    unknown,
-): value is Record<string, unknown> {
-  return (
-    typeof value ===
-      "object" &&
-    value !==
-      null &&
-    !Array.isArray(
-      value,
-    )
+function successResponse(
+  intake:
+    ConfirmedIntakeResponse,
+
+  execution:
+    ExecutionResponse,
+
+  attachment:
+    AttachmentResponse,
+
+  proposal:
+    StructuredIntakeProposal |
+    null,
+
+  message:
+    string,
+
+  status:
+    number =
+    200,
+) {
+  return NextResponse.json(
+    {
+      ok:
+        true,
+
+      intake,
+
+      execution,
+
+      attachment,
+
+      proposal: {
+        structured:
+          proposal !==
+          null,
+
+        action:
+          proposal
+            ? proposal.action
+            : null,
+      },
+
+      message,
+    },
+    {
+      status,
+
+      headers:
+        PRIVATE_RESPONSE_HEADERS,
+    },
   );
 }
 
@@ -193,7 +308,7 @@ function hasValidOrigin(
 
 
   /*
-   * Server-to-server requests may omit Origin.
+   * Internal/server requests may omit Origin.
    */
   if (
     !origin
@@ -363,201 +478,15 @@ function normalizePreviewField(
     value.trim();
 
 
-  if (
-    normalized.length ===
+  return normalized.length >
     0
-  ) {
-    return null;
-  }
-
-
-  return normalized;
+    ? normalized
+    : null;
 }
 
 
 /* =========================================================
- * 13. PREVIEW NORMALIZER
- * ======================================================= */
-
-/**
- * First try the authoritative V2 schema.
- *
- * If that fails because the request came from the currently
- * deployed legacy preview API, try the transitional schema.
- *
- *
- * IMPORTANT:
- *
- * A request containing a `proposal` property NEVER falls
- * back to legacy validation.
- *
- * This prevents a malformed V2 proposal from bypassing the
- * strict validator.
- */
-function parseConfirmablePreview(
-  value:
-    unknown,
-):
-  | {
-      success:
-        true;
-
-      data:
-        ConfirmablePreview;
-    }
-  | {
-      success:
-        false;
-
-      error:
-        string;
-    } {
-
-  /* -------------------------------------------------------
-   * Strict V2
-   * ---------------------------------------------------- */
-
-  const strictValidation =
-    strictIntakePreviewSchema
-      .safeParse(
-        value,
-      );
-
-
-  if (
-    strictValidation.success
-  ) {
-    const preview =
-      strictValidation.data;
-
-
-    return {
-      success:
-        true,
-
-      data: {
-        kind:
-          preview.kind,
-
-        label:
-          preview.label,
-
-        title:
-          preview.title,
-
-        summary:
-          preview.summary,
-
-        confidence:
-          preview.confidence,
-
-        next_action:
-          preview.next_action,
-
-        proposal:
-          preview.proposal,
-
-        requires_confirmation:
-          true,
-      },
-    };
-  }
-
-
-  /* -------------------------------------------------------
-   * If proposal exists, strict validation is mandatory.
-   * ---------------------------------------------------- */
-
-  if (
-    isRecord(
-      value,
-    ) &&
-    Object.prototype.hasOwnProperty.call(
-      value,
-      "proposal",
-    )
-  ) {
-    return {
-      success:
-        false,
-
-      error:
-        getFirstValidationError(
-          strictValidation.error,
-        ),
-    };
-  }
-
-
-  /* -------------------------------------------------------
-   * Transitional preview
-   * ---------------------------------------------------- */
-
-  const legacyValidation =
-    intakePreviewSchema
-      .safeParse(
-        value,
-      );
-
-
-  if (
-    !legacyValidation.success
-  ) {
-    return {
-      success:
-        false,
-
-      error:
-        getFirstValidationError(
-          legacyValidation.error,
-        ),
-    };
-  }
-
-
-  const preview =
-    legacyValidation.data;
-
-
-  return {
-    success:
-      true,
-
-    data: {
-      kind:
-        preview.kind,
-
-      label:
-        preview.label,
-
-      title:
-        preview.title,
-
-      summary:
-        preview.summary,
-
-      confidence:
-        preview.confidence,
-
-      next_action:
-        preview.next_action,
-
-      /*
-       * Transitional previews were created before the
-       * structured proposal pipeline existed.
-       */
-      proposal:
-        null,
-
-      requires_confirmation:
-        true,
-    },
-  };
-}
-
-
-/* =========================================================
- * 14. FILE VALIDATION
+ * 13. FILE VALIDATION
  * ======================================================= */
 
 function validateFile(
@@ -578,11 +507,6 @@ function validateFile(
       error:
         string;
     } {
-
-  /* -------------------------------------------------------
-   * Size
-   * ---------------------------------------------------- */
-
   const sizeValidation =
     intakeFileSizeSchema
       .safeParse(
@@ -611,10 +535,6 @@ function validateFile(
   }
 
 
-  /* -------------------------------------------------------
-   * Filename
-   * ---------------------------------------------------- */
-
   const nameValidation =
     intakeFileNameSchema
       .safeParse(
@@ -639,10 +559,6 @@ function validateFile(
     };
   }
 
-
-  /* -------------------------------------------------------
-   * MIME
-   * ---------------------------------------------------- */
 
   const mimeValidation =
     intakeFileMimeSchema
@@ -675,16 +591,370 @@ function validateFile(
 
 
 /* =========================================================
- * 15. POST
+ * 14. PREVIEW PARSING
+ * ======================================================= */
+
+function parsePreview(
+  raw:
+    string,
+):
+  | {
+      success:
+        true;
+
+      data:
+        ActiveStrictIntakePreview;
+    }
+  | {
+      success:
+        false;
+
+      error:
+        string;
+    } {
+  let value:
+    unknown;
+
+
+  try {
+    value =
+      JSON.parse(
+        raw,
+      ) as unknown;
+  } catch {
+    return {
+      success:
+        false,
+
+      error:
+        "معاينة LIFE OS غير صالحة.",
+    };
+  }
+
+
+  /*
+   * FINAL V2 boundary.
+   *
+   * No transitional downgrade.
+   *
+   * finance / plan / growth / travel:
+   * exact proposal required.
+   *
+   * document / note:
+   * proposal must be null.
+   */
+  const validation =
+    activeStrictIntakePreviewSchema
+      .safeParse(
+        value,
+      );
+
+
+  if (
+    !validation.success
+  ) {
+    return {
+      success:
+        false,
+
+      error:
+        getFirstValidationError(
+          validation.error,
+        ),
+    };
+  }
+
+
+  return {
+    success:
+      true,
+
+    data:
+      validation.data,
+  };
+}
+
+
+/* =========================================================
+ * 15. DOCUMENT CATEGORY
+ * ======================================================= */
+
+function getDocumentCategory(
+  preview:
+    ActiveStrictIntakePreview,
+): DocumentCategory {
+  switch (
+    preview.kind
+  ) {
+    case "finance":
+      return "finance";
+
+
+    case "travel":
+      return "travel";
+
+
+    case "growth":
+      if (
+        preview.proposal?.action ===
+        "create_career_item"
+      ) {
+        return "career";
+      }
+
+
+      return "education";
+
+
+    case "plan":
+      return "general";
+
+
+    case "document":
+      return "general";
+
+
+    case "note":
+      return "general";
+
+
+    default: {
+      const exhaustive:
+        never =
+        preview.kind;
+
+
+      void exhaustive;
+
+
+      return "general";
+    }
+  }
+}
+
+
+/* =========================================================
+ * 16. CLEANUP UPLOADED DOCUMENT
+ * ======================================================= */
+
+/**
+ * Used only as compensating cleanup when:
+ *
+ * private Storage upload succeeded
+ * +
+ * document metadata succeeded
+ * +
+ * intake lifecycle could NOT safely be finalized.
+ *
+ *
+ * Normal user-facing document deletion remains archive-first.
+ */
+async function cleanupUploadedDocument(
+  document:
+    Document,
+): Promise<void> {
+  const supabase =
+    await createClient();
+
+
+  /*
+   * Remove metadata first.
+   *
+   * If this fails, keep the Storage object so a metadata row
+   * does not point to a knowingly missing object.
+   */
+  const {
+    error:
+      metadataDeleteError,
+  } =
+    await supabase
+      .from(
+        "documents",
+      )
+      .delete()
+      .eq(
+        "id",
+        document.id,
+      )
+      .eq(
+        "user_id",
+        document.user_id,
+      );
+
+
+  if (
+    metadataDeleteError
+  ) {
+    return;
+  }
+
+
+  /*
+   * Best-effort removal of the private binary.
+   */
+  try {
+    await supabase.storage
+      .from(
+        document.storage_bucket,
+      )
+      .remove([
+        document.storage_path,
+      ]);
+  } catch {
+    /*
+     * The remaining object is still private and protected by
+     * Storage RLS.
+     */
+  }
+}
+
+
+/* =========================================================
+ * 17. FINALIZE PRIMARY DOCUMENT INTAKE
+ * ======================================================= */
+
+async function finalizePrimaryDocumentIntake(
+  intakeId:
+    UUID,
+
+  document:
+    Document,
+) {
+  try {
+    return await markIntakeItemApplied(
+      intakeId,
+      "document",
+      document.id,
+    );
+  } catch (
+    error
+  ) {
+    /*
+     * Network ambiguity protection:
+     *
+     * markIntakeItemApplied() may theoretically complete in
+     * PostgreSQL before the caller receives the response.
+     *
+     * Re-read the owned intake before cleanup.
+     */
+    try {
+      const current =
+        await getIntakeItem(
+          intakeId,
+        );
+
+
+      if (
+        current?.status ===
+          "applied" &&
+        current.target_entity_type ===
+          "document" &&
+        current.target_entity_id ===
+          document.id
+      ) {
+        return current;
+      }
+    } catch {
+      /*
+       * Continue to safe cleanup attempt below.
+       */
+    }
+
+
+    await cleanupUploadedDocument(
+      document,
+    );
+
+
+    throw error;
+  }
+}
+
+
+/* =========================================================
+ * 18. UPLOAD CONFIRMED PDF
+ * ======================================================= */
+
+async function uploadConfirmedPdf(
+  preview:
+    ActiveStrictIntakePreview,
+
+  file:
+    File,
+
+  tripId:
+    UUID |
+    null,
+): Promise<Document> {
+  return uploadPrivatePdfDocument({
+    file,
+
+    title:
+      preview.title,
+
+    category:
+      getDocumentCategory(
+        preview,
+      ),
+
+    trip_id:
+      tripId,
+
+    notes:
+      null,
+  });
+}
+
+
+/* =========================================================
+ * 19. APPROVED RESPONSE HELPER
+ * ======================================================= */
+
+function approvedIntakeResponse(
+  id:
+    UUID,
+
+  preview:
+    ActiveStrictIntakePreview,
+
+  approvedAt:
+    string |
+    null,
+): ConfirmedIntakeResponse {
+  return {
+    id,
+
+    kind:
+      preview.kind,
+
+    title:
+      preview.title,
+
+    status:
+      "approved",
+
+    approved_at:
+      approvedAt,
+
+    target_entity_type:
+      null,
+
+    target_entity_id:
+      null,
+  };
+}
+
+
+/* =========================================================
+ * 20. POST
  * ======================================================= */
 
 export async function POST(
   request:
     Request,
 ) {
-
   /* -------------------------------------------------------
-   * Origin
+   * Same-origin
    * ---------------------------------------------------- */
 
   if (
@@ -700,7 +970,7 @@ export async function POST(
 
 
   /* -------------------------------------------------------
-   * Content type
+   * Multipart only
    * ---------------------------------------------------- */
 
   if (
@@ -716,7 +986,7 @@ export async function POST(
 
 
   /* -------------------------------------------------------
-   * Request size
+   * Declared size
    * ---------------------------------------------------- */
 
   if (
@@ -732,11 +1002,11 @@ export async function POST(
 
 
   /* -------------------------------------------------------
-   * Authentication
+   * Verified authentication
    * ---------------------------------------------------- */
 
   try {
-    await requireAAL2UserId();
+    await assertAuthenticatedIdentity();
   } catch {
     return errorResponse(
       401,
@@ -814,33 +1084,12 @@ export async function POST(
 
 
   /* -------------------------------------------------------
-   * Parse JSON
-   * ---------------------------------------------------- */
-
-  let parsedPreviewJson:
-    unknown;
-
-
-  try {
-    parsedPreviewJson =
-      JSON.parse(
-        rawPreview,
-      ) as unknown;
-  } catch {
-    return errorResponse(
-      400,
-      "معاينة LIFE OS غير صالحة.",
-    );
-  }
-
-
-  /* -------------------------------------------------------
-   * Preview validation
+   * Final preview validation
    * ---------------------------------------------------- */
 
   const previewValidation =
-    parseConfirmablePreview(
-      parsedPreviewJson,
+    parsePreview(
+      rawPreview,
     );
 
 
@@ -870,6 +1119,22 @@ export async function POST(
     return errorResponse(
       400,
       "النص أو ملف PDF الأصلي مطلوب للتأكيد.",
+    );
+  }
+
+
+  /* -------------------------------------------------------
+   * A document intake requires the actual PDF
+   * ---------------------------------------------------- */
+
+  if (
+    preview.kind ===
+      "document" &&
+    !file
+  ) {
+    return errorResponse(
+      400,
+      "ملف PDF الأصلي مطلوب لحفظ المستند.",
     );
   }
 
@@ -926,9 +1191,9 @@ export async function POST(
   }
 
 
-  /* -------------------------------------------------------
-   * Persist + approve
-   * ---------------------------------------------------- */
+  /* =======================================================
+   * 21. CREATE + APPROVE DURABLE INTAKE
+   * ===================================================== */
 
   let approved:
     Awaited<
@@ -939,21 +1204,6 @@ export async function POST(
 
 
   try {
-    /*
-     * STEP 1
-     *
-     * Create the durable intake proposal.
-     *
-     *
-     * Structured preview:
-     *
-     * proposed_payload = exact proposal reviewed by user
-     *
-     *
-     * Transitional preview:
-     *
-     * proposed_payload = {}
-     */
     const created =
       await createIntakeItem({
         kind:
@@ -992,18 +1242,18 @@ export async function POST(
         next_action:
           preview.next_action,
 
+        /*
+         * Structured kinds persist exactly what the user saw.
+         *
+         * note / document persist an empty object because
+         * their active preview contract requires proposal:null.
+         */
         proposed_payload:
           preview.proposal ??
           {},
       });
 
 
-    /*
-     * STEP 2
-     *
-     * This request exists only because the user explicitly
-     * pressed Confirm.
-     */
     approved =
       await approveIntakeItem(
         created.id,
@@ -1017,196 +1267,116 @@ export async function POST(
 
 
   /* =======================================================
-   * 16. NO EXECUTOR AVAILABLE
+   * 22. PRIMARY DOCUMENT WORKFLOW
    * ===================================================== */
 
   if (
-    !isIntakeKindExecutable(
-      approved.kind,
-    )
+    preview.kind ===
+    "document"
   ) {
-    return NextResponse.json(
-      {
-        ok:
-          true,
-
-        intake: {
-          id:
-            approved.id,
-
-          kind:
-            approved.kind,
-
-          title:
-            approved.title,
-
-          status:
-            approved.status,
-
-          approved_at:
-            approved.approved_at,
-
-          target_entity_type:
-            null,
-
-          target_entity_id:
-            null,
-        },
-
-        execution: {
-          attempted:
-            false,
-
-          applied:
-            false,
-
-          reason:
-            "EXECUTOR_NOT_AVAILABLE",
-        },
-
-        proposal: {
-          structured:
-            preview.proposal !==
-            null,
-
-          action:
-            preview.proposal
-              ? preview.proposal.action
-              : null,
-        },
-
-        message:
-          preview.proposal
-            ? "تم اعتماد القيم التي راجعتها وحفظ الاقتراح داخل LIFE OS. التنفيذ الفعلي لهذا النوع بيتفعل بعد إضافة الـExecutor الخاص فيه."
-            : "تم اعتماد الإضافة داخل LIFE OS. التنفيذ لهذا النوع بيتفعل بعد إضافة الـExecutor الخاص فيه.",
-      },
-      {
-        status:
-          200,
-
-        headers:
-          PRIVATE_RESPONSE_HEADERS,
-      },
-    );
-  }
-
-
-  /* =======================================================
-   * 17. EXECUTE SUPPORTED KIND
-   * ===================================================== */
-
-  try {
-    const execution =
-      await executeIntakeItem(
-        approved.id,
-      );
-
-
-    return NextResponse.json(
-      {
-        ok:
-          true,
-
-        intake: {
-          id:
-            execution.intake_id,
-
-          kind:
-            execution.kind,
-
-          title:
-            approved.title,
-
-          status:
-            execution.status,
-
-          approved_at:
-            approved.approved_at,
-
-          target_entity_type:
-            execution.target_entity_type,
-
-          target_entity_id:
-            execution.target_entity_id,
-        },
-
-        execution: {
-          attempted:
-            true,
-
-          applied:
-            true,
-
-          target_entity_type:
-            execution.target_entity_type,
-
-          target_entity_id:
-            execution.target_entity_id,
-        },
-
-        proposal: {
-          structured:
-            preview.proposal !==
-            null,
-
-          action:
-            preview.proposal
-              ? preview.proposal.action
-              : null,
-        },
-
-        message:
-          execution.kind ===
-          "note"
-            ? "تم حفظ الملاحظة داخل LIFE OS."
-            : "تم تنفيذ الإضافة داخل LIFE OS.",
-      },
-      {
-        status:
-          200,
-
-        headers:
-          PRIVATE_RESPONSE_HEADERS,
-      },
-    );
-  } catch {
     /*
-     * Confirmation already succeeded.
-     *
-     * Never tell the client to create another proposal.
-     *
-     * The approved intake stays available for a controlled
-     * retry later.
+     * Guaranteed above.
      */
-    return NextResponse.json(
-      {
-        ok:
-          true,
+    if (
+      !file
+    ) {
+      return errorResponse(
+        400,
+        "ملف PDF الأصلي مطلوب لحفظ المستند.",
+      );
+    }
 
-        intake: {
+
+    try {
+      const document =
+        await uploadConfirmedPdf(
+          preview,
+          file,
+          null,
+        );
+
+
+      const applied =
+        await finalizePrimaryDocumentIntake(
+          approved.id,
+          document,
+        );
+
+
+      return successResponse(
+        {
           id:
-            approved.id,
+            applied.id,
 
           kind:
-            approved.kind,
+            "document",
 
           title:
-            approved.title,
+            applied.title,
 
           status:
-            approved.status,
+            "applied",
 
           approved_at:
-            approved.approved_at,
+            applied.approved_at,
 
           target_entity_type:
-            null,
+            "document",
 
           target_entity_id:
-            null,
+            document.id,
         },
 
-        execution: {
+        {
+          attempted:
+            true,
+
+          applied:
+            true,
+
+          target_entity_type:
+            "document",
+
+          target_entity_id:
+            document.id,
+        },
+
+        {
+          attempted:
+            true,
+
+          saved:
+            true,
+
+          document_id:
+            document.id,
+
+          category:
+            document.category,
+
+          linked_trip_id:
+            document.trip_id,
+        },
+
+        null,
+
+        "تم حفظ المستند بشكل خاص داخل LIFE OS.",
+      );
+    } catch {
+      /*
+       * Intake remains approved.
+       *
+       * We never claim permanent document success unless both
+       * private file + metadata + intake lifecycle succeed.
+       */
+      return successResponse(
+        approvedIntakeResponse(
+          approved.id,
+          preview,
+          approved.approved_at,
+        ),
+
+        {
           attempted:
             true,
 
@@ -1217,34 +1387,388 @@ export async function POST(
             "EXECUTION_PENDING",
         },
 
-        proposal: {
-          structured:
-            preview.proposal !==
-            null,
+        {
+          attempted:
+            true,
 
-          action:
-            preview.proposal
-              ? preview.proposal.action
-              : null,
+          saved:
+            false,
+
+          reason:
+            "DOCUMENT_UPLOAD_PENDING",
         },
 
-        message:
-          "تم اعتماد الإضافة، لكن التنفيذ النهائي ما اكتمل. الإضافة محفوظة بأمان للمحاولة لاحقًا.",
-      },
-      {
-        status:
-          202,
+        null,
 
-        headers:
-          PRIVATE_RESPONSE_HEADERS,
+        "تم اعتماد المستند، لكن الحفظ الخاص للملف ما اكتمل. ما تم اعتبار المستند محفوظًا نهائيًا.",
+
+        202,
+      );
+    }
+  }
+
+
+  /* =======================================================
+   * 23. EXECUTOR SAFETY CHECK
+   * ===================================================== */
+
+  if (
+    !isIntakeKindExecutable(
+      approved.kind,
+    )
+  ) {
+    return successResponse(
+      approvedIntakeResponse(
+        approved.id,
+        preview,
+        approved.approved_at,
+      ),
+
+      {
+        attempted:
+          false,
+
+        applied:
+          false,
+
+        reason:
+          "EXECUTOR_NOT_AVAILABLE",
       },
+
+      file
+        ? {
+            attempted:
+              false,
+
+            saved:
+              false,
+
+            reason:
+              "DOCUMENT_UPLOAD_PENDING",
+          }
+        : {
+            attempted:
+              false,
+
+            saved:
+              false,
+
+            reason:
+              "NO_FILE",
+          },
+
+      preview.proposal,
+
+      "تم اعتماد الإضافة، لكن ما في Executor آمن لهذا النوع حاليًا.",
+
+      202,
     );
   }
+
+
+  /* =======================================================
+   * 24. EXECUTE DOMAIN RECORD
+   * ===================================================== */
+
+  let execution:
+    Awaited<
+      ReturnType<
+        typeof executeIntakeItem
+      >
+    >;
+
+
+  try {
+    execution =
+      await executeIntakeItem(
+        approved.id,
+      );
+  } catch {
+    /*
+     * Intake was approved successfully but domain execution
+     * did not complete.
+     *
+     * Do not create another proposal automatically.
+     */
+    return successResponse(
+      approvedIntakeResponse(
+        approved.id,
+        preview,
+        approved.approved_at,
+      ),
+
+      {
+        attempted:
+          true,
+
+        applied:
+          false,
+
+        reason:
+          "EXECUTION_PENDING",
+      },
+
+      file
+        ? {
+            attempted:
+              false,
+
+            saved:
+              false,
+
+            reason:
+              "DOCUMENT_UPLOAD_PENDING",
+          }
+        : {
+            attempted:
+              false,
+
+            saved:
+              false,
+
+            reason:
+              "NO_FILE",
+          },
+
+      preview.proposal,
+
+      "تم اعتماد الإضافة، لكن التنفيذ النهائي ما اكتمل. ما تم إنشاء حقيقة جديدة إضافية تلقائيًا.",
+
+      202,
+    );
+  }
+
+
+  /* =======================================================
+   * 25. OPTIONAL CONFIRMED PDF
+   * ===================================================== */
+
+  if (
+    file
+  ) {
+    const linkedTripId =
+      execution.kind ===
+        "travel" &&
+      execution.target_entity_type ===
+        "trip"
+        ? execution.target_entity_id
+        : null;
+
+
+    try {
+      const document =
+        await uploadConfirmedPdf(
+          preview,
+          file,
+          linkedTripId,
+        );
+
+
+      const kindMessage =
+        execution.kind ===
+        "travel"
+          ? "تم حفظ الرحلة وملف PDF الخاص بها داخل LIFE OS."
+          : execution.kind ===
+              "note"
+            ? "تم حفظ الملاحظة وملف PDF الخاص بشكل آمن داخل LIFE OS."
+            : "تم تنفيذ الإضافة وحفظ ملف PDF بشكل خاص داخل LIFE OS.";
+
+
+      return successResponse(
+        {
+          id:
+            execution.intake_id,
+
+          kind:
+            execution.kind,
+
+          title:
+            approved.title,
+
+          status:
+            "applied",
+
+          approved_at:
+            approved.approved_at,
+
+          target_entity_type:
+            execution.target_entity_type,
+
+          target_entity_id:
+            execution.target_entity_id,
+        },
+
+        {
+          attempted:
+            true,
+
+          applied:
+            true,
+
+          target_entity_type:
+            execution.target_entity_type,
+
+          target_entity_id:
+            execution.target_entity_id,
+        },
+
+        {
+          attempted:
+            true,
+
+          saved:
+            true,
+
+          document_id:
+            document.id,
+
+          category:
+            document.category,
+
+          linked_trip_id:
+            document.trip_id,
+        },
+
+        preview.proposal,
+
+        kindMessage,
+      );
+    } catch {
+      /*
+       * IMPORTANT:
+       *
+       * The primary domain fact already succeeded.
+       *
+       * Do not roll it back and do not pretend the PDF saved.
+       */
+      return successResponse(
+        {
+          id:
+            execution.intake_id,
+
+          kind:
+            execution.kind,
+
+          title:
+            approved.title,
+
+          status:
+            "applied",
+
+          approved_at:
+            approved.approved_at,
+
+          target_entity_type:
+            execution.target_entity_type,
+
+          target_entity_id:
+            execution.target_entity_id,
+        },
+
+        {
+          attempted:
+            true,
+
+          applied:
+            true,
+
+          target_entity_type:
+            execution.target_entity_type,
+
+          target_entity_id:
+            execution.target_entity_id,
+        },
+
+        {
+          attempted:
+            true,
+
+          saved:
+            false,
+
+          reason:
+            "DOCUMENT_UPLOAD_PENDING",
+        },
+
+        preview.proposal,
+
+        execution.kind ===
+          "travel"
+          ? "تم حفظ الرحلة، لكن ملف PDF ما اكتمل حفظه الخاص."
+          : "تم تنفيذ الإضافة، لكن ملف PDF ما اكتمل حفظه الخاص.",
+      );
+    }
+  }
+
+
+  /* =======================================================
+   * 26. SUCCESS WITHOUT FILE
+   * ===================================================== */
+
+  return successResponse(
+    {
+      id:
+        execution.intake_id,
+
+      kind:
+        execution.kind,
+
+      title:
+        approved.title,
+
+      status:
+        "applied",
+
+      approved_at:
+        approved.approved_at,
+
+      target_entity_type:
+        execution.target_entity_type,
+
+      target_entity_id:
+        execution.target_entity_id,
+    },
+
+    {
+      attempted:
+        true,
+
+      applied:
+        true,
+
+      target_entity_type:
+        execution.target_entity_type,
+
+      target_entity_id:
+        execution.target_entity_id,
+    },
+
+    {
+      attempted:
+        false,
+
+      saved:
+        false,
+
+      reason:
+        "NO_FILE",
+    },
+
+    preview.proposal,
+
+    execution.kind ===
+      "note"
+      ? "تم حفظ الملاحظة داخل LIFE OS."
+      : execution.kind ===
+          "travel"
+        ? "تم حفظ الرحلة داخل LIFE OS."
+        : "تم تنفيذ الإضافة داخل LIFE OS.",
+  );
 }
 
 
 /* =========================================================
- * 18. GET IS NOT SUPPORTED
+ * 27. GET NOT SUPPORTED
  * ======================================================= */
 
 export async function GET() {
@@ -1256,247 +1780,222 @@ export async function GET() {
 
 
 /* =========================================================
- * 19. TRANSITIONAL COMPATIBILITY
+ * 28. FINAL ACTIVE PREVIEW CONTRACT
  * ======================================================= */
 
 /**
- * CURRENT deployed preview:
- *
- * {
- *   kind,
- *   label,
- *   title,
- *   summary,
- *   confidence,
- *   next_action,
- *   requires_confirmation
- * }
+ * No legacy preview fallback remains.
  *
  *
- * Accepted safely.
+ * Required:
  *
+ * finance
+ *      → structured proposal
  *
- * NEW structured preview:
+ * plan
+ *      → structured proposal
  *
- * {
- *   kind,
- *   label,
- *   title,
- *   summary,
- *   confidence,
- *   next_action,
- *   proposal,
- *   requires_confirmation
- * }
+ * growth
+ *      → structured proposal
  *
+ * travel
+ *      → create_trip proposal
  *
- * Also accepted safely.
+ * document
+ *      → proposal:null
+ *
+ * note
+ *      → proposal:null
  */
 
 
 /* =========================================================
- * 20. ANTI-DOWNGRADE RULE
+ * 29. TRAVEL CONTRACT
  * ======================================================= */
 
 /**
- * Critical:
+ * Travel confirmation:
  *
- * If the browser sends a `proposal` property:
- *
- * strictIntakePreviewSchema MUST pass.
- *
- *
- * We never do:
- *
- * invalid structured preview
+ * reviewed create_trip proposal
  *      ↓
- * remove proposal
+ * durable intake
  *      ↓
- * accept as legacy
+ * explicit approval
+ *      ↓
+ * execute_travel_intake()
+ *      ↓
+ * trips
  *
  *
- * That would be a validation downgrade vulnerability.
+ * If a PDF is attached:
+ *
+ * trips.id
+ *      ↓
+ * documents.trip_id
+ *      ↓
+ * private Storage object
  */
 
 
 /* =========================================================
- * 21. STRUCTURED PAYLOAD STORAGE
+ * 30. PRIMARY DOCUMENT CONTRACT
  * ======================================================= */
 
 /**
- * New V2 structured proposals are persisted exactly inside:
+ * document:
  *
- * intake_items.proposed_payload
+ * actual PDF required
+ *      ↓
+ * intake approved
+ *      ↓
+ * validated PDF
+ *      ↓
+ * private Storage
+ *      ↓
+ * documents metadata
+ *      ↓
+ * intake target = document
+ *      ↓
+ * status = applied
+ *
+ *
+ * We never mark a document intake applied before the private
+ * file and metadata both exist.
+ */
+
+
+/* =========================================================
+ * 31. PDF ATTACHMENT CONTRACT
+ * ======================================================= */
+
+/**
+ * Any confirmed supported intake may include a PDF.
+ *
+ *
+ * The domain fact remains the PRIMARY intake target.
+ *
+ *
+ * The PDF becomes a private supplemental document.
  *
  *
  * Example:
  *
- * {
- *   version: 1,
- *   kind: "finance",
- *   action: "create_income_source",
- *   data: {
- *     name: "الراتب",
- *     amount: 30000,
- *     currency: "AED",
- *     frequency: "monthly",
- *     next_expected_date: null,
- *     notes: null
- *   }
- * }
+ * travel intake
+ * target = trip
  *
- *
- * This records exactly what the user reviewed.
+ * attached PDF
+ *      ↓
+ * documents.trip_id = trip.id
  */
 
 
 /* =========================================================
- * 22. PROPOSAL ≠ EXECUTION
+ * 32. FAILURE BOUNDARY
  * ======================================================= */
 
 /**
- * Persisting:
+ * If domain execution fails:
  *
- * proposed_payload
- *
- * does NOT create:
- *
- * income source
- * budget item
- * goal
- * project
- * learning item
- * career item
+ * intake remains approved.
  *
  *
- * Domain execution still requires its exact executor.
+ * If primary document persistence fails:
+ *
+ * intake remains approved.
+ *
+ *
+ * If a supplemental PDF fails AFTER domain execution:
+ *
+ * the domain fact remains applied.
+ *
+ * LIFE OS does not lie and claim the PDF was saved.
  */
 
 
 /* =========================================================
- * 23. CURRENT EXECUTION MATRIX
+ * 33. OWNERSHIP
  * ======================================================= */
 
 /**
- * note
- *      ↓
- * memory_item ✅
- *
- *
- * finance
- *      ↓
- * approved structured proposal
- *      ↓
- * executor pending
- *
- *
- * plan
- *      ↓
- * approved structured proposal
- *      ↓
- * executor pending
- *
- *
- * growth
- *      ↓
- * approved structured proposal
- *      ↓
- * executor pending
- *
- *
- * travel
- *      ↓
- * approved
- *      ↓
- * travel domain pending
- *
- *
- * document
- *      ↓
- * approved
- *      ↓
- * private storage layer pending
- */
-
-
-/* =========================================================
- * 24. SOURCE TRUST RULE
- * ======================================================= */
-
-/**
- * Confirmation revalidates:
- *
- * preview
- * text
- * PDF metadata
- *
- *
- * Browser cannot provide:
+ * Browser never provides:
  *
  * user_id
- * table name
- * SQL
- * RPC name
- * executor name
- */
-
-
-/* =========================================================
- * 25. OWNERSHIP
- * ======================================================= */
-
-/**
- * user_id is never accepted from browser input.
+ *
  *
  * Ownership comes from:
  *
- * authenticated Supabase session
- *
- * and is enforced again through:
- *
- * PostgreSQL RLS.
+ * verified Supabase auth
+ *      ↓
+ * auth.uid()
+ *      ↓
+ * PostgreSQL RLS
+ *      ↓
+ * Storage RLS
  */
 
 
 /* =========================================================
- * 26. FILE RULE
+ * 34. NO ARBITRARY EXECUTION
  * ======================================================= */
 
 /**
- * PDF bytes are still temporary.
+ * Browser / AI cannot choose:
  *
- * intake_items stores only:
+ * table name
+ * RPC name
+ * SQL
+ * executor
+ * storage owner
  *
- * filename
- * MIME
- * size
  *
- *
- * Permanent PDFs will later move to private Supabase
- * Storage.
+ * The server dispatcher chooses only hard-coded supported
+ * operations.
  */
 
 
 /* =========================================================
- * 27. FINAL V2 RULE
+ * 35. PRIVATE FILE RULE
+ * ======================================================= */
+
+/**
+ * PDFs are stored only in:
+ *
+ * life-os-private-documents
+ *
+ *
+ * public = false
+ *
+ *
+ * Object path starts with:
+ *
+ * auth.uid()
+ *
+ *
+ * No permanent public URL is created.
+ */
+
+
+/* =========================================================
+ * 36. FINAL LIFE OS V2 RULE
  * ======================================================= */
 
 /**
  * AI Suggests
  *      ↓
- * Exact Proposal
+ * Exact Values
  *      ↓
  * User Reviews
  *      ↓
- * User Approves
+ * User Confirms
  *      ↓
- * Proposal Persisted
+ * Server Revalidates
  *      ↓
- * Deterministic Executor
+ * Deterministic Execution
  *      ↓
- * Final Domain Fact
+ * RLS-Protected Fact
  *
  *
  * Simple outside.
  * Intelligent underneath.
+ * Private by default.
  */
