@@ -16,7 +16,7 @@ import {
 
 import {
   APP_NAME,
-  DEFAULT_AUTHENTICATED_ROUTE,
+  LOGIN_ROUTE,
 } from "@/lib/constants";
 
 import {
@@ -29,28 +29,11 @@ import {
 
 
 /* =========================================================
- * LIFE OS V2
- * LOGIN
- *
- * Flow:
- *
- * Email + Password
- *      ↓
- * Supabase Auth
- *      ↓
- * /onboarding
- *      ↓
- * No profile → setup
- * Existing profile → dashboard
- * ======================================================= */
-
-
-/* =========================================================
  * 1. ROUTES
  * ======================================================= */
 
-const AFTER_LOGIN_ROUTE =
-  "/onboarding";
+const AFTER_PASSWORD_ROUTE =
+  "/mfa";
 
 
 /* =========================================================
@@ -59,22 +42,26 @@ const AFTER_LOGIN_ROUTE =
 
 type AuthFlow =
   | "checking"
-  | "login";
+  | "login"
+  | "submitting";
 
 
 /* =========================================================
- * 3. SAFE USER MESSAGES
+ * 3. SAFE MESSAGES
  * ======================================================= */
 
 const AUTH_MESSAGES = {
   loginFailed:
-    "تعذر تسجيل الدخول. تحقق من البيانات وحاول مرة أخرى.",
+    "تعذر تسجيل الدخول. تحقق من البريد الإلكتروني وكلمة المرور.",
 
   authCheckFailed:
-    "تعذر التحقق من حالة الدخول. حاول تسجيل الدخول مرة أخرى.",
+    "تعذر التحقق من حالة الدخول. حاول مرة أخرى.",
 
   invalidLogin:
     "أدخل البريد الإلكتروني وكلمة المرور بشكل صحيح.",
+
+  submitting:
+    "جاري التحقق من بيانات الدخول...",
 } as const;
 
 
@@ -119,60 +106,14 @@ export default function LoginPage() {
 
 
   const [
-    isBusy,
-    setIsBusy,
+    message,
+    setMessage,
   ] =
-    useState(false);
-
-
-  const [
-    errorMessage,
-    setErrorMessage,
-  ] =
-    useState<string | null>(
-      null,
-    );
+    useState("");
 
 
   /* =======================================================
-   * 5. ENTER LIFE OS V2
-   * ===================================================== */
-
-  function enterLifeOS():
-  void {
-    /*
-     * V2 always resolves onboarding first.
-     *
-     * /onboarding decides:
-     *
-     * profile missing
-     *      → show first-time setup
-     *
-     * profile exists
-     *      → redirect to DEFAULT_AUTHENTICATED_ROUTE
-     *
-     *
-     * Prefetching the normal authenticated route keeps the
-     * returning-user transition fast while preserving the
-     * new onboarding decision boundary.
-     */
-
-    router.prefetch(
-      DEFAULT_AUTHENTICATED_ROUTE,
-    );
-
-
-    router.replace(
-      AFTER_LOGIN_ROUTE,
-    );
-
-
-    router.refresh();
-  }
-
-
-  /* =======================================================
-   * 6. INITIAL AUTH CHECK
+   * 5. EXISTING SESSION CHECK
    * ===================================================== */
 
   useEffect(
@@ -181,67 +122,59 @@ export default function LoginPage() {
         true;
 
 
-      async function initialize():
+      async function checkAuthentication():
       Promise<void> {
-        try {
-          const {
-            data,
-            error,
-          } =
-            await supabase.auth
-              .getUser();
+        const {
+          data,
+          error,
+        } =
+          await supabase.auth
+            .getClaims();
 
 
-          if (
-            !active
-          ) {
-            return;
-          }
+        if (
+          !active
+        ) {
+          return;
+        }
 
 
-          /*
-           * Already authenticated.
-           *
-           * Do not guess on the client whether onboarding has
-           * been completed.
-           *
-           * Let /onboarding resolve that on the server.
-           */
-          if (
-            !error &&
-            data.user
-          ) {
-            enterLifeOS();
-
-            return;
-          }
-
-
+        if (
+          error
+        ) {
           setFlow(
             "login",
           );
-        } catch {
-          if (
-            !active
-          ) {
-            return;
-          }
 
-
-          setErrorMessage(
+          setMessage(
             AUTH_MESSAGES
               .authCheckFailed,
           );
 
-
-          setFlow(
-            "login",
-          );
+          return;
         }
+
+
+        if (
+          data?.claims
+        ) {
+          router.replace(
+            AFTER_PASSWORD_ROUTE,
+          );
+
+          router.refresh();
+
+          return;
+        }
+
+
+        setFlow(
+          "login",
+        );
       }
 
 
-      void initialize();
+      void checkAuthentication();
 
 
       return () => {
@@ -249,57 +182,40 @@ export default function LoginPage() {
           false;
       };
     },
-
-    // Supabase client and router remain stable for the
-    // lifetime of this page.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
+    [
+      router,
+      supabase,
+    ],
   );
 
 
   /* =======================================================
-   * 7. PASSWORD LOGIN
+   * 6. LOGIN
    * ===================================================== */
 
   async function handleLogin(
     event:
-      FormEvent<HTMLFormElement>,
+      FormEvent<
+        HTMLFormElement
+      >,
   ):
   Promise<void> {
     event.preventDefault();
 
 
-    if (
-      isBusy
-    ) {
-      return;
-    }
-
-
-    setErrorMessage(
-      null,
-    );
-
-
-    const normalizedEmail =
-      email
-        .trim()
-        .toLowerCase();
-
-
-    const validation =
+    const parsed =
       loginInputSchema.safeParse({
         email:
-          normalizedEmail,
+          email.trim(),
 
         password,
       });
 
 
     if (
-      !validation.success
+      !parsed.success
     ) {
-      setErrorMessage(
+      setMessage(
         AUTH_MESSAGES
           .invalidLogin,
       );
@@ -308,429 +224,306 @@ export default function LoginPage() {
     }
 
 
-    setIsBusy(
-      true,
+    setFlow(
+      "submitting",
+    );
+
+    setMessage(
+      AUTH_MESSAGES
+        .submitting,
     );
 
 
-    try {
-      const {
-        data,
-        error,
-      } =
-        await supabase.auth
-          .signInWithPassword({
-            email:
-              normalizedEmail,
+    const {
+      error,
+    } =
+      await supabase.auth
+        .signInWithPassword({
+          email:
+            parsed.data.email,
 
-            password,
-          });
-
-
-      /*
-       * Never expose raw Supabase authentication errors.
-       */
-      if (
-        error ||
-        !data.user ||
-        !data.session
-      ) {
-        setErrorMessage(
-          AUTH_MESSAGES
-            .loginFailed,
-        );
-
-        return;
-      }
+          password:
+            parsed.data.password,
+        });
 
 
-      /*
-       * Password is no longer needed after successful login.
-       */
+    if (
+      error
+    ) {
       setPassword(
         "",
       );
 
+      setFlow(
+        "login",
+      );
 
-      /*
-       * V2 onboarding router decides whether this is:
-       *
-       * first setup
-       *
-       * or:
-       *
-       * normal returning user.
-       */
-      enterLifeOS();
-    } catch {
-      setErrorMessage(
+      setMessage(
         AUTH_MESSAGES
           .loginFailed,
       );
-    } finally {
-      setIsBusy(
-        false,
+
+      return;
+    }
+
+
+    router.replace(
+      AFTER_PASSWORD_ROUTE,
+    );
+
+    router.refresh();
+  }
+
+
+  /* =======================================================
+   * 7. FIELD CHANGES
+   * ===================================================== */
+
+  function handleEmailChange(
+    value:
+      string,
+  ):
+  void {
+    setEmail(
+      value,
+    );
+
+
+    if (
+      message
+    ) {
+      setMessage(
+        "",
+      );
+    }
+  }
+
+
+  function handlePasswordChange(
+    value:
+      string,
+  ):
+  void {
+    setPassword(
+      value,
+    );
+
+
+    if (
+      message
+    ) {
+      setMessage(
+        "",
       );
     }
   }
 
 
   /* =======================================================
-   * 8. CHECKING SCREEN
+   * 8. RENDER
    * ===================================================== */
 
-  if (
+  const isChecking =
     flow ===
-    "checking"
-  ) {
-    return (
-      <main className="auth-page">
-        <section
-          className="auth-card"
-          aria-live="polite"
-        >
-          <div className="auth-brand">
-
-            <div
-              className="auth-brand__mark"
-              aria-hidden="true"
-            >
-              L
-            </div>
+      "checking";
 
 
-            <h1 className="auth-brand__title">
-              {APP_NAME}
-            </h1>
+  const isSubmitting =
+    flow ===
+      "submitting";
 
-
-            <p className="auth-brand__subtitle">
-              جارٍ التحقق من حالة الدخول...
-            </p>
-
-          </div>
-        </section>
-      </main>
-    );
-  }
-
-
-  /* =======================================================
-   * 9. LOGIN SCREEN
-   * ===================================================== */
 
   return (
     <main className="auth-page">
-      <section className="auth-card">
-
-        {/* ===============================================
-         * BRAND
-         * ============================================= */}
-
-        <div className="auth-brand">
-
+      <section
+        className="auth-card"
+        aria-labelledby="login-title"
+      >
+        <div className="auth-card__header">
           <div
-            className="auth-brand__mark"
+            className="brand-mark"
             aria-hidden="true"
           >
-            L
+            ✦
           </div>
 
+          <div>
+            <p className="eyebrow">
+              {APP_NAME}
+            </p>
 
-          <h1 className="auth-brand__title">
-            {APP_NAME}
-          </h1>
+            <h1
+              id="login-title"
+              className="auth-card__title"
+            >
+              تسجيل الدخول
+            </h1>
 
-
-          <p className="auth-brand__subtitle">
-            حياتك. خططك. قراراتك.
-          </p>
-
+            <p className="auth-card__description">
+              منظومتك الشخصية الخاصة لإدارة المال والأهداف والاستثمارات والتطوير.
+            </p>
+          </div>
         </div>
 
 
-        {/* ===============================================
-         * ERROR
-         * ============================================= */}
-
-        {errorMessage ? (
+        {isChecking ? (
           <div
-            className="alert alert--negative"
-            role="alert"
+            className="notice"
+            role="status"
+            aria-live="polite"
           >
-            {errorMessage}
+            جاري التحقق من حالة الدخول...
           </div>
-        ) : null}
-
-
-        {/* ===============================================
-         * LOGIN FORM
-         * ============================================= */}
-
-        <form
-          className="form"
-          onSubmit={
-            handleLogin
-          }
-        >
-
-          <div className="form-field">
-
-            <label
-              className="form-label"
-              htmlFor="life-os-email"
-            >
-              البريد الإلكتروني
-            </label>
-
-
-            <input
-              id="life-os-email"
-              className="input ltr"
-              type="email"
-              inputMode="email"
-              autoComplete="username"
-              autoCapitalize="none"
-              spellCheck={false}
-              required
-              value={
-                email
-              }
-              disabled={
-                isBusy
-              }
-              onChange={(
-                event,
-              ) => {
-                setEmail(
-                  event.target.value,
-                );
-
-
-                if (
-                  errorMessage
-                ) {
-                  setErrorMessage(
-                    null,
-                  );
-                }
-              }}
-            />
-
-          </div>
-
-
-          <div className="form-field">
-
-            <label
-              className="form-label"
-              htmlFor="life-os-password"
-            >
-              كلمة المرور
-            </label>
-
-
-            <input
-              id="life-os-password"
-              className="input ltr"
-              type="password"
-              autoComplete="current-password"
-              required
-              value={
-                password
-              }
-              disabled={
-                isBusy
-              }
-              onChange={(
-                event,
-              ) => {
-                setPassword(
-                  event.target.value,
-                );
-
-
-                if (
-                  errorMessage
-                ) {
-                  setErrorMessage(
-                    null,
-                  );
-                }
-              }}
-            />
-
-          </div>
-
-
-          <button
-            type="submit"
-            className="button button--primary button--full"
-            disabled={
-              isBusy
+        ) : (
+          <form
+            className="stack"
+            onSubmit={
+              handleLogin
             }
+            noValidate
           >
-            {isBusy
-              ? "جارٍ تسجيل الدخول..."
-              : "تسجيل الدخول"}
-          </button>
+            <label
+              className="field"
+              htmlFor="email"
+            >
+              <span className="field__label">
+                البريد الإلكتروني
+              </span>
 
-        </form>
+              <input
+                id="email"
+                className="input ltr"
+                type="email"
+                inputMode="email"
+                autoComplete="email"
+                autoCapitalize="none"
+                spellCheck={false}
+                value={email}
+                onChange={
+                  (
+                    event,
+                  ) => {
+                    handleEmailChange(
+                      event.target.value,
+                    );
+                  }
+                }
+                placeholder="name@example.com"
+                disabled={
+                  isSubmitting
+                }
+                required
+                autoFocus
+              />
+            </label>
 
 
-        {/* ===============================================
-         * PRIVATE WORKSPACE NOTE
-         * ============================================= */}
+            <label
+              className="field"
+              htmlFor="password"
+            >
+              <span className="field__label">
+                كلمة المرور
+              </span>
 
-        <p
-          className="text-subtle text-small text-center"
-          style={{
-            margin:
-              "18px 0 0",
-          }}
-        >
-          LIFE OS مساحة شخصية خاصة.
+              <input
+                id="password"
+                className="input ltr"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={
+                  (
+                    event,
+                  ) => {
+                    handlePasswordChange(
+                      event.target.value,
+                    );
+                  }
+                }
+                placeholder="••••••••"
+                disabled={
+                  isSubmitting
+                }
+                required
+              />
+            </label>
+
+
+            {message ? (
+              <div
+                className="notice"
+                role="alert"
+                aria-live="polite"
+              >
+                {message}
+              </div>
+            ) : null}
+
+
+            <button
+              className="button button--primary"
+              type="submit"
+              disabled={
+                isSubmitting
+              }
+            >
+              {isSubmitting
+                ? "جاري تسجيل الدخول..."
+                : "متابعة"}
+            </button>
+          </form>
+        )}
+
+
+        <div className="stack stack--small">
+          <div className="space-between">
+            <span className="text-muted text-small">
+              كلمة المرور
+            </span>
+
+            <span className="badge badge--positive">
+              الخطوة الأولى
+            </span>
+          </div>
+
+          <div className="space-between">
+            <span className="text-muted text-small">
+              TOTP / MFA
+            </span>
+
+            <span className="badge badge--positive">
+              إلزامي
+            </span>
+          </div>
+
+          <div className="space-between">
+            <span className="text-muted text-small">
+              مستوى الوصول النهائي
+            </span>
+
+            <strong className="ltr">
+              AAL2
+            </strong>
+          </div>
+        </div>
+
+
+        <p className="text-muted text-small">
+          بعد التحقق من كلمة المرور ستنتقل إلى رمز المصادقة. لن تُفتح البيانات الخاصة قبل اكتمال الخطوتين.
         </p>
 
+
+        <span
+          aria-hidden="true"
+          style={{
+            display:
+              "none",
+          }}
+        >
+          {LOGIN_ROUTE}
+        </span>
       </section>
     </main>
   );
 }
-
-
-/* =========================================================
- * 10. V2 LOGIN FLOW
- * ======================================================= */
-
-/**
- * New user:
- *
- * Login
- *      ↓
- * /onboarding
- *      ↓
- * profile missing
- *      ↓
- * setup
- *      ↓
- * DEFAULT_AUTHENTICATED_ROUTE
- *
- *
- * Returning user:
- *
- * Login
- *      ↓
- * /onboarding
- *      ↓
- * profile exists
- *      ↓
- * DEFAULT_AUTHENTICATED_ROUTE
- */
-
-
-/* =========================================================
- * 11. SECURITY BOUNDARY
- * ======================================================= */
-
-/**
- * Login establishes authentication only.
- *
- * It does NOT determine database ownership.
- *
- *
- * Protection remains:
- *
- * Supabase Auth
- *      ↓
- * Verified JWT
- *      ↓
- * Server-side identity
- *      ↓
- * PostgreSQL RLS
- *      ↓
- * Row ownership
- */
-
-
-/* =========================================================
- * 12. CLIENT DATA RULE
- * ======================================================= */
-
-/**
- * The browser does NOT ask:
- *
- * "Does this user have a profile?"
- *
- * That decision belongs to:
- *
- * /onboarding
- *
- * on the server.
- *
- * This keeps V2 routing simple and avoids duplicating
- * sensitive data logic inside the login client.
- */
-
-
-/* =========================================================
- * 13. ROUTE COMPATIBILITY RULE
- * ======================================================= */
-
-/**
- * DEFAULT_AUTHENTICATED_ROUTE remains the canonical normal
- * private destination for LIFE OS.
- *
- * V2 does not remove that route.
- *
- * Instead:
- *
- * Login
- *      ↓
- * /onboarding
- *      ↓
- * DEFAULT_AUTHENTICATED_ROUTE
- *
- *
- * This preserves compatibility with existing LIFE OS routing
- * and security tests while allowing first-time onboarding.
- */
-
-
-/* =========================================================
- * 14. SECRET HANDLING
- * ======================================================= */
-
-/**
- * Password:
- *
- * - exists only temporarily in component state
- * - is cleared after successful login
- * - is never stored in LIFE OS tables
- * - is never logged
- * - is never sent to OpenAI
- */
-
-
-/* =========================================================
- * 15. FINAL V2 LOGIN RULE
- * ======================================================= */
-
-/**
- * Authentication decides:
- *
- * "Who are you?"
- *
- *
- * Onboarding decides:
- *
- * "Is LIFE OS ready for you?"
- *
- *
- * DEFAULT_AUTHENTICATED_ROUTE decides:
- *
- * "Where does the ready workspace begin?"
- *
- *
- * The dashboard should never be responsible for
- * authentication or first-time setup.
- */
