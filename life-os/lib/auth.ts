@@ -9,7 +9,6 @@ import {
 import {
   DEFAULT_AUTHENTICATED_ROUTE,
   LOGIN_ROUTE,
-  REQUIRED_AUTHENTICATION_LEVEL,
 } from "@/lib/constants";
 
 import {
@@ -27,15 +26,7 @@ import {
 
 
 /* =========================================================
- * 1. AUTHENTICATION ROUTES
- * ======================================================= */
-
-export const MFA_ROUTE =
-  "/mfa";
-
-
-/* =========================================================
- * 2. AUTHENTICATION TYPES
+ * 1. AUTHENTICATION TYPES
  * ======================================================= */
 
 export type AuthenticatorAssuranceLevel =
@@ -85,12 +76,11 @@ export interface AuthenticationState {
 
 
 /* =========================================================
- * 3. AUTHENTICATION ERRORS
+ * 2. AUTHENTICATION ERROR
  * ======================================================= */
 
 export type AuthenticationErrorCode =
-  | "UNAUTHENTICATED"
-  | "MFA_REQUIRED";
+  | "UNAUTHENTICATED";
 
 
 export class AuthenticationError
@@ -104,10 +94,7 @@ export class AuthenticationError
       AuthenticationErrorCode,
   ) {
     super(
-      code ===
-        "MFA_REQUIRED"
-        ? "Multi-factor authentication is required."
-        : "Authentication is required.",
+      "Authentication is required.",
     );
 
 
@@ -122,7 +109,7 @@ export class AuthenticationError
 
 
 /* =========================================================
- * 4. CLAIM HELPERS
+ * 3. CLAIM HELPERS
  * ======================================================= */
 
 function getClaimString(
@@ -342,146 +329,33 @@ Promise<AuthenticationState> {
   }
 
 
-  const {
-    data:
-      assuranceData,
-    error:
-      assuranceError,
-  } =
-    await supabase.auth.mfa
-      .getAuthenticatorAssuranceLevel();
-
-
-  const currentLevel =
-    assuranceError
-      ? identity.aal
-      : normalizeAal(
-          assuranceData
-            ?.currentLevel,
-        ) ??
-        identity.aal;
-
-
-  const nextLevel =
-    assuranceError
-      ? currentLevel
-      : normalizeAal(
-          assuranceData
-            ?.nextLevel,
-        ) ??
-        currentLevel;
-
-
-  if (
-    currentLevel ===
-      REQUIRED_AUTHENTICATION_LEVEL
-  ) {
-    return {
-      authenticated:
-        true,
-
-      identity: {
-        ...identity,
-
-        aal:
-          currentLevel,
-      },
-
-      current_level:
-        currentLevel,
-
-      next_level:
-        nextLevel,
-
-      mfa_action:
-        "none",
-    };
-  }
-
-
-  const {
-    data:
-      factorsData,
-    error:
-      factorsError,
-  } =
-    await supabase.auth.mfa
-      .listFactors();
-
-
-  if (
-    factorsError
-  ) {
-    return {
-      authenticated:
-        true,
-
-      identity: {
-        ...identity,
-
-        aal:
-          currentLevel,
-      },
-
-      current_level:
-        currentLevel,
-
-      next_level:
-        nextLevel,
-
-      mfa_action:
-        "unknown",
-    };
-  }
-
-
-  const hasVerifiedTotp =
-    factorsData
-      ?.totp
-      ?.some(
-        (
-          factor,
-        ) =>
-          factor.status ===
-            "verified",
-      ) ??
-    false;
-
-
   return {
     authenticated:
       true,
 
-    identity: {
-      ...identity,
-
-      aal:
-        currentLevel,
-    },
+    identity,
 
     current_level:
-      currentLevel,
+      identity.aal,
 
     next_level:
-      nextLevel,
+      identity.aal,
 
     mfa_action:
-      hasVerifiedTotp
-        ? "verify"
-        : "enroll",
+      "none",
   };
 }
 
 
 /* =========================================================
- * 8. ASSERT AUTHENTICATED IDENTITY
+ * 7. ASSERT AUTHENTICATED IDENTITY
  * ======================================================= */
 
 /**
  * Canonical private API and data-layer assertion.
  *
- * A verified session is not sufficient until the current JWT
- * has been promoted to the required AAL2 level.
+ * A verified email-and-password session is sufficient.
+ * PostgreSQL RLS still enforces row ownership.
  */
 export async function assertAuthenticatedIdentity():
 Promise<VerifiedAuthIdentity> {
@@ -498,26 +372,17 @@ Promise<VerifiedAuthIdentity> {
   }
 
 
-  if (
-    identity.aal !==
-      REQUIRED_AUTHENTICATION_LEVEL
-  ) {
-    throw new AuthenticationError(
-      "MFA_REQUIRED",
-    );
-  }
-
-
   return identity;
 }
 
 
 /* =========================================================
- * 9. ASSERT AAL2 IDENTITY
+ * 8. LEGACY AAL2 ASSERTION ALIAS
  * ======================================================= */
 
 /**
- * Required by private APIs and private data operations.
+ * Backward-compatible name used by existing modules.
+ * It now verifies authentication without requiring MFA.
  */
 export async function assertAAL2Identity():
 Promise<VerifiedAuthIdentity> {
@@ -526,7 +391,7 @@ Promise<VerifiedAuthIdentity> {
 
 
 /* =========================================================
- * 10. OPTIONAL AAL2 IDENTITY
+ * 9. LEGACY OPTIONAL IDENTITY ALIAS
  * ======================================================= */
 
 export async function getAAL2Identity():
@@ -534,32 +399,18 @@ Promise<
   VerifiedAuthIdentity |
   null
 > {
-  const identity =
-    await getVerifiedAuthIdentity();
-
-
-  if (
-    !identity ||
-    identity.aal !==
-      REQUIRED_AUTHENTICATION_LEVEL
-  ) {
-    return null;
-  }
-
-
-  return identity;
+  return getVerifiedAuthIdentity();
 }
 
 
 /* =========================================================
- * 11. PAGE GUARD — AUTHENTICATED
+ * 10. PAGE GUARD — AUTHENTICATED
  * ======================================================= */
 
 /**
  * Canonical private page guard.
  *
- * The /mfa browser flow uses the browser client directly and
- * therefore does not call this private-page guard.
+ * Users without a verified session are redirected to login.
  */
 export async function requireAuthenticatedIdentity():
 Promise<VerifiedAuthIdentity> {
@@ -577,26 +428,16 @@ Promise<VerifiedAuthIdentity> {
   }
 
 
-  if (
-    state.current_level !==
-      REQUIRED_AUTHENTICATION_LEVEL
-  ) {
-    redirect(
-      MFA_ROUTE,
-    );
-  }
-
-
   return state.identity;
 }
 
 
 /* =========================================================
- * 12. PAGE GUARD — AAL2
+ * 11. LEGACY PAGE GUARD ALIAS
  * ======================================================= */
 
 /**
- * Private LIFE OS pages require AAL2.
+ * Backward-compatible name used by existing pages.
  */
 export async function requireAAL2Identity():
 Promise<VerifiedAuthIdentity> {
@@ -605,7 +446,7 @@ Promise<VerifiedAuthIdentity> {
 
 
 /* =========================================================
- * 13. LOGIN PAGE REDIRECT
+ * 12. LOGIN PAGE REDIRECT
  * ======================================================= */
 
 export async function redirectIfFullyAuthenticated():
@@ -615,30 +456,17 @@ Promise<void> {
 
 
   if (
-    !state.authenticated
-  ) {
-    return;
-  }
-
-
-  if (
-    state.current_level ===
-      REQUIRED_AUTHENTICATION_LEVEL
+    state.authenticated
   ) {
     redirect(
       DEFAULT_AUTHENTICATED_ROUTE,
     );
   }
-
-
-  redirect(
-    MFA_ROUTE,
-  );
 }
 
 
 /* =========================================================
- * 14. FRESH AUTHENTICATED USER
+ * 13. FRESH AUTHENTICATED USER
  * ======================================================= */
 
 export async function getFreshAuthenticatedUser():
@@ -713,8 +541,8 @@ Promise<User> {
  * ======================================================= */
 
 /**
- * Private data operations derive user_id from a verified AAL2
- * identity.
+ * Private data operations derive user_id from a verified
+ * authenticated identity.
  */
 export async function requireAAL2UserId():
 Promise<UUID> {
@@ -736,16 +564,7 @@ Promise<UUID> {
  * /login
  *
  *
- * Password verified
- *      ↓
- * AAL1
- *      ↓
- * /mfa
- *
- *
- * TOTP enrolled and verified
- *      ↓
- * AAL2
+ * Email and password verified
  *      ↓
  * private LIFE OS access
  *
@@ -753,8 +572,6 @@ Promise<UUID> {
  * Authorization proof:
  *
  * verified JWT claims
- * +
- * AAL2
  * +
  * server-derived user identity
  * +
@@ -771,3 +588,4 @@ Promise<UUID> {
  * - expose privileged credentials
  * - weaken RLS because application guards exist
  */
+
