@@ -25,64 +25,187 @@ import type {
   TaskStatus,
 } from "@/lib/types";
 
-export const APP_NAME = "LIFE OS";
 
-export const APP_VERSION = "2.0.0-beta.1";
+/* =========================================================
+ * LIFE OS V2
+ * FINAL APPLICATION CONSTANTS
+ *
+ * Product structure:
+ *
+ * الرئيسية
+ * المال
+ * خططي
+ * السفر
+ * التطوير
+ * LIFE AI
+ *
+ *
+ * Authentication:
+ *
+ * password-authenticated verified session
+ * AAL1 minimum
+ *
+ *
+ * Permanent safety rule:
+ *
+ * AI Suggests
+ *      ↓
+ * User Reviews
+ *      ↓
+ * User Approves
+ *      ↓
+ * Deterministic System Executes
+ *
+ *
+ * Simple outside.
+ * Intelligent underneath.
+ * Private by default.
+ * ======================================================= */
 
-export const APP_PHASE = "V2";
+
+/* =========================================================
+ * 1. APPLICATION IDENTITY
+ * ======================================================= */
+
+export const APP_NAME =
+  "LIFE OS";
+
+
+export const APP_VERSION =
+  "2.0.0";
+
+
+export const APP_PHASE =
+  "V2";
+
 
 export const APP_DESCRIPTION =
   "Personal AI Operating System";
 
-export const APP_LANGUAGE = "ar";
 
-export const APP_LOCALE = "ar-AE";
+export const APP_LANGUAGE =
+  "ar";
 
-export const APP_DIRECTION = "rtl";
 
-export const DEFAULT_CURRENCY = "AED";
+export const APP_LOCALE =
+  "ar-AE";
 
-export const DEFAULT_TIMEZONE = "Asia/Dubai";
+
+export const APP_DIRECTION =
+  "rtl";
+
+
+/* =========================================================
+ * 2. DEFAULTS
+ * ======================================================= */
+
+export const DEFAULT_CURRENCY =
+  "AED";
+
+
+export const DEFAULT_TIMEZONE =
+  "Asia/Dubai";
+
+
+/* =========================================================
+ * 3. PRODUCT PRINCIPLES
+ * ======================================================= */
 
 export const PRODUCT_PRINCIPLE =
   "Simple outside. Intelligent underneath.";
 
+
 export const SECURITY_PRINCIPLE =
   "AI Suggests → User Reviews → User Approves → System Executes";
 
-export const AI_ROLE = "advisor";
 
-export const MAX_DASHBOARD_PRIORITIES = 3;
+export const AI_ROLE =
+  "advisor";
 
-export const MAX_DASHBOARD_GOALS = 5;
 
-export const MAX_DASHBOARD_PROJECTS = 5;
+/* =========================================================
+ * 4. DASHBOARD LIMITS
+ * ======================================================= */
 
-export const MAX_DASHBOARD_TASKS = 5;
+export const MAX_DASHBOARD_PRIORITIES =
+  3;
 
-export const MAX_DASHBOARD_LEARNING_ITEMS = 5;
 
-export const DEFAULT_PAGE_SIZE = 20;
+export const MAX_DASHBOARD_GOALS =
+  5;
 
-export const AUDIT_PAGE_SIZE = 50;
 
-export const MAX_PAGE_SIZE = 100;
+export const MAX_DASHBOARD_PROJECTS =
+  5;
 
-export const AI_MAX_USER_MESSAGE_LENGTH = 4_000;
 
-export const AI_MAX_TOOL_CALLS = 7;
+export const MAX_DASHBOARD_TASKS =
+  5;
 
-export const AI_MAX_CONTEXT_ITEMS_PER_CATEGORY = 10;
 
-export const AI_MAX_RECOMMENDATIONS = 3;
+export const MAX_DASHBOARD_LEARNING_ITEMS =
+  5;
 
-export const DECISION_MAX_SCENARIOS = 3;
 
-export const OPPORTUNITY_MAX_RESULTS = 5;
+export const MAX_DASHBOARD_TRIPS =
+  5;
 
-export const OPPORTUNITY_MIN_FIT_SCORE = 0;
 
-export const OPPORTUNITY_MAX_FIT_SCORE = 100;
+/* =========================================================
+ * 5. PAGINATION
+ * ======================================================= */
+
+export const DEFAULT_PAGE_SIZE =
+  20;
+
+
+export const AUDIT_PAGE_SIZE =
+  50;
+
+
+export const MAX_PAGE_SIZE =
+  100;
+
+
+/* =========================================================
+ * 6. AI LIMITS
+ * ======================================================= */
+
+export const AI_MAX_USER_MESSAGE_LENGTH =
+  4_000;
+
+
+export const AI_MAX_TOOL_CALLS =
+  7;
+
+
+export const AI_MAX_CONTEXT_ITEMS_PER_CATEGORY =
+  10;
+
+
+export const AI_MAX_RECOMMENDATIONS =
+  3;
+
+
+export const DECISION_MAX_SCENARIOS =
+  3;
+
+
+export const OPPORTUNITY_MAX_RESULTS =
+  5;
+
+
+export const OPPORTUNITY_MIN_FIT_SCORE =
+  0;
+
+
+export const OPPORTUNITY_MAX_FIT_SCORE =
+  100;
+
+
+/* =========================================================
+ * 7. PRIORITIES
+ * ======================================================= */
 
 export const PRIORITIES = [
   "low",
@@ -90,11 +213,26 @@ export const PRIORITIES = [
   "high",
 ] as const satisfies readonly Priority[];
 
-export const PRIORITY_LABELS: Record<Priority, string> = {
-  low: "منخفض",
-  medium: "متوسط",
-  high: "مرتفع",
+
+export const PRIORITY_LABELS:
+Record<
+  Priority,
+  string
+> = {
+  low:
+    "منخفض",
+
+  medium:
+    "متوسط",
+
+  high:
+    "مرتفع",
 };
+
+
+/* =========================================================
+ * 8. FREQUENCIES
+ * ======================================================= */
 
 export const FREQUENCIES = [
   "monthly",
@@ -103,12 +241,29 @@ export const FREQUENCIES = [
   "other",
 ] as const satisfies readonly Frequency[];
 
-export const FREQUENCY_LABELS: Record<Frequency, string> = {
-  monthly: "شهري",
-  annual: "سنوي",
-  one_time: "مرة واحدة",
-  other: "أخرى",
+
+export const FREQUENCY_LABELS:
+Record<
+  Frequency,
+  string
+> = {
+  monthly:
+    "شهري",
+
+  annual:
+    "سنوي",
+
+  one_time:
+    "مرة واحدة",
+
+  other:
+    "أخرى",
 };
+
+
+/* =========================================================
+ * 9. GOAL STATUSES
+ * ======================================================= */
 
 export const GOAL_STATUSES = [
   "planned",
@@ -118,13 +273,32 @@ export const GOAL_STATUSES = [
   "cancelled",
 ] as const satisfies readonly GoalStatus[];
 
-export const GOAL_STATUS_LABELS: Record<GoalStatus, string> = {
-  planned: "مخطط",
-  active: "قيد العمل",
-  paused: "مؤجل",
-  completed: "مكتمل",
-  cancelled: "ملغي",
+
+export const GOAL_STATUS_LABELS:
+Record<
+  GoalStatus,
+  string
+> = {
+  planned:
+    "مخطط",
+
+  active:
+    "قيد العمل",
+
+  paused:
+    "مؤجل",
+
+  completed:
+    "مكتمل",
+
+  cancelled:
+    "ملغي",
 };
+
+
+/* =========================================================
+ * 10. GOAL CATEGORIES
+ * ======================================================= */
 
 export const GOAL_CATEGORIES = [
   "finance",
@@ -139,21 +313,47 @@ export const GOAL_CATEGORIES = [
   "other",
 ] as const satisfies readonly GoalCategory[];
 
-export const GOAL_CATEGORY_LABELS: Record<
+
+export const GOAL_CATEGORY_LABELS:
+Record<
   GoalCategory,
   string
 > = {
-  finance: "المالية",
-  investments: "الاستثمارات",
-  career: "المسار المهني",
-  learning: "التعلم",
-  education: "التعليم",
-  business: "البزنس",
-  travel: "السفر",
-  fitness: "اللياقة",
-  personal: "شخصي",
-  other: "أخرى",
+  finance:
+    "المالية",
+
+  investments:
+    "الاستثمارات",
+
+  career:
+    "المسار المهني",
+
+  learning:
+    "التعلم",
+
+  education:
+    "التعليم",
+
+  business:
+    "البزنس",
+
+  travel:
+    "السفر",
+
+  fitness:
+    "اللياقة",
+
+  personal:
+    "شخصي",
+
+  other:
+    "أخرى",
 };
+
+
+/* =========================================================
+ * 11. PROJECT STATUSES
+ * ======================================================= */
 
 export const PROJECT_STATUSES = [
   "planned",
@@ -164,17 +364,35 @@ export const PROJECT_STATUSES = [
   "cancelled",
 ] as const satisfies readonly ProjectStatus[];
 
-export const PROJECT_STATUS_LABELS: Record<
+
+export const PROJECT_STATUS_LABELS:
+Record<
   ProjectStatus,
   string
 > = {
-  planned: "مخطط",
-  active: "قيد العمل",
-  blocked: "متعطل",
-  paused: "مؤجل",
-  completed: "مكتمل",
-  cancelled: "ملغي",
+  planned:
+    "مخطط",
+
+  active:
+    "قيد العمل",
+
+  blocked:
+    "متعطل",
+
+  paused:
+    "مؤجل",
+
+  completed:
+    "مكتمل",
+
+  cancelled:
+    "ملغي",
 };
+
+
+/* =========================================================
+ * 12. PROJECT CATEGORIES
+ * ======================================================= */
 
 export const PROJECT_CATEGORIES = [
   "ai",
@@ -189,21 +407,47 @@ export const PROJECT_CATEGORIES = [
   "other",
 ] as const satisfies readonly ProjectCategory[];
 
-export const PROJECT_CATEGORY_LABELS: Record<
+
+export const PROJECT_CATEGORY_LABELS:
+Record<
   ProjectCategory,
   string
 > = {
-  ai: "الذكاء الاصطناعي",
-  career: "المسار المهني",
-  education: "التعليم",
-  finance: "المالية",
-  investments: "الاستثمارات",
-  business: "البزنس",
-  travel: "السفر",
-  fitness: "اللياقة",
-  personal: "شخصي",
-  other: "أخرى",
+  ai:
+    "الذكاء الاصطناعي",
+
+  career:
+    "المسار المهني",
+
+  education:
+    "التعليم",
+
+  finance:
+    "المالية",
+
+  investments:
+    "الاستثمارات",
+
+  business:
+    "البزنس",
+
+  travel:
+    "السفر",
+
+  fitness:
+    "اللياقة",
+
+  personal:
+    "شخصي",
+
+  other:
+    "أخرى",
 };
+
+
+/* =========================================================
+ * 13. TASK STATUSES
+ * ======================================================= */
 
 export const TASK_STATUSES = [
   "pending",
@@ -212,12 +456,29 @@ export const TASK_STATUSES = [
   "cancelled",
 ] as const satisfies readonly TaskStatus[];
 
-export const TASK_STATUS_LABELS: Record<TaskStatus, string> = {
-  pending: "بانتظار التنفيذ",
-  active: "قيد العمل",
-  completed: "مكتمل",
-  cancelled: "ملغي",
+
+export const TASK_STATUS_LABELS:
+Record<
+  TaskStatus,
+  string
+> = {
+  pending:
+    "بانتظار التنفيذ",
+
+  active:
+    "قيد العمل",
+
+  completed:
+    "مكتمل",
+
+  cancelled:
+    "ملغي",
 };
+
+
+/* =========================================================
+ * 14. BUDGET CATEGORIES
+ * ======================================================= */
 
 export const BUDGET_CATEGORIES = [
   "family",
@@ -233,22 +494,50 @@ export const BUDGET_CATEGORIES = [
   "other",
 ] as const satisfies readonly BudgetCategory[];
 
-export const BUDGET_CATEGORY_LABELS: Record<
+
+export const BUDGET_CATEGORY_LABELS:
+Record<
   BudgetCategory,
   string
 > = {
-  family: "العائلة",
-  housing: "السكن",
-  debt: "القروض والالتزامات",
-  transport: "المواصلات",
-  personal: "المصاريف الشخصية",
-  travel: "السفر",
-  emergency: "الطوارئ",
-  investments: "الاستثمارات",
-  education: "التعليم",
-  business: "البزنس",
-  other: "أخرى",
+  family:
+    "العائلة",
+
+  housing:
+    "السكن",
+
+  debt:
+    "القروض والالتزامات",
+
+  transport:
+    "المواصلات",
+
+  personal:
+    "المصاريف الشخصية",
+
+  travel:
+    "السفر",
+
+  emergency:
+    "الطوارئ",
+
+  investments:
+    "الاستثمارات",
+
+  education:
+    "التعليم",
+
+  business:
+    "البزنس",
+
+  other:
+    "أخرى",
 };
+
+
+/* =========================================================
+ * 15. BUDGET ITEM TYPES
+ * ======================================================= */
 
 export const BUDGET_ITEM_TYPES = [
   "expense",
@@ -257,15 +546,29 @@ export const BUDGET_ITEM_TYPES = [
   "debt",
 ] as const satisfies readonly BudgetItemType[];
 
-export const BUDGET_ITEM_TYPE_LABELS: Record<
+
+export const BUDGET_ITEM_TYPE_LABELS:
+Record<
   BudgetItemType,
   string
 > = {
-  expense: "مصروف",
-  saving: "توفير",
-  investment: "استثمار",
-  debt: "التزام",
+  expense:
+    "مصروف",
+
+  saving:
+    "توفير",
+
+  investment:
+    "استثمار",
+
+  debt:
+    "التزام",
 };
+
+
+/* =========================================================
+ * 16. INVESTMENT ASSET TYPES
+ * ======================================================= */
 
 export const INVESTMENT_ASSET_TYPES = [
   "stock",
@@ -276,17 +579,35 @@ export const INVESTMENT_ASSET_TYPES = [
   "other",
 ] as const satisfies readonly InvestmentAssetType[];
 
-export const INVESTMENT_ASSET_TYPE_LABELS: Record<
+
+export const INVESTMENT_ASSET_TYPE_LABELS:
+Record<
   InvestmentAssetType,
   string
 > = {
-  stock: "سهم",
-  etf: "صندوق ETF",
-  sukuk: "صكوك",
-  fund: "صندوق",
-  cash: "نقد",
-  other: "أخرى",
+  stock:
+    "سهم",
+
+  etf:
+    "صندوق ETF",
+
+  sukuk:
+    "صكوك",
+
+  fund:
+    "صندوق",
+
+  cash:
+    "نقد",
+
+  other:
+    "أخرى",
 };
+
+
+/* =========================================================
+ * 17. INVESTMENT TRANSACTION TYPES
+ * ======================================================= */
 
 export const INVESTMENT_TRANSACTION_TYPES = [
   "buy",
@@ -296,16 +617,32 @@ export const INVESTMENT_TRANSACTION_TYPES = [
   "adjustment",
 ] as const satisfies readonly InvestmentTransactionType[];
 
-export const INVESTMENT_TRANSACTION_TYPE_LABELS: Record<
+
+export const INVESTMENT_TRANSACTION_TYPE_LABELS:
+Record<
   InvestmentTransactionType,
   string
 > = {
-  buy: "شراء",
-  sell: "بيع",
-  dividend: "توزيعات",
-  fee: "رسوم",
-  adjustment: "تعديل",
+  buy:
+    "شراء",
+
+  sell:
+    "بيع",
+
+  dividend:
+    "توزيعات",
+
+  fee:
+    "رسوم",
+
+  adjustment:
+    "تعديل",
 };
+
+
+/* =========================================================
+ * 18. LEARNING ITEM TYPES
+ * ======================================================= */
 
 export const LEARNING_ITEM_TYPES = [
   "course",
@@ -316,17 +653,35 @@ export const LEARNING_ITEM_TYPES = [
   "other",
 ] as const satisfies readonly LearningItemType[];
 
-export const LEARNING_ITEM_TYPE_LABELS: Record<
+
+export const LEARNING_ITEM_TYPE_LABELS:
+Record<
   LearningItemType,
   string
 > = {
-  course: "دورة",
-  certification: "شهادة مهنية",
-  learning_path: "مسار تعليمي",
-  masters: "ماجستير",
-  university_program: "برنامج جامعي",
-  other: "أخرى",
+  course:
+    "دورة",
+
+  certification:
+    "شهادة مهنية",
+
+  learning_path:
+    "مسار تعليمي",
+
+  masters:
+    "ماجستير",
+
+  university_program:
+    "برنامج جامعي",
+
+  other:
+    "أخرى",
 };
+
+
+/* =========================================================
+ * 19. LEARNING STATUSES
+ * ======================================================= */
 
 export const LEARNING_STATUSES = [
   "planned",
@@ -336,16 +691,32 @@ export const LEARNING_STATUSES = [
   "dropped",
 ] as const satisfies readonly LearningStatus[];
 
-export const LEARNING_STATUS_LABELS: Record<
+
+export const LEARNING_STATUS_LABELS:
+Record<
   LearningStatus,
   string
 > = {
-  planned: "مخطط",
-  active: "قيد الدراسة",
-  completed: "مكتمل",
-  paused: "مؤجل",
-  dropped: "متوقف",
+  planned:
+    "مخطط",
+
+  active:
+    "قيد الدراسة",
+
+  completed:
+    "مكتمل",
+
+  paused:
+    "مؤجل",
+
+  dropped:
+    "متوقف",
 };
+
+
+/* =========================================================
+ * 20. CAREER ITEM TYPES
+ * ======================================================= */
 
 export const CAREER_ITEM_TYPES = [
   "current_role",
@@ -356,17 +727,35 @@ export const CAREER_ITEM_TYPES = [
   "gap",
 ] as const satisfies readonly CareerItemType[];
 
-export const CAREER_ITEM_TYPE_LABELS: Record<
+
+export const CAREER_ITEM_TYPE_LABELS:
+Record<
   CareerItemType,
   string
 > = {
-  current_role: "الدور الحالي",
-  target_role: "الدور المستهدف",
-  skill: "مهارة",
-  achievement: "إنجاز",
-  milestone: "محطة مهنية",
-  gap: "فجوة تطويرية",
+  current_role:
+    "الدور الحالي",
+
+  target_role:
+    "الدور المستهدف",
+
+  skill:
+    "مهارة",
+
+  achievement:
+    "إنجاز",
+
+  milestone:
+    "محطة مهنية",
+
+  gap:
+    "فجوة تطويرية",
 };
+
+
+/* =========================================================
+ * 21. CAREER STATUSES
+ * ======================================================= */
 
 export const CAREER_STATUSES = [
   "active",
@@ -375,15 +764,29 @@ export const CAREER_STATUSES = [
   "archived",
 ] as const satisfies readonly CareerStatus[];
 
-export const CAREER_STATUS_LABELS: Record<
+
+export const CAREER_STATUS_LABELS:
+Record<
   CareerStatus,
   string
 > = {
-  active: "نشط",
-  planned: "مخطط",
-  completed: "مكتمل",
-  archived: "مؤرشف",
+  active:
+    "نشط",
+
+  planned:
+    "مخطط",
+
+  completed:
+    "مكتمل",
+
+  archived:
+    "مؤرشف",
 };
+
+
+/* =========================================================
+ * 22. MEMORY CATEGORIES
+ * ======================================================= */
 
 export const MEMORY_CATEGORIES = [
   "finance",
@@ -401,24 +804,56 @@ export const MEMORY_CATEGORIES = [
   "other",
 ] as const satisfies readonly MemoryCategory[];
 
-export const MEMORY_CATEGORY_LABELS: Record<
+
+export const MEMORY_CATEGORY_LABELS:
+Record<
   MemoryCategory,
   string
 > = {
-  finance: "المالية",
-  investments: "الاستثمارات",
-  career: "المسار المهني",
-  learning: "التعلم",
-  education: "التعليم",
-  projects: "المشاريع",
-  travel: "السفر",
-  fitness: "اللياقة",
-  personal: "شخصي",
-  preference: "تفضيل",
-  constraint: "قيد",
-  decision: "قرار",
-  other: "أخرى",
+  finance:
+    "المالية",
+
+  investments:
+    "الاستثمارات",
+
+  career:
+    "المسار المهني",
+
+  learning:
+    "التعلم",
+
+  education:
+    "التعليم",
+
+  projects:
+    "المشاريع",
+
+  travel:
+    "السفر",
+
+  fitness:
+    "اللياقة",
+
+  personal:
+    "شخصي",
+
+  preference:
+    "تفضيل",
+
+  constraint:
+    "قيد",
+
+  decision:
+    "قرار",
+
+  other:
+    "أخرى",
 };
+
+
+/* =========================================================
+ * 23. AI RECOMMENDATION CATEGORIES
+ * ======================================================= */
 
 export const AI_RECOMMENDATION_CATEGORIES = [
   "general",
@@ -435,23 +870,53 @@ export const AI_RECOMMENDATION_CATEGORIES = [
   "decision",
 ] as const satisfies readonly AIRecommendationCategory[];
 
-export const AI_RECOMMENDATION_CATEGORY_LABELS: Record<
+
+export const AI_RECOMMENDATION_CATEGORY_LABELS:
+Record<
   AIRecommendationCategory,
   string
 > = {
-  general: "عام",
-  finance: "المالية",
-  investments: "الاستثمارات",
-  goals: "الأهداف",
-  projects: "المشاريع",
-  career: "المسار المهني",
-  learning: "التعلم",
-  education: "التعليم",
-  travel: "السفر",
-  fitness: "اللياقة",
-  opportunity: "فرصة",
-  decision: "قرار",
+  general:
+    "عام",
+
+  finance:
+    "المالية",
+
+  investments:
+    "الاستثمارات",
+
+  goals:
+    "الأهداف",
+
+  projects:
+    "المشاريع",
+
+  career:
+    "المسار المهني",
+
+  learning:
+    "التعلم",
+
+  education:
+    "التعليم",
+
+  travel:
+    "السفر",
+
+  fitness:
+    "اللياقة",
+
+  opportunity:
+    "فرصة",
+
+  decision:
+    "قرار",
 };
+
+
+/* =========================================================
+ * 24. AI RECOMMENDATION STATUSES
+ * ======================================================= */
 
 export const AI_RECOMMENDATION_STATUSES = [
   "new",
@@ -460,16 +925,38 @@ export const AI_RECOMMENDATION_STATUSES = [
   "dismissed",
 ] as const satisfies readonly AIRecommendationStatus[];
 
-export const AI_RECOMMENDATION_STATUS_LABELS: Record<
+
+export const AI_RECOMMENDATION_STATUS_LABELS:
+Record<
   AIRecommendationStatus,
   string
 > = {
-  new: "جديد",
-  reviewed: "تمت المراجعة",
-  accepted: "مقبول",
-  dismissed: "مستبعد",
+  new:
+    "جديد",
+
+  reviewed:
+    "تمت المراجعة",
+
+  accepted:
+    "مقبول",
+
+  dismissed:
+    "مستبعد",
 };
 
+
+/* =========================================================
+ * 25. AI RECOMMENDATION ENTITY TYPES
+ * ======================================================= */
+
+/**
+ * Keep this aligned with the frozen AIRecommendationEntityType
+ * domain contract.
+ *
+ * Travel recommendations may use category="travel" without
+ * inventing a new entity type until the shared type contract
+ * explicitly supports one.
+ */
 export const AI_RECOMMENDATION_ENTITY_TYPES = [
   "goal",
   "project",
@@ -479,6 +966,18 @@ export const AI_RECOMMENDATION_ENTITY_TYPES = [
   "task",
 ] as const satisfies readonly AIRecommendationEntityType[];
 
+
+/* =========================================================
+ * 26. AI TOOL NAMES
+ * ======================================================= */
+
+/**
+ * V2 LIFE AI is read-oriented.
+ *
+ * Travel data is currently supplied through the controlled
+ * context builder rather than granting AI an arbitrary Travel
+ * write tool.
+ */
 export const AI_TOOL_NAMES = [
   "get_dashboard_snapshot",
   "get_finance_snapshot",
@@ -488,6 +987,11 @@ export const AI_TOOL_NAMES = [
   "simulate_decision",
   "search_opportunities",
 ] as const satisfies readonly AIToolName[];
+
+
+/* =========================================================
+ * 27. PROHIBITED AI ACTIONS
+ * ======================================================= */
 
 export const PROHIBITED_AI_ACTIONS = [
   "transfer_money",
@@ -503,6 +1007,11 @@ export const PROHIBITED_AI_ACTIONS = [
   "execute_shell_command",
 ] as const satisfies readonly ProhibitedAIAction[];
 
+
+/* =========================================================
+ * 28. OPPORTUNITY CATEGORIES
+ * ======================================================= */
+
 export const OPPORTUNITY_CATEGORIES = [
   "course",
   "certification",
@@ -512,17 +1021,35 @@ export const OPPORTUNITY_CATEGORIES = [
   "development",
 ] as const satisfies readonly OpportunityCategory[];
 
-export const OPPORTUNITY_CATEGORY_LABELS: Record<
+
+export const OPPORTUNITY_CATEGORY_LABELS:
+Record<
   OpportunityCategory,
   string
 > = {
-  course: "دورة",
-  certification: "شهادة مهنية",
-  job: "فرصة وظيفية",
-  education: "فرصة تعليمية",
-  professional_program: "برنامج مهني",
-  development: "فرصة تطوير",
+  course:
+    "دورة",
+
+  certification:
+    "شهادة مهنية",
+
+  job:
+    "فرصة وظيفية",
+
+  education:
+    "فرصة تعليمية",
+
+  professional_program:
+    "برنامج مهني",
+
+  development:
+    "فرصة تطوير",
 };
+
+
+/* =========================================================
+ * 29. OPPORTUNITY RECOMMENDATIONS
+ * ======================================================= */
 
 export const OPPORTUNITY_RECOMMENDATIONS = [
   "strong_match",
@@ -531,125 +1058,305 @@ export const OPPORTUNITY_RECOMMENDATIONS = [
   "skip",
 ] as const satisfies readonly OpportunityRecommendation[];
 
-export const OPPORTUNITY_RECOMMENDATION_LABELS: Record<
+
+export const OPPORTUNITY_RECOMMENDATION_LABELS:
+Record<
   OpportunityRecommendation,
   string
 > = {
-  strong_match: "مناسبة جدًا",
-  consider: "تستحق النظر",
-  low_priority: "أولوية منخفضة",
-  skip: "تجاوزها",
+  strong_match:
+    "مناسبة جدًا",
+
+  consider:
+    "تستحق النظر",
+
+  low_priority:
+    "أولوية منخفضة",
+
+  skip:
+    "تجاوزها",
 };
 
-export const CAREER_RATING_MIN = 1;
 
-export const CAREER_RATING_MAX = 5;
+/* =========================================================
+ * 30. NUMERIC BOUNDARIES
+ * ======================================================= */
 
-export const PROGRESS_MIN = 0;
+export const CAREER_RATING_MIN =
+  1;
 
-export const PROGRESS_MAX = 100;
 
-export const MONEY_MIN = 0;
+export const CAREER_RATING_MAX =
+  5;
 
-export const DUE_DAY_MIN = 1;
 
-export const DUE_DAY_MAX = 31;
+export const PROGRESS_MIN =
+  0;
 
-export const TITLE_MIN_LENGTH = 1;
 
-export const TITLE_MAX_LENGTH = 120;
+export const PROGRESS_MAX =
+  100;
 
-export const SHORT_TEXT_MAX_LENGTH = 500;
 
-export const NOTES_MAX_LENGTH = 2_000;
+export const MONEY_MIN =
+  0;
 
-export const MEMORY_CONTENT_MAX_LENGTH = 4_000;
 
-export const AI_RECOMMENDATION_MAX_LENGTH = 2_000;
+export const DUE_DAY_MIN =
+  1;
 
-export const PRIORITY_WEIGHT: Record<Priority, number> = {
-  high: 3,
-  medium: 2,
-  low: 1,
+
+export const DUE_DAY_MAX =
+  31;
+
+
+/* =========================================================
+ * 31. TEXT BOUNDARIES
+ * ======================================================= */
+
+export const TITLE_MIN_LENGTH =
+  1;
+
+
+export const TITLE_MAX_LENGTH =
+  120;
+
+
+export const SHORT_TEXT_MAX_LENGTH =
+  500;
+
+
+export const NOTES_MAX_LENGTH =
+  2_000;
+
+
+export const MEMORY_CONTENT_MAX_LENGTH =
+  4_000;
+
+
+export const AI_RECOMMENDATION_MAX_LENGTH =
+  2_000;
+
+
+/* =========================================================
+ * 32. PRIORITY SORT WEIGHT
+ * ======================================================= */
+
+export const PRIORITY_WEIGHT:
+Record<
+  Priority,
+  number
+> = {
+  high:
+    3,
+
+  medium:
+    2,
+
+  low:
+    1,
 };
 
+
+/* =========================================================
+ * 33. FINAL V2 PRIMARY NAVIGATION
+ * ======================================================= */
+
+/**
+ * Exactly six top-level destinations.
+ *
+ *
+ * User-facing information architecture:
+ *
+ * الرئيسية
+ * المال
+ * خططي
+ * السفر
+ * التطوير
+ * LIFE AI
+ */
 export const NAVIGATION_ITEMS = [
   {
-    label: "الرئيسية",
-    href: "/dashboard",
-    icon: "⌂",
+    label:
+      "الرئيسية",
+
+    href:
+      "/dashboard",
+
+    icon:
+      "⌂",
   },
+
   {
-    label: "المال",
-    href: "/finance",
-    icon: "◈",
+    label:
+      "المال",
+
+    href:
+      "/finance",
+
+    icon:
+      "◈",
   },
+
   {
-    label: "خططي",
-    href: "/goals",
-    icon: "◎",
+    label:
+      "خططي",
+
+    href:
+      "/goals",
+
+    icon:
+      "◎",
   },
+
   {
-    label: "السفر",
-    href: "/travel",
-    icon: "✈",
+    label:
+      "السفر",
+
+    href:
+      "/travel",
+
+    icon:
+      "✈",
   },
+
   {
-    label: "التطوير",
-    href: "/learning",
-    icon: "◉",
+    label:
+      "التطوير",
+
+    href:
+      "/learning",
+
+    icon:
+      "◉",
   },
+
   {
-    label: "LIFE AI",
-    href: "/assistant",
-    icon: "✦",
+    label:
+      "LIFE AI",
+
+    href:
+      "/assistant",
+
+    icon:
+      "✦",
   },
 ] as const satisfies readonly NavigationItem[];
 
+
+/* =========================================================
+ * 34. SECONDARY / DETAILED NAVIGATION
+ * ======================================================= */
+
+/**
+ * Compatibility export name is intentionally retained because
+ * existing UI code may still import LEGACY_NAVIGATION_ITEMS.
+ *
+ *
+ * These pages are not legacy data.
+ *
+ * They are detailed secondary views under the six V2 areas.
+ */
 export const LEGACY_NAVIGATION_ITEMS = [
   {
-    label: "الاستثمارات",
-    href: "/investments",
-    icon: "↗",
+    label:
+      "الاستثمارات",
+
+    href:
+      "/investments",
+
+    icon:
+      "↗",
   },
+
   {
-    label: "المشاريع",
-    href: "/projects",
-    icon: "▣",
+    label:
+      "المشاريع",
+
+    href:
+      "/projects",
+
+    icon:
+      "▣",
   },
+
   {
-    label: "المسار المهني",
-    href: "/career",
-    icon: "◇",
+    label:
+      "المسار المهني",
+
+    href:
+      "/career",
+
+    icon:
+      "◇",
   },
+
   {
-    label: "المهام",
-    href: "/tasks",
-    icon: "✓",
+    label:
+      "المهام",
+
+    href:
+      "/tasks",
+
+    icon:
+      "✓",
   },
+
   {
-    label: "السجل",
-    href: "/audit",
-    icon: "≡",
+    label:
+      "السجل",
+
+    href:
+      "/audit",
+
+    icon:
+      "≡",
   },
+
   {
-    label: "الإعدادات",
-    href: "/settings",
-    icon: "⚙",
+    label:
+      "الإعدادات",
+
+    href:
+      "/settings",
+
+    icon:
+      "⚙",
   },
 ] as const satisfies readonly NavigationItem[];
 
-export const HOME_ROUTE = "/dashboard";
 
-export const MONEY_ROUTE = "/finance";
+/* =========================================================
+ * 35. PRIMARY ROUTES
+ * ======================================================= */
 
-export const PLANS_ROUTE = "/goals";
+export const HOME_ROUTE =
+  "/dashboard";
 
-export const TRAVEL_ROUTE = "/travel";
 
-export const GROWTH_ROUTE = "/learning";
+export const MONEY_ROUTE =
+  "/finance";
 
-export const LIFE_AI_ROUTE = "/assistant";
+
+export const PLANS_ROUTE =
+  "/goals";
+
+
+export const TRAVEL_ROUTE =
+  "/travel";
+
+
+export const GROWTH_ROUTE =
+  "/learning";
+
+
+export const LIFE_AI_ROUTE =
+  "/assistant";
+
+
+/* =========================================================
+ * 36. PUBLIC ROUTES
+ * ======================================================= */
 
 export const PUBLIC_ROUTES = [
   "/",
@@ -657,6 +1364,16 @@ export const PUBLIC_ROUTES = [
   "/auth/callback",
 ] as const;
 
+
+/* =========================================================
+ * 37. PROTECTED ROUTES
+ * ======================================================= */
+
+/**
+ * /onboarding is authenticated.
+ *
+ * It is not a public account-registration route.
+ */
 export const PROTECTED_ROUTES = [
   "/dashboard",
   "/finance",
@@ -664,121 +1381,268 @@ export const PROTECTED_ROUTES = [
   "/travel",
   "/learning",
   "/assistant",
+
   "/investments",
   "/projects",
   "/career",
   "/tasks",
+
   "/audit",
   "/settings",
+  "/onboarding",
 ] as const;
 
-export const AI_API_ROUTE = "/api/ai";
+
+/* =========================================================
+ * 38. API ROUTES
+ * ======================================================= */
+
+export const AI_API_ROUTE =
+  "/api/ai";
+
 
 export const OPPORTUNITIES_API_ROUTE =
   "/api/opportunities";
 
+
+export const INTAKE_PREVIEW_API_ROUTE =
+  "/api/intake/preview";
+
+
+export const INTAKE_CONFIRM_API_ROUTE =
+  "/api/intake/confirm";
+
+
+/* =========================================================
+ * 39. USER ERRORS
+ * ======================================================= */
+
 export const USER_ERRORS = {
-  generic: "تعذر تنفيذ الطلب الآن.",
-  dataLoad: "تعذر تحميل البيانات.",
-  invalidInput: "البيانات المدخلة غير صحيحة.",
+  generic:
+    "تعذر تنفيذ الطلب الآن.",
+
+  dataLoad:
+    "تعذر تحميل البيانات.",
+
+  invalidInput:
+    "البيانات المدخلة غير صحيحة.",
+
   authentication:
     "انتهت الجلسة. سجل الدخول مرة أخرى.",
+
   authorization:
     "ليس لديك صلاحية لتنفيذ هذا الإجراء.",
+
   aiUnavailable:
     "تعذر تشغيل المساعد الذكي الآن. بيانات LIFE OS محفوظة ولم تتأثر.",
+
   opportunityUnavailable:
     "تعذر البحث عن الفرص الآن.",
+
+  intakeUnavailable:
+    "تعذر تجهيز الإضافة الآن. لم يتم حفظ أي تغيير.",
 } as const;
+
+
+/* =========================================================
+ * 40. EMPTY STATES
+ * ======================================================= */
 
 export const EMPTY_STATE_MESSAGES = {
   goals: {
-    title: "لا توجد أهداف بعد",
-    description: "أضف أول هدف لتبدأ المتابعة.",
+    title:
+      "لا توجد أهداف بعد",
+
+    description:
+      "أضف أول هدف لتبدأ المتابعة.",
   },
 
+
   projects: {
-    title: "لا توجد مشاريع بعد",
+    title:
+      "لا توجد مشاريع بعد",
+
     description:
       "أضف مشروعًا عندما يكون لديك هدف متعدد الخطوات.",
   },
 
+
   finance: {
-    title: "لا توجد بيانات مالية بعد",
+    title:
+      "لا توجد بيانات مالية بعد",
+
     description:
       "ابدأ بإضافة مصدر الدخل والتوزيعات الأساسية.",
   },
 
+
   investments: {
-    title: "لا توجد استثمارات بعد",
+    title:
+      "لا توجد استثمارات بعد",
+
     description:
       "أضف أول أصل استثماري لمتابعة المحفظة.",
   },
 
+
+  travel: {
+    title:
+      "لا توجد رحلات بعد",
+
+    description:
+      "أضف وجهتك أو ارفع برنامج الرحلة PDF.",
+  },
+
+
   career: {
-    title: "لا توجد بيانات مهنية بعد",
+    title:
+      "لا توجد بيانات مهنية بعد",
+
     description:
       "ابدأ بإضافة دورك الحالي أو هدفك المهني.",
   },
 
+
   learning: {
-    title: "لا توجد عناصر تعليمية بعد",
+    title:
+      "لا توجد عناصر تعليمية بعد",
+
     description:
       "أضف الدورة أو البرنامج الذي تعمل عليه حاليًا.",
   },
 
+
   tasks: {
-    title: "لا توجد مهام",
-    description: "أنت محدث حاليًا.",
+    title:
+      "لا توجد مهام",
+
+    description:
+      "أنت محدث حاليًا.",
   },
 
+
   audit: {
-    title: "لا يوجد نشاط مسجل بعد",
+    title:
+      "لا يوجد نشاط مسجل بعد",
+
     description:
       "ستظهر هنا العمليات المهمة داخل LIFE OS.",
   },
 } as const;
 
+
+/* =========================================================
+ * 41. STATUS SORT WEIGHT
+ * ======================================================= */
+
 export const STATUS_SORT_WEIGHT = {
-  active: 5,
-  blocked: 5,
-  pending: 4,
-  planned: 3,
-  paused: 2,
-  completed: 1,
-  archived: 1,
-  dropped: 1,
-  cancelled: 0,
+  active:
+    5,
+
+  blocked:
+    5,
+
+  pending:
+    4,
+
+  planned:
+    3,
+
+  paused:
+    2,
+
+  completed:
+    1,
+
+  archived:
+    1,
+
+  dropped:
+    1,
+
+  cancelled:
+    0,
 } as const;
 
+
+/* =========================================================
+ * 42. DATE FORMATTING
+ * ======================================================= */
+
 export const DATE_DISPLAY_OPTIONS = {
-  year: "numeric",
-  month: "short",
-  day: "numeric",
+  year:
+    "numeric",
+
+  month:
+    "short",
+
+  day:
+    "numeric",
 } as const satisfies Intl.DateTimeFormatOptions;
+
 
 export const DATE_TIME_DISPLAY_OPTIONS = {
-  year: "numeric",
-  month: "short",
-  day: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
+  year:
+    "numeric",
+
+  month:
+    "short",
+
+  day:
+    "numeric",
+
+  hour:
+    "2-digit",
+
+  minute:
+    "2-digit",
 } as const satisfies Intl.DateTimeFormatOptions;
 
+
+/* =========================================================
+ * 43. MONEY FORMATTING
+ * ======================================================= */
+
 export const CURRENCY_DISPLAY_OPTIONS = {
-  style: "currency",
-  currencyDisplay: "symbol",
-  maximumFractionDigits: 2,
+  style:
+    "currency",
+
+  currencyDisplay:
+    "symbol",
+
+  maximumFractionDigits:
+    2,
 } as const satisfies Intl.NumberFormatOptions;
+
+
+/* =========================================================
+ * 44. PERCENT FORMATTING
+ * ======================================================= */
 
 export const PERCENT_DISPLAY_OPTIONS = {
-  minimumFractionDigits: 0,
-  maximumFractionDigits: 1,
+  minimumFractionDigits:
+    0,
+
+  maximumFractionDigits:
+    1,
 } as const satisfies Intl.NumberFormatOptions;
 
-export const AUDIT_METADATA_MAX_KEYS = 10;
 
-export const AUDIT_METADATA_MAX_STRING_LENGTH = 250;
+/* =========================================================
+ * 45. AUDIT LIMITS
+ * ======================================================= */
+
+export const AUDIT_METADATA_MAX_KEYS =
+  10;
+
+
+export const AUDIT_METADATA_MAX_STRING_LENGTH =
+  250;
+
+
+/* =========================================================
+ * 46. FORBIDDEN AUDIT METADATA
+ * ======================================================= */
 
 export const FORBIDDEN_AUDIT_METADATA_KEYS = [
   "password",
@@ -797,14 +1661,41 @@ export const FORBIDDEN_AUDIT_METADATA_KEYS = [
   "openai_api_key",
 ] as const;
 
-export const REQUIRED_AUTHENTICATION_LEVEL = "aal1";
 
-export const LOGIN_ROUTE = "/login";
+/* =========================================================
+ * 47. AUTHENTICATION
+ * ======================================================= */
 
-export const SETTINGS_ROUTE = "/settings";
+/**
+ * LIFE OS V2 requires a verified authenticated Supabase
+ * session.
+ *
+ *
+ * Password login satisfies AAL1.
+ *
+ *
+ * TOTP may still exist as optional account hardening, but the
+ * application does not require AAL2 for ordinary V2 use.
+ */
+export const REQUIRED_AUTHENTICATION_LEVEL =
+  "aal1";
+
+
+export const LOGIN_ROUTE =
+  "/login";
+
+
+export const SETTINGS_ROUTE =
+  "/settings";
+
 
 export const DEFAULT_AUTHENTICATED_ROUTE =
   "/dashboard";
+
+
+/* =========================================================
+ * 48. SENSITIVE QUERY PARAMETERS
+ * ======================================================= */
 
 export const SENSITIVE_QUERY_PARAMETER_NAMES = [
   "password",
@@ -818,46 +1709,330 @@ export const SENSITIVE_QUERY_PARAMETER_NAMES = [
   "investment_balance",
 ] as const;
 
+
+/* =========================================================
+ * 49. LIFE OS DATABASE TABLE REGISTRY
+ * ======================================================= */
+
+/**
+ * Complete V2 public application table registry.
+ *
+ *
+ * V1 foundation:
+ *
+ * profiles
+ * income_sources
+ * budget_items
+ * monthly_snapshots
+ * investment_assets
+ * investment_transactions
+ * goals
+ * projects
+ * tasks
+ * learning_items
+ * career_items
+ * memory_items
+ * ai_recommendations
+ * audit_logs
+ *
+ *
+ * V2:
+ *
+ * intake_items
+ * trips
+ * documents
+ */
 export const LIFE_OS_TABLES = [
   "profiles",
+
+  "income_sources",
+  "budget_items",
+  "monthly_snapshots",
+
+  "investment_assets",
+  "investment_transactions",
+
+  "goals",
+  "projects",
+  "tasks",
+
+  "learning_items",
+  "career_items",
+
+  "memory_items",
+  "ai_recommendations",
+
+  "intake_items",
+
+  "trips",
+  "documents",
+
+  "audit_logs",
+] as const;
+
+
+/* =========================================================
+ * 50. V2 DOMAIN TABLE GROUPS
+ * ======================================================= */
+
+export const LIFE_OS_MONEY_TABLES = [
   "income_sources",
   "budget_items",
   "monthly_snapshots",
   "investment_assets",
   "investment_transactions",
+] as const;
+
+
+export const LIFE_OS_PLAN_TABLES = [
   "goals",
   "projects",
   "tasks",
-  "learning_items",
-  "career_items",
-  "memory_items",
-  "ai_recommendations",
-  "audit_logs",
 ] as const;
 
+
+export const LIFE_OS_GROWTH_TABLES = [
+  "learning_items",
+  "career_items",
+] as const;
+
+
+export const LIFE_OS_TRAVEL_TABLES = [
+  "trips",
+  "documents",
+] as const;
+
+
+export const LIFE_OS_INTELLIGENCE_TABLES = [
+  "memory_items",
+  "ai_recommendations",
+  "intake_items",
+] as const;
+
+
+/* =========================================================
+ * 51. PRIVATE DOCUMENT STORAGE
+ * ======================================================= */
+
+/**
+ * Canonical bucket name.
+ *
+ * Actual upload validation and Storage RLS remain enforced in
+ * the Travel/document data layer and Supabase migrations.
+ */
+export const PRIVATE_DOCUMENT_STORAGE_BUCKET =
+  "life-os-private-documents";
+
+
+/* =========================================================
+ * 52. AI OUTPUT LABELS
+ * ======================================================= */
+
 export const AI_OUTPUT_LABELS = {
-  situation: "الوضع",
-  recommendation: "الاقتراح",
-  nextAction: "الخطوة التالية",
+  situation:
+    "الوضع",
+
+  recommendation:
+    "الاقتراح",
+
+  nextAction:
+    "الخطوة التالية",
 } as const;
+
+
+/* =========================================================
+ * 53. DECISION LABELS
+ * ======================================================= */
 
 export const DECISION_LABELS = {
-  optionA: "الخيار A",
-  optionB: "الخيار B",
-  optionC: "الخيار C",
-  bestChoice: "الخيار الأفضل",
-  tradeoff: "المقابل",
-  nextAction: "الخطوة التالية",
+  optionA:
+    "الخيار A",
+
+  optionB:
+    "الخيار B",
+
+  optionC:
+    "الخيار C",
+
+  bestChoice:
+    "الخيار الأفضل",
+
+  tradeoff:
+    "المقابل",
+
+  nextAction:
+    "الخطوة التالية",
 } as const;
 
+
+/* =========================================================
+ * 54. APPLICATION SAFETY DEFAULTS
+ * ======================================================= */
+
 export const APPLICATION_SAFETY_DEFAULTS = {
-  publicRegistrationEnabled: false,
-  autonomousFinancialExecution: false,
-  autonomousEmailExecution: false,
-  autonomousDeletion: false,
-  arbitrarySqlEnabled: false,
-  shellExecutionEnabled: false,
-  backgroundOpportunityMonitoring: false,
-  directBankIntegration: false,
-  brokerExecution: false,
+  publicRegistrationEnabled:
+    false,
+
+  autonomousFinancialExecution:
+    false,
+
+  autonomousEmailExecution:
+    false,
+
+  autonomousDeletion:
+    false,
+
+  arbitrarySqlEnabled:
+    false,
+
+  shellExecutionEnabled:
+    false,
+
+  backgroundOpportunityMonitoring:
+    false,
+
+  directBankIntegration:
+    false,
+
+  brokerExecution:
+    false,
+
+  aiDatabaseWriteAuthority:
+    false,
+
+  publicDocumentStorage:
+    false,
+
+  autonomousIntakeExecution:
+    false,
 } as const;
+
+
+/* =========================================================
+ * 55. FINAL NAVIGATION CONTRACT
+ * ======================================================= */
+
+/**
+ * Exactly six top-level V2 destinations:
+ *
+ * الرئيسية
+ * المال
+ * خططي
+ * السفر
+ * التطوير
+ * LIFE AI
+ *
+ *
+ * Detailed routes remain available underneath those areas.
+ */
+
+
+/* =========================================================
+ * 56. FINAL AUTH CONTRACT
+ * ======================================================= */
+
+/**
+ * Required:
+ *
+ * verified authenticated session
+ * +
+ * AAL1 minimum
+ *
+ *
+ * Not required for ordinary application use:
+ *
+ * mandatory TOTP
+ * mandatory AAL2
+ */
+
+
+/* =========================================================
+ * 57. FINAL TRAVEL CONTRACT
+ * ======================================================= */
+
+/**
+ * Travel is no longer a placeholder.
+ *
+ *
+ * V2 contains:
+ *
+ * trips
+ * documents
+ * private Storage
+ * Universal Add travel proposal
+ * deterministic Travel executor
+ * Travel OS page
+ * Home Travel summary
+ * LIFE AI read-only Travel context
+ */
+
+
+/* =========================================================
+ * 58. FINAL INTAKE CONTRACT
+ * ======================================================= */
+
+/**
+ * Universal Add:
+ *
+ * text / PDF
+ *      ↓
+ * AI preview
+ *      ↓
+ * exact structured proposal
+ *      ↓
+ * user review
+ *      ↓
+ * explicit confirmation
+ *      ↓
+ * deterministic executor
+ *
+ *
+ * AI never receives direct database write authority.
+ */
+
+
+/* =========================================================
+ * 59. FINAL DATABASE SECURITY CONTRACT
+ * ======================================================= */
+
+/**
+ * Application access:
+ *
+ * publishable Supabase client
+ * +
+ * authenticated user session
+ * +
+ * PostgreSQL RLS
+ * +
+ * Storage RLS
+ *
+ *
+ * No application feature requires:
+ *
+ * service_role
+ * database password
+ * arbitrary SQL from AI
+ */
+
+
+/* =========================================================
+ * 60. FINAL LIFE OS V2 RULE
+ * ======================================================= */
+
+/**
+ * Database architecture may be complex underneath.
+ *
+ * User-facing LIFE OS stays simple:
+ *
+ * الرئيسية
+ * المال
+ * خططي
+ * السفر
+ * التطوير
+ * LIFE AI
+ *
+ *
+ * Simple outside.
+ * Intelligent underneath.
+ * Private by default.
+ */
