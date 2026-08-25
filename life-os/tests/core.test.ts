@@ -80,7 +80,7 @@ import type {
  * - Track Record
  * - exactly six primary life areas
  * - Travel as a first-class V2 area
- * - AAL1 application contract
+ * - mandatory AAL2 application contract
  * - complete database table registry
  * - AI execution boundaries
  * - autonomous execution disabled
@@ -535,12 +535,12 @@ describe(
   "LIFE OS V2 authentication contract",
   () => {
     it(
-      "requires AAL1 for ordinary authenticated use",
+      "requires AAL2 for private authenticated use",
       () => {
         expect(
           REQUIRED_AUTHENTICATION_LEVEL,
         ).toBe(
-          "aal1",
+          "aal2",
         );
       },
     );
@@ -3319,12 +3319,12 @@ describe(
  *
  * verified authenticated session
  *      ↓
- * AAL1
+ * Mandatory AAL2
  *      ↓
  * private application
  *
  *
- * TOTP remains optional hardening.
+ * TOTP verification is required before private access.
  */
 
 
