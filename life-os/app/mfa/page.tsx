@@ -169,7 +169,7 @@ export default function MfaPage() {
     message,
     setMessage,
   ] =
-    useState(
+    useState<string>(
       MFA_MESSAGES.checking,
     );
 
@@ -371,13 +371,7 @@ export default function MfaPage() {
 
 
         const verifiedFactor =
-          factorsData.totp.find(
-            (
-              factor,
-            ) =>
-              factor.status ===
-                "verified",
-          );
+          factorsData.totp[0];
 
 
         if (
@@ -397,29 +391,6 @@ export default function MfaPage() {
 
           return;
         }
-
-
-        const unverifiedFactors =
-          factorsData.totp.filter(
-            (
-              factor,
-            ) =>
-              factor.status ===
-                "unverified",
-          );
-
-
-        for (
-          const factor of
-            unverifiedFactors
-        ) {
-          await supabase.auth.mfa
-            .unenroll({
-              factorId:
-                factor.id,
-            });
-        }
-
 
         if (
           !active
