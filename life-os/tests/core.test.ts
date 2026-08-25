@@ -1653,7 +1653,9 @@ describe(
             (
               item,
             ) =>
-              item.href ===
+              String(
+                item.href,
+              ) ===
               "/investments",
           ),
         ).toBe(
@@ -1671,7 +1673,9 @@ describe(
             (
               item,
             ) =>
-              item.href ===
+              String(
+                item.href,
+              ) ===
               "/projects",
           ),
         ).toBe(
@@ -1689,7 +1693,9 @@ describe(
             (
               item,
             ) =>
-              item.href ===
+              String(
+                item.href,
+              ) ===
               "/career",
           ),
         ).toBe(
