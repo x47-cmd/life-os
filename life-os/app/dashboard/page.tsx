@@ -21,7 +21,7 @@ import {
 } from "@/components/priority-card";
 
 import {
-  requireAAL2Identity,
+  requireAuthenticatedIdentity,
 } from "@/lib/auth";
 
 import {
@@ -30,22 +30,37 @@ import {
 
 import {
   formatCurrency,
+  formatDate,
+  formatPercent,
 } from "@/lib/format";
+
+import {
+  getTravelSnapshot,
+} from "@/lib/travel-data";
 
 
 /* =========================================================
  * LIFE OS V2
- * HOME
+ * FINAL HOME
  *
- * Purpose:
- *
- * The Home page should answer only:
+ * Home answers only:
  *
  * 1. وين أنا الحين؟
  * 2. شو أهم 3 أشياء؟
- * 3. شو الخطوة التالية؟
+ * 3. شو أهم وضعي في:
  *
- * It should NOT repeat every module in LIFE OS.
+ *    المال
+ *    خططي
+ *    السفر
+ *    التطوير
+ *
+ * 4. شو توصية LIFE OS الحالية؟
+ *
+ *
+ * Home does NOT become a second copy of every module.
+ *
+ * Simple outside.
+ * Intelligent underneath.
  * ======================================================= */
 
 
@@ -53,32 +68,45 @@ import {
  * 1. METADATA
  * ======================================================= */
 
-export const metadata: Metadata = {
-  title: "الرئيسية",
+export const metadata:
+Metadata = {
+  title:
+    "الرئيسية",
 };
 
 
 /* =========================================================
- * 2. PRIORITY SOURCE
+ * 2. PRIORITY SOURCE LABEL
  * ======================================================= */
 
 function getPrioritySourceLabel(
-  source: string,
+  source:
+    string,
 ): string {
-  switch (source) {
+  switch (
+    source
+  ) {
     case "finance":
     case "investment":
     case "investments":
       return "المال";
+
 
     case "goal":
     case "project":
     case "task":
       return "خططي";
 
+
+    case "travel":
+    case "trip":
+      return "السفر";
+
+
     case "learning":
     case "career":
       return "التطوير";
+
 
     default:
       return "LIFE OS";
@@ -87,20 +115,16 @@ function getPrioritySourceLabel(
 
 
 /* =========================================================
- * 3. DATA PRESENCE
+ * 3. CORE DATA PRESENCE
  * ======================================================= */
 
 /**
- * V2 must distinguish between:
+ * Zero is a valid real value.
  *
- * 0 = real value
+ * Therefore the Home page does not decide whether data exists
+ * by checking whether a monetary value is greater than zero.
  *
- * and:
- *
- * data has never been entered.
- *
- * Until the dedicated onboarding state is added, we use the
- * presence of existing records as the safest V2 indicator.
+ * It checks whether domain records actually exist.
  */
 function hasCoreLifeData(
   dashboard:
@@ -109,84 +133,196 @@ function hasCoreLifeData(
         typeof getDashboardSnapshot
       >
     >,
+
+  travel:
+    Awaited<
+      ReturnType<
+        typeof getTravelSnapshot
+      >
+    >,
 ): boolean {
   const finance =
     dashboard.finance;
 
+
   const investments =
     dashboard.investments;
+
 
   const goals =
     dashboard.goals;
 
+
   const projects =
     dashboard.projects;
 
+
   const tasks =
     dashboard.tasks;
+
 
   const learning =
     dashboard.learning;
 
 
   return (
-    finance.income_sources.length > 0 ||
-    finance.budget_items.length > 0 ||
-    finance.latest_monthly_snapshot !== null ||
-    investments.active_asset_count > 0 ||
-    goals.active_count > 0 ||
-    goals.planned_count > 0 ||
-    goals.paused_count > 0 ||
-    goals.completed_count > 0 ||
-    projects.active_count > 0 ||
-    projects.planned_count > 0 ||
-    projects.blocked_count > 0 ||
-    projects.completed_count > 0 ||
-    tasks.active_count > 0 ||
-    tasks.pending_count > 0 ||
-    tasks.completed_count > 0 ||
-    learning.active_count > 0 ||
-    learning.planned_count > 0 ||
-    learning.completed_count > 0 ||
-    learning.paused_count > 0
+    finance.income_sources.length >
+      0 ||
+    finance.budget_items.length >
+      0 ||
+    finance.latest_monthly_snapshot !==
+      null ||
+    investments.active_asset_count >
+      0 ||
+    goals.active_count >
+      0 ||
+    goals.planned_count >
+      0 ||
+    goals.paused_count >
+      0 ||
+    goals.completed_count >
+      0 ||
+    projects.active_count >
+      0 ||
+    projects.planned_count >
+      0 ||
+    projects.blocked_count >
+      0 ||
+    projects.completed_count >
+      0 ||
+    tasks.active_count >
+      0 ||
+    tasks.pending_count >
+      0 ||
+    tasks.completed_count >
+      0 ||
+    learning.active_count >
+      0 ||
+    learning.planned_count >
+      0 ||
+    learning.completed_count >
+      0 ||
+    learning.paused_count >
+      0 ||
+    travel.upcoming_trips.length >
+      0 ||
+    travel.active_trips.length >
+      0 ||
+    travel.completed_trip_count >
+      0 ||
+    travel.document_count >
+      0
   );
 }
 
 
 /* =========================================================
- * 4. HOME PAGE
+ * 4. TRAVEL DATE LABEL
+ * ======================================================= */
+
+function getTravelDateLabel(
+  startDate:
+    string |
+    null,
+
+  endDate:
+    string |
+    null,
+): string {
+  if (
+    !startDate &&
+    !endDate
+  ) {
+    return "التاريخ غير محدد";
+  }
+
+
+  if (
+    startDate &&
+    !endDate
+  ) {
+    return `من ${formatDate(
+      startDate,
+    )}`;
+  }
+
+
+  if (
+    !startDate &&
+    endDate
+  ) {
+    return `حتى ${formatDate(
+      endDate,
+    )}`;
+  }
+
+
+  return `${formatDate(
+    startDate,
+  )} — ${formatDate(
+    endDate,
+  )}`;
+}
+
+
+/* =========================================================
+ * 5. HOME PAGE
  * ======================================================= */
 
 export default async function DashboardPage() {
-  await requireAAL2Identity();
+  /*
+   * Final V2 authentication boundary.
+   *
+   * Password-authenticated verified identity is sufficient.
+   */
+  await requireAuthenticatedIdentity();
 
 
-  const dashboard =
-    await getDashboardSnapshot();
+  /*
+   * Dashboard and Travel are independent read models.
+   *
+   * Load them concurrently.
+   */
+  const [
+    dashboard,
+    travel,
+  ] =
+    await Promise.all([
+      getDashboardSnapshot(),
+
+      getTravelSnapshot(),
+    ]);
 
 
   const finance =
     dashboard.finance;
 
+
   const investments =
     dashboard.investments;
+
 
   const goals =
     dashboard.goals;
 
+
   const projects =
     dashboard.projects;
+
 
   const learning =
     dashboard.learning;
 
+
   const latestRecommendation =
-    dashboard.latest_ai_recommendation;
+    dashboard
+      .latest_ai_recommendation;
 
 
   const hasData =
     hasCoreLifeData(
       dashboard,
+      travel,
     );
 
 
@@ -200,6 +336,28 @@ export default async function DashboardPage() {
   const activeGrowth =
     learning.active_count +
     learning.planned_count;
+
+
+  /*
+   * Current active trip has priority.
+   *
+   * Otherwise use the next planned/booked trip.
+   */
+  const focusTrip =
+    travel.active_trips[0] ??
+    travel.next_trip ??
+    null;
+
+
+  const moneyHasData =
+    finance.income_sources.length >
+      0 ||
+    finance.budget_items.length >
+      0 ||
+    finance.latest_monthly_snapshot !==
+      null ||
+    investments.active_asset_count >
+      0;
 
 
   return (
@@ -234,7 +392,7 @@ export default async function DashboardPage() {
 
 
         {/* =================================================
-         * FIRST-TIME / EMPTY HOME
+         * FIRST-TIME STATE
          * =============================================== */}
 
         {!hasData ? (
@@ -245,53 +403,58 @@ export default async function DashboardPage() {
             <article
               className="card"
               style={{
-                padding: "28px",
+                padding:
+                  "28px",
               }}
             >
               <div
                 className="stack"
                 style={{
-                  maxWidth: "680px",
+                  maxWidth:
+                    "680px",
                 }}
               >
                 <div>
-                  <span
-                    className="badge badge--neutral"
-                  >
+                  <span className="badge badge--neutral">
                     بداية LIFE OS
                   </span>
                 </div>
+
 
                 <div>
                   <h2
                     id="home-start-title"
                     className="card__title"
                     style={{
-                      fontSize: "24px",
-                      marginBottom: "8px",
+                      fontSize:
+                        "24px",
+
+                      marginBottom:
+                        "8px",
                     }}
                   >
                     خلنا نبني صورتك الحقيقية
                   </h2>
 
+
                   <p className="card__description">
                     ما عندي بيانات كافية عن المال،
                     الخطط، السفر أو التطوير حتى أعطيك
-                    تحليلًا مفيدًا.
+                    صورة مفيدة.
                   </p>
                 </div>
+
 
                 <div
                   className="inline"
                   style={{
-                    marginTop: "4px",
+                    marginTop:
+                      "4px",
                   }}
                 >
-                  <span
-                    className="text-muted text-small"
-                  >
-                    الخطوة التالية في V2: الإضافة الذكية
-                    — تكتب أو ترفع أي شيء وأنا أرتبه لك.
+                  <span className="text-muted text-small">
+                    استخدم زر + واكتب أي معلومة أو ارفع PDF،
+                    وLIFE OS بيجهز لك القيم للمراجعة قبل الحفظ.
                   </span>
                 </div>
               </div>
@@ -317,6 +480,7 @@ export default async function DashboardPage() {
                 أهم 3 الآن
               </h2>
 
+
               <p className="section-description">
                 الأشياء التي تستحق انتباهك فعلًا.
               </p>
@@ -324,47 +488,59 @@ export default async function DashboardPage() {
           </div>
 
 
-          {dashboard.top_priorities.length > 0 ? (
+          {dashboard
+            .top_priorities
+            .length >
+          0 ? (
             <div className="priority-grid">
-              {dashboard.top_priorities.map(
-                (
-                  priority,
-                  index,
-                ) => (
-                  <PriorityCard
-                    key={priority.id}
-                    rank={index + 1}
-                    title={priority.title}
-                    description={
-                      priority.description
-                    }
-                    nextAction={
-                      priority.next_action
-                    }
-                    priority={
-                      priority.priority
-                    }
-                    sourceLabel={
-                      getPrioritySourceLabel(
-                        priority.source,
-                      )
-                    }
-                    meta={
-                      priority.target_date ? (
-                        <span>
-                          المستهدف:{" "}
-                          <span className="ltr">
-                            {
-                              priority
-                                .target_date
-                            }
+              {dashboard
+                .top_priorities
+                .map(
+                  (
+                    priority,
+                    index,
+                  ) => (
+                    <PriorityCard
+                      key={
+                        priority.id
+                      }
+                      rank={
+                        index +
+                        1
+                      }
+                      title={
+                        priority.title
+                      }
+                      description={
+                        priority.description
+                      }
+                      nextAction={
+                        priority.next_action
+                      }
+                      priority={
+                        priority.priority
+                      }
+                      sourceLabel={
+                        getPrioritySourceLabel(
+                          priority.source,
+                        )
+                      }
+                      meta={
+                        priority.target_date ? (
+                          <span>
+                            المستهدف:{" "}
+                            <span className="ltr">
+                              {
+                                priority
+                                  .target_date
+                              }
+                            </span>
                           </span>
-                        </span>
-                      ) : null
-                    }
-                  />
-                ),
-              )}
+                        ) : null
+                      }
+                    />
+                  ),
+                )}
             </div>
           ) : (
             <EmptyState
@@ -377,8 +553,8 @@ export default async function DashboardPage() {
               }
               description={
                 hasData
-                  ? "LIFE OS ما اكتشف شيئًا يحتاج تدخلك الآن."
-                  : "بعد إضافة بياناتك، LIFE OS يختار لك أهم 3 أشياء تلقائيًا."
+                  ? "LIFE OS ما عنده أولوية محفوظة تحتاج تدخلك الآن."
+                  : "بعد إضافة بياناتك، أهم الأولويات بتظهر هنا."
               }
             />
           )}
@@ -386,7 +562,7 @@ export default async function DashboardPage() {
 
 
         {/* =================================================
-         * CURRENT LIFE SNAPSHOT
+         * FOUR LIFE AREAS
          * =============================================== */}
 
         <section
@@ -402,14 +578,15 @@ export default async function DashboardPage() {
                 لمحة سريعة
               </h2>
 
+
               <p className="section-description">
-                أقل عدد ممكن من الأرقام.
+                أهم أربع مناطق في حياتك من أول نظرة.
               </p>
             </div>
           </div>
 
 
-          <div className="grid grid--3">
+          <div className="grid grid--2">
 
             {/* =============================================
              * MONEY
@@ -419,38 +596,43 @@ export default async function DashboardPage() {
               href="/finance"
               className="card"
               style={{
-                textDecoration: "none",
-                color: "inherit",
+                textDecoration:
+                  "none",
+
+                color:
+                  "inherit",
               }}
             >
               <div className="space-between">
                 <div>
-                  <span
-                    className="text-muted text-small"
-                  >
+                  <span className="text-muted text-small">
                     المال
                   </span>
+
 
                   <h3
                     className="card__title"
                     style={{
-                      marginTop: "6px",
+                      marginTop:
+                        "6px",
                     }}
                   >
-                    {finance.income_sources.length > 0 ||
-                    finance.latest_monthly_snapshot !== null
+                    {moneyHasData
                       ? formatCurrency(
-                          finance.available_amount,
+                          finance
+                            .available_amount,
                           finance.currency,
                         )
                       : "غير مضاف"}
                   </h3>
                 </div>
 
+
                 <span
                   aria-hidden="true"
                   style={{
-                    fontSize: "22px",
+                    fontSize:
+                      "22px",
                   }}
                 >
                   ◈
@@ -461,13 +643,16 @@ export default async function DashboardPage() {
               <p
                 className="card__description"
                 style={{
-                  marginTop: "10px",
+                  marginTop:
+                    "10px",
                 }}
               >
-                {finance.income_sources.length > 0 ||
-                finance.latest_monthly_snapshot !== null
-                  ? "المتاح بعد التوزيعات الحالية."
-                  : "أضف دخلك وتوزيعك الشهري."}
+                {moneyHasData
+                  ? investments.active_asset_count >
+                    0
+                    ? `المتاح بعد التوزيعات • ${investments.active_asset_count} أصل استثماري`
+                    : "المتاح بعد التوزيعات الحالية."
+                  : "دخلك، التزاماتك واستثماراتك في مكان واحد."}
               </p>
             </Link>
 
@@ -480,34 +665,40 @@ export default async function DashboardPage() {
               href="/goals"
               className="card"
               style={{
-                textDecoration: "none",
-                color: "inherit",
+                textDecoration:
+                  "none",
+
+                color:
+                  "inherit",
               }}
             >
               <div className="space-between">
                 <div>
-                  <span
-                    className="text-muted text-small"
-                  >
+                  <span className="text-muted text-small">
                     خططي
                   </span>
+
 
                   <h3
                     className="card__title"
                     style={{
-                      marginTop: "6px",
+                      marginTop:
+                        "6px",
                     }}
                   >
-                    {activePlans > 0
+                    {activePlans >
+                    0
                       ? `${activePlans} نشطة`
                       : "لا توجد"}
                   </h3>
                 </div>
 
+
                 <span
                   aria-hidden="true"
                   style={{
-                    fontSize: "22px",
+                    fontSize:
+                      "22px",
                   }}
                 >
                   ◎
@@ -518,12 +709,14 @@ export default async function DashboardPage() {
               <p
                 className="card__description"
                 style={{
-                  marginTop: "10px",
+                  marginTop:
+                    "10px",
                 }}
               >
-                {activePlans > 0
-                  ? "أهدافك ومشاريعك الحالية."
-                  : "أضف أول هدف أو مشروع."}
+                {activePlans >
+                0
+                  ? `${goals.active_count + goals.planned_count} هدف • ${projects.active_count + projects.planned_count} مشروع`
+                  : "أهدافك ومشاريعك الحالية بتظهر هنا."}
               </p>
             </Link>
 
@@ -532,29 +725,43 @@ export default async function DashboardPage() {
              * TRAVEL
              * =========================================== */}
 
-            <article className="card">
+            <Link
+              href="/travel"
+              className="card"
+              style={{
+                textDecoration:
+                  "none",
+
+                color:
+                  "inherit",
+              }}
+            >
               <div className="space-between">
                 <div>
-                  <span
-                    className="text-muted text-small"
-                  >
+                  <span className="text-muted text-small">
                     السفر
                   </span>
+
 
                   <h3
                     className="card__title"
                     style={{
-                      marginTop: "6px",
+                      marginTop:
+                        "6px",
                     }}
                   >
-                    قريبًا
+                    {focusTrip
+                      ? focusTrip.destination
+                      : "لا توجد رحلة"}
                   </h3>
                 </div>
+
 
                 <span
                   aria-hidden="true"
                   style={{
-                    fontSize: "22px",
+                    fontSize:
+                      "22px",
                   }}
                 >
                   ✈
@@ -562,151 +769,304 @@ export default async function DashboardPage() {
               </div>
 
 
+              {focusTrip ? (
+                <>
+                  <div
+                    style={{
+                      marginTop:
+                        "12px",
+                    }}
+                  >
+                    <div className="space-between">
+                      <span className="text-muted text-small">
+                        الجاهزية
+                      </span>
+
+                      <strong>
+                        {
+                          formatPercent(
+                            focusTrip
+                              .readiness_percent,
+                          )
+                        }
+                      </strong>
+                    </div>
+
+
+                    <progress
+                      value={
+                        focusTrip
+                          .readiness_percent
+                      }
+                      max={100}
+                      aria-label={`جاهزية الرحلة ${focusTrip.readiness_percent}%`}
+                      style={{
+                        width:
+                          "100%",
+
+                        height:
+                          "8px",
+
+                        marginTop:
+                          "6px",
+                      }}
+                    />
+                  </div>
+
+
+                  <p
+                    className="card__description"
+                    style={{
+                      marginTop:
+                        "10px",
+                    }}
+                  >
+                    {
+                      getTravelDateLabel(
+                        focusTrip.start_date,
+                        focusTrip.end_date,
+                      )
+                    }
+                  </p>
+                </>
+              ) : (
+                <p
+                  className="card__description"
+                  style={{
+                    marginTop:
+                      "10px",
+                  }}
+                >
+                  أضف وجهتك أو ارفع برنامج الرحلة PDF.
+                </p>
+              )}
+            </Link>
+
+
+            {/* =============================================
+             * GROWTH
+             * =========================================== */}
+
+            <Link
+              href="/learning"
+              className="card"
+              style={{
+                textDecoration:
+                  "none",
+
+                color:
+                  "inherit",
+              }}
+            >
+              <div className="space-between">
+                <div>
+                  <span className="text-muted text-small">
+                    التطوير
+                  </span>
+
+
+                  <h3
+                    className="card__title"
+                    style={{
+                      marginTop:
+                        "6px",
+                    }}
+                  >
+                    {activeGrowth >
+                    0
+                      ? `${activeGrowth} نشط`
+                      : "لا يوجد"}
+                  </h3>
+                </div>
+
+
+                <span
+                  aria-hidden="true"
+                  style={{
+                    fontSize:
+                      "22px",
+                  }}
+                >
+                  ◉
+                </span>
+              </div>
+
+
               <p
                 className="card__description"
                 style={{
-                  marginTop: "10px",
+                  marginTop:
+                    "10px",
                 }}
               >
-                الرحلة القادمة، الميزانية والجاهزية.
+                {activeGrowth >
+                0
+                  ? "الدراسة، الدورات والمسار المهني."
+                  : "تعليمك وتطورك المهني في مكان واحد."}
               </p>
-            </article>
+            </Link>
 
           </div>
         </section>
 
 
         {/* =================================================
-         * SECONDARY SNAPSHOT
+         * NEXT TRIP DETAIL
          * =============================================== */}
 
-        {hasData ? (
+        {focusTrip ? (
           <section
             className="page-section"
-            aria-labelledby="home-secondary-title"
+            aria-labelledby="home-travel-title"
           >
-            <div className="grid grid--2">
+            <div className="section-header">
+              <div className="section-header__content">
+                <h2
+                  id="home-travel-title"
+                  className="section-title"
+                >
+                  الرحلة القادمة
+                </h2>
 
-              {/* ===========================================
-               * INVESTMENTS
-               * ========================================= */}
+
+                <p className="section-description">
+                  أهم شيء تحتاج تعرفه قبل السفر.
+                </p>
+              </div>
+
 
               <Link
-                href="/investments"
-                className="card"
-                style={{
-                  textDecoration: "none",
-                  color: "inherit",
-                }}
+                href="/travel"
+                className="button button--secondary button--small"
               >
-                <div className="space-between">
-                  <div>
-                    <span
-                      className="text-muted text-small"
-                    >
-                      الاستثمارات
-                    </span>
-
-                    <h3
-                      className="card__title"
-                      style={{
-                        marginTop: "6px",
-                      }}
-                    >
-                      {investments.active_asset_count > 0
-                        ? formatCurrency(
-                            investments
-                              .total_estimated_value,
-                            investments.currency,
-                          )
-                        : "غير مضافة"}
-                    </h3>
-                  </div>
-
-                  <span
-                    aria-hidden="true"
-                    style={{
-                      fontSize: "22px",
-                    }}
-                  >
-                    ↗
-                  </span>
-                </div>
-
-
-                <p
-                  className="card__description"
-                  style={{
-                    marginTop: "10px",
-                  }}
-                >
-                  {investments.active_asset_count > 0
-                    ? `${investments.active_asset_count} أصل نشط`
-                    : "أضف المحفظة عندما تكون جاهزًا."}
-                </p>
+                فتح السفر
               </Link>
-
-
-              {/* ===========================================
-               * GROWTH
-               * ========================================= */}
-
-              <Link
-                href="/learning"
-                className="card"
-                style={{
-                  textDecoration: "none",
-                  color: "inherit",
-                }}
-              >
-                <div className="space-between">
-                  <div>
-                    <span
-                      className="text-muted text-small"
-                    >
-                      التطوير
-                    </span>
-
-                    <h3
-                      className="card__title"
-                      style={{
-                        marginTop: "6px",
-                      }}
-                    >
-                      {activeGrowth > 0
-                        ? `${activeGrowth} نشط`
-                        : "لا يوجد"}
-                    </h3>
-                  </div>
-
-                  <span
-                    aria-hidden="true"
-                    style={{
-                      fontSize: "22px",
-                    }}
-                  >
-                    ◉
-                  </span>
-                </div>
-
-
-                <p
-                  className="card__description"
-                  style={{
-                    marginTop: "10px",
-                  }}
-                >
-                  الدراسة، الدورات والمسار المهني.
-                </p>
-              </Link>
-
             </div>
+
+
+            <article className="card">
+              <div className="space-between">
+                <div>
+                  <span className="badge">
+                    {
+                      focusTrip.status ===
+                        "active"
+                        ? "جارية الآن"
+                        : focusTrip.status ===
+                            "booked"
+                          ? "محجوزة"
+                          : "مخطط لها"
+                    }
+                  </span>
+
+
+                  <h3
+                    className="card__title"
+                    style={{
+                      marginTop:
+                        "12px",
+
+                      marginBottom:
+                        "4px",
+                    }}
+                  >
+                    {focusTrip.title}
+                  </h3>
+
+
+                  <p
+                    className="card__description"
+                    style={{
+                      margin:
+                        0,
+                    }}
+                  >
+                    ✈ {focusTrip.destination}
+                  </p>
+                </div>
+
+
+                <div
+                  style={{
+                    textAlign:
+                      "end",
+                  }}
+                >
+                  <span className="text-muted text-small">
+                    الجاهزية
+                  </span>
+
+
+                  <div
+                    style={{
+                      marginTop:
+                        "4px",
+
+                      fontSize:
+                        "24px",
+
+                      fontWeight:
+                        700,
+                    }}
+                  >
+                    {
+                      formatPercent(
+                        focusTrip
+                          .readiness_percent,
+                      )
+                    }
+                  </div>
+                </div>
+              </div>
+
+
+              <div
+                className="grid grid--2"
+                style={{
+                  marginTop:
+                    "20px",
+                }}
+              >
+                <div>
+                  <div className="text-subtle text-small">
+                    التاريخ
+                  </div>
+
+                  <strong>
+                    {
+                      getTravelDateLabel(
+                        focusTrip.start_date,
+                        focusTrip.end_date,
+                      )
+                    }
+                  </strong>
+                </div>
+
+
+                <div>
+                  <div className="text-subtle text-small">
+                    الميزانية
+                  </div>
+
+                  <strong className="currency">
+                    {focusTrip.budget_total !==
+                    null
+                      ? formatCurrency(
+                          focusTrip
+                            .budget_total,
+                          focusTrip.currency,
+                        )
+                      : "غير محددة"}
+                  </strong>
+                </div>
+              </div>
+            </article>
           </section>
         ) : null}
 
 
         {/* =================================================
-         * LIFE AI
+         * LIFE OS RECOMMENDATION
          * =============================================== */}
 
         <section
@@ -716,32 +1076,34 @@ export default async function DashboardPage() {
           <article
             className="card"
             style={{
-              padding: "24px",
+              padding:
+                "24px",
             }}
           >
             <div className="space-between">
               <div
                 style={{
-                  maxWidth: "720px",
+                  maxWidth:
+                    "720px",
                 }}
               >
-                <span
-                  className="text-muted text-small"
-                >
-                  ✦ من LIFE OS
+                <span className="text-muted text-small">
+                  ✦ توصية LIFE OS
                 </span>
+
 
                 <h2
                   id="home-ai-title"
                   className="card__title"
                   style={{
-                    marginTop: "8px",
+                    marginTop:
+                      "8px",
                   }}
                 >
                   {latestRecommendation
                     ? latestRecommendation.title
                     : hasData
-                      ? "وضعك واضح"
+                      ? "ما عندك توصية عاجلة الآن"
                       : "أحتاج بياناتك أولًا"}
                 </h2>
 
@@ -749,14 +1111,16 @@ export default async function DashboardPage() {
                 <p
                   className="card__description"
                   style={{
-                    marginTop: "8px",
+                    marginTop:
+                      "8px",
                   }}
                 >
                   {latestRecommendation
-                    ? latestRecommendation.recommendation
+                    ? latestRecommendation
+                        .recommendation
                     : hasData
-                      ? "ما عندي توصية محفوظة تحتاج انتباهك الآن."
-                      : "بعد الإعداد، أعطيك توصية قصيرة مرتبطة بوضعك الحقيقي بدل كلام عام."}
+                      ? "LIFE OS ما عنده توصية محفوظة تحتاج انتباهك الآن."
+                      : "بعد إضافة بياناتك، تظهر هنا توصية واحدة مرتبطة بوضعك الحقيقي."}
                 </p>
               </div>
 
@@ -773,14 +1137,17 @@ export default async function DashboardPage() {
 
 
         {/* =================================================
-         * V2 RULE
+         * HOME PRINCIPLE
          * =============================================== */}
 
         <p
           className="text-muted text-small"
           style={{
-            textAlign: "center",
-            paddingBottom: "8px",
+            textAlign:
+              "center",
+
+            paddingBottom:
+              "8px",
           }}
         >
           أقل معلومات ظاهرة. أكثر ذكاء تحتها.
@@ -790,3 +1157,102 @@ export default async function DashboardPage() {
     </AppShell>
   );
 }
+
+
+/* =========================================================
+ * 6. FINAL HOME CONTRACT
+ * ======================================================= */
+
+/**
+ * Home contains:
+ *
+ * Top 3
+ *
+ * money snapshot
+ * plans snapshot
+ * travel snapshot
+ * growth snapshot
+ *
+ * one focused upcoming/active trip
+ *
+ * one LIFE OS recommendation
+ *
+ *
+ * It does NOT duplicate:
+ *
+ * full Finance
+ * full Investments
+ * full Goals
+ * full Projects
+ * full Travel OS
+ * full Learning
+ * full Career
+ */
+
+
+/* =========================================================
+ * 7. TRAVEL HOME RULE
+ * ======================================================= */
+
+/**
+ * Travel is now live on Home.
+ *
+ *
+ * Home reads:
+ *
+ * active trip
+ *      or
+ * next planned/booked trip
+ *
+ *
+ * It displays:
+ *
+ * destination
+ * dates
+ * readiness
+ * budget
+ *
+ *
+ * Full details remain in:
+ *
+ * /travel
+ */
+
+
+/* =========================================================
+ * 8. DATA TRUTH RULE
+ * ======================================================= */
+
+/**
+ * Home displays database facts only.
+ *
+ *
+ * It does not ask AI to calculate:
+ *
+ * available money
+ * active plan count
+ * Travel readiness
+ * Travel budget
+ *
+ *
+ * AI recommendations remain a separate explicit read model.
+ */
+
+
+/* =========================================================
+ * 9. FINAL LIFE OS V2 RULE
+ * ======================================================= */
+
+/**
+ * The Home screen should answer:
+ *
+ * What matters?
+ * What's next?
+ *
+ *
+ * without making the user inspect the whole system.
+ *
+ *
+ * Simple outside.
+ * Intelligent underneath.
+ */
