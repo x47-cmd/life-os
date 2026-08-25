@@ -5,21 +5,15 @@ import type {
 import Link from "next/link";
 
 import {
-  revalidatePath,
-} from "next/cache";
-
-import {
-  redirect,
-} from "next/navigation";
-
-import {
-  runInvestmentCommittee,
-  InvestmentCommitteeError,
-} from "@/ai/investment-intelligence";
-
-import {
   AppShell,
 } from "@/components/app-shell";
+
+import { DataEntryButton } from "@/components/data-entry/data-entry-button";
+
+import {
+  DataTable,
+  type DataTableColumn,
+} from "@/components/data-table";
 
 import {
   EmptyState,
@@ -31,41 +25,16 @@ import {
 
 import {
   StatCard,
-  type StatCardTone,
 } from "@/components/stat-card";
 
 import {
-  requireAuthenticatedIdentity,
+  requireAAL2Identity,
 } from "@/lib/auth";
 
 import {
   getInvestmentSnapshot,
+  listInvestmentTransactions,
 } from "@/lib/data";
-
-import {
-  calculateInvestmentTechnicalSnapshot,
-  calculateTrackRecordCalibrationScore,
-  getForecastDirectionLabel,
-  getInvestmentRecommendationLabel,
-  getInvestmentStanceLabel,
-  getInvestmentTrackRecordGrade,
-  getTrackRecordGradeLabel,
-} from "@/lib/investment-intelligence";
-
-import {
-  createInvestmentAIAnalysisPackage,
-  getInvestmentIntelligenceSnapshot,
-  InvestmentIntelligenceDataError,
-  requireInvestmentIntelligenceAsset,
-  type InvestmentAIAnalysis,
-  type InvestmentAIForecast,
-} from "@/lib/investment-intelligence-data";
-
-import {
-  fetchInvestmentResearchData,
-  InvestmentMarketDataError,
-  type InvestmentMarketEvidence,
-} from "@/lib/investment-market-data";
 
 import {
   formatCurrency,
@@ -73,1033 +42,577 @@ import {
   formatPercent,
   formatPrice,
   formatQuantity,
+  formatSignedCurrency,
 } from "@/lib/format";
 
 import type {
-  InvestmentAsset,
-  JsonValue,
+  InvestmentPosition,
+  InvestmentTransaction,
   UUID,
 } from "@/lib/types";
-
-
-/* =========================================================
- * LIFE OS
- * LIFE INVEST AI
- *
- * Investment Intelligence UI
- *
- * Simple outside.
- * Intelligent underneath.
- *
- *
- * User sees:
- *
- * portfolio
- * AI score
- * recommendation
- * forecasts
- * Track Record
- *
- *
- * Underneath:
- *
- * real market data
- * technical calculations
- * AI Investment Committee
- * deterministic score
- * immutable forecasts
- * objective historical grading
- *
- *
- * No trading authority.
- * ======================================================= */
 
 
 /* =========================================================
  * 1. METADATA
  * ======================================================= */
 
-export const metadata:
-Metadata = {
+export const metadata: Metadata = {
   title:
-    "LIFE Invest AI",
+    "الاستثمارات",
 };
 
 
 /* =========================================================
- * 2. PAGE PROPS
+ * 2. ASSET TYPE LABEL
  * ======================================================= */
 
-interface InvestmentIntelligencePageProps {
-  searchParams?:
-    Promise<{
-      status?:
-        string |
-        string[] |
-        undefined;
-    }>;
-}
-
-
-/* =========================================================
- * 3. DISPLAY SCORE
- * ======================================================= */
-
-function formatAIScore(
-  value:
-    number |
-    null,
+function getAssetTypeLabel(
+  assetType: string,
 ): string {
-  if (
-    value ===
-    null
-  ) {
-    return "—";
+  switch (assetType) {
+    case "stock":
+      return "سهم";
+
+    case "etf":
+      return "ETF";
+
+    case "fund":
+      return "صندوق";
+
+    case "sukuk":
+      return "صكوك";
+
+    case "bond":
+      return "سند";
+
+    case "cash":
+      return "نقد";
+
+    case "other":
+      return "أخرى";
+
+    default:
+      return assetType;
   }
-
-
-  return `${(
-    value /
-    10
-  ).toFixed(1)}/10`;
 }
 
 
 /* =========================================================
- * 4. SCORE TONE
+ * 3. TRANSACTION TYPE LABEL
  * ======================================================= */
 
-function getScoreTone(
-  score:
-    number |
-    null,
-): StatCardTone {
-  if (
-    score ===
-    null
-  ) {
-    return "neutral";
+function getTransactionTypeLabel(
+  type: string,
+): string {
+  switch (type) {
+    case "buy":
+      return "شراء";
+
+    case "sell":
+      return "بيع";
+
+    case "dividend":
+      return "توزيعات";
+
+    case "deposit":
+      return "إيداع";
+
+    case "withdrawal":
+      return "سحب";
+
+    case "fee":
+      return "رسوم";
+
+    case "adjustment":
+      return "تعديل";
+
+    default:
+      return type;
   }
+}
 
 
+/* =========================================================
+ * 4. TRANSACTION BADGE
+ * ======================================================= */
+
+function getTransactionBadgeClass(
+  type: string,
+): string {
+  switch (type) {
+    case "buy":
+    case "deposit":
+      return "badge badge--accent";
+
+    case "dividend":
+      return "badge badge--positive";
+
+    case "sell":
+    case "withdrawal":
+      return "badge badge--warning";
+
+    case "fee":
+      return "badge badge--negative";
+
+    default:
+      return "badge";
+  }
+}
+
+
+/* =========================================================
+ * 5. GAIN / LOSS TONE
+ * ======================================================= */
+
+function getGainLossTone(
+  value: number,
+):
+  | "positive"
+  | "negative"
+  | "neutral" {
   if (
-    score >=
-    70
+    value > 0
   ) {
     return "positive";
   }
 
-
   if (
-    score >=
-    45
+    value < 0
   ) {
-    return "neutral";
+    return "negative";
   }
 
-
-  if (
-    score >=
-    30
-  ) {
-    return "warning";
-  }
-
-
-  return "negative";
+  return "neutral";
 }
 
 
 /* =========================================================
- * 5. RECOMMENDATION BADGE
+ * 6. GAIN / LOSS TEXT CLASS
  * ======================================================= */
 
-function getRecommendationBadgeClass(
-  recommendation:
-    InvestmentAIAnalysis[
-      "recommendation"
-    ],
-): string {
-  switch (
-    recommendation
-  ) {
-    case "accumulate":
-      return "badge badge--positive";
-
-    case "hold":
-      return "badge badge--accent";
-
-    case "watch":
-      return "badge badge--warning";
-
-    case "avoid":
-      return "badge badge--negative";
-
-    case "insufficient":
-    default:
-      return "badge";
-  }
-}
-
-
-/* =========================================================
- * 6. STANCE BADGE
- * ======================================================= */
-
-function getStanceBadgeClass(
-  stance:
-    InvestmentAIAnalysis[
-      "stance"
-    ],
-): string {
-  switch (
-    stance
-  ) {
-    case "strong_bullish":
-    case "bullish":
-      return "badge badge--positive";
-
-    case "bearish":
-    case "strong_bearish":
-      return "badge badge--negative";
-
-    case "neutral":
-      return "badge badge--warning";
-
-    case "insufficient":
-    default:
-      return "badge";
-  }
-}
-
-
-/* =========================================================
- * 7. FORECAST BADGE
- * ======================================================= */
-
-function getForecastBadgeClass(
-  direction:
-    InvestmentAIForecast[
-      "direction"
-    ],
-): string {
-  switch (
-    direction
-  ) {
-    case "up":
-      return "badge badge--positive";
-
-    case "down":
-      return "badge badge--negative";
-
-    case "flat":
-    default:
-      return "badge badge--warning";
-  }
-}
-
-
-/* =========================================================
- * 8. CARD STYLE
- * ======================================================= */
-
-const CARD_STYLE = {
-  border:
-    "1px solid rgba(128, 128, 128, 0.18)",
-
-  borderRadius:
-    "18px",
-
-  padding:
-    "20px",
-
-  background:
-    "rgba(255, 255, 255, 0.02)",
-} as const;
-
-
-/* =========================================================
- * 9. GRID STYLE
- * ======================================================= */
-
-const GRID_STYLE = {
-  display:
-    "grid",
-
-  gridTemplateColumns:
-    "repeat(auto-fit, minmax(260px, 1fr))",
-
-  gap:
-    "16px",
-} as const;
-
-
-/* =========================================================
- * 10. SECTION STYLE
- * ======================================================= */
-
-const SECTION_STYLE = {
-  marginTop:
-    "28px",
-} as const;
-
-
-/* =========================================================
- * 11. SECTION HEADER
- * ======================================================= */
-
-function SectionHeader({
-  title,
-  description,
-}: {
-  title:
-    string;
-
-  description?:
-    string;
-}) {
-  return (
-    <div
-      style={{
-        marginBottom:
-          "14px",
-      }}
-    >
-      <h2
-        style={{
-          margin:
-            0,
-
-          fontSize:
-            "1.1rem",
-        }}
-      >
-        {title}
-      </h2>
-
-      {description ? (
-        <p
-          className="text-subtle"
-          style={{
-            margin:
-              "5px 0 0",
-          }}
-        >
-          {description}
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-
-/* =========================================================
- * 12. ACTION BUTTON STYLE
- * ======================================================= */
-
-const ANALYZE_BUTTON_STYLE = {
-  width:
-    "100%",
-
-  border:
-    "0",
-
-  borderRadius:
-    "12px",
-
-  padding:
-    "11px 16px",
-
-  font:
-    "inherit",
-
-  fontWeight:
-    700,
-
-  cursor:
-    "pointer",
-
-  background:
-    "#111827",
-
-  color:
-    "#ffffff",
-} as const;
-
-
-/* =========================================================
- * 13. TECHNICAL EVIDENCE
- * ======================================================= */
-
-function buildTechnicalEvidence(
-  asset:
-    InvestmentAsset,
-
-  technical:
-    ReturnType<
-      typeof calculateInvestmentTechnicalSnapshot
-    >,
-
-  observedAt:
-    string,
-): InvestmentMarketEvidence {
-  const value:
-    JsonValue = {
-
-      ticker:
-        asset.ticker,
-
-      data_points:
-        technical.data_points,
-
-      latest_date:
-        technical.latest_date,
-
-      latest_close:
-        technical.latest_close,
-
-      sma_20:
-        technical.sma_20,
-
-      sma_50:
-        technical.sma_50,
-
-      ema_20:
-        technical.ema_20,
-
-      rsi_14:
-        technical.rsi_14,
-
-      momentum_20_percent:
-        technical.momentum_20_percent,
-
-      annualized_volatility_percent:
-        technical
-          .annualized_volatility_percent,
-
-      max_drawdown_percent:
-        technical
-          .max_drawdown_percent,
-
-      technical_score:
-        technical.technical_score,
-
-      signal:
-        technical.signal,
-    };
-
-
-  return {
-    source_type:
-      "technical",
-
-    source_name:
-      "LIFE OS Technical Engine",
-
-    title:
-      `${asset.ticker} deterministic technical snapshot`,
-
-    source_url:
-      null,
-
-    published_at:
-      null,
-
-    observed_at:
-      observedAt,
-
-    fact:
-      technical.technical_score ===
-      null
-        ? `تم تحليل ${technical.data_points} نقطة سعرية، ولكن البيانات غير كافية لإصدار Technical Score كامل.`
-        : `تم تحليل ${technical.data_points} نقطة سعرية. Technical Score: ${technical.technical_score}. الإشارة: ${technical.signal}.`,
-
-    value_json:
-      value,
-  };
-}
-
-
-/* =========================================================
- * 14. PORTFOLIO EVIDENCE
- * ======================================================= */
-
-function buildPortfolioEvidence(
-  asset:
-    InvestmentAsset,
-
-  allocationPercent:
-    number |
-    null,
-
-  portfolioCurrency:
-    string,
-
-  observedAt:
-    string,
-): InvestmentMarketEvidence {
-  return {
-    source_type:
-      "portfolio",
-
-    source_name:
-      "LIFE OS Portfolio Engine",
-
-    title:
-      `${asset.ticker} personal portfolio context`,
-
-    source_url:
-      null,
-
-    published_at:
-      null,
-
-    observed_at:
-      observedAt,
-
-    fact:
-      allocationPercent ===
-      null
-        ? `الكمية الحالية ${asset.quantity}. لا يمكن حساب الوزن ضمن المحفظة الحالية بدون تحويل عملات موثوق.`
-        : `الكمية الحالية ${asset.quantity}. الوزن الحالي في المحفظة ${allocationPercent.toFixed(2)}%.`,
-
-    value_json: {
-      quantity:
-        asset.quantity,
-
-      average_cost:
-        asset.average_cost,
-
-      allocation_percent:
-        allocationPercent,
-
-      portfolio_currency:
-        portfolioCurrency,
-
-      asset_currency:
-        asset.currency,
-
-      target_quantity:
-        asset.target_quantity,
-
-      monthly_contribution_target:
-        asset
-          .monthly_contribution_target,
-    },
-  };
-}
-
-
-/* =========================================================
- * 15. ANALYSIS ERROR STATUS
- * ======================================================= */
-
-function getAnalysisFailureStatus(
-  error:
-    unknown,
+function getGainLossClass(
+  value: number | null,
 ): string {
   if (
-    error instanceof
-    InvestmentMarketDataError
+    value === null ||
+    value === 0
   ) {
-    switch (
-      error.code
-    ) {
-      case "CONFIGURATION_MISSING":
-      case "UNAUTHORIZED":
-      case "FORBIDDEN":
-        return "market_configuration";
-
-      case "RATE_LIMITED":
-        return "rate_limited";
-
-      case "DATA_NOT_FOUND":
-      case "PRICE_HISTORY_UNAVAILABLE":
-      case "INSTRUMENT_MISMATCH":
-      case "CURRENCY_MISMATCH":
-        return "market_data_unavailable";
-
-      default:
-        return "market_error";
-    }
+    return "";
   }
 
-
-  if (
-    error instanceof
-    InvestmentCommitteeError
-  ) {
-    switch (
-      error.code
-    ) {
-      case "INSUFFICIENT_EVIDENCE":
-        return "insufficient_evidence";
-
-      case "OPENAI_UNAVAILABLE":
-        return "ai_unavailable";
-
-      case "INVALID_FORECAST":
-      case "INVALID_RESPONSE":
-      case "EMPTY_RESPONSE":
-        return "ai_invalid";
-
-      default:
-        return "analysis_error";
-    }
-  }
-
-
-  if (
-    error instanceof
-    InvestmentIntelligenceDataError
-  ) {
-    return "data_error";
-  }
-
-
-  return "analysis_error";
+  return value > 0
+    ? "text-positive"
+    : "text-negative";
 }
 
 
 /* =========================================================
- * 16. SERVER ACTION
+ * 7. SORT POSITIONS
  * ======================================================= */
 
 /**
- * User explicitly clicks:
+ * Primary portfolio view:
  *
- * تحليل الآن
+ * 1. Positions with the highest estimated value
+ * 2. Unpriced positions afterward
  *
- *
- * Nothing runs autonomously.
+ * We do not ask AI to rank portfolio holdings.
  */
-async function analyzeInvestmentAssetAction(
-  formData:
-    FormData,
-): Promise<void> {
-  "use server";
-
-
-  await requireAuthenticatedIdentity();
-
-
-  const rawAssetId =
-    formData.get(
-      "asset_id",
-    );
-
-
-  if (
-    typeof rawAssetId !==
-      "string" ||
-    rawAssetId
-      .trim()
-      .length ===
-      0
-  ) {
-    redirect(
-      "/investments/intelligence?status=invalid_asset",
-    );
-  }
-
-
-  const assetId =
-    rawAssetId.trim();
-
-
-  try {
-
-    /* -----------------------------------------------------
-     * EXACT OWNED ASSET
-     * -------------------------------------------------- */
-
-    const asset =
-      await requireInvestmentIntelligenceAsset(
-        assetId,
-      );
-
-
-    if (
-      !asset.is_active
-    ) {
-      redirect(
-        "/investments/intelligence?status=inactive_asset",
-      );
-    }
-
-
-    /* -----------------------------------------------------
-     * CURRENT PORTFOLIO
-     * -------------------------------------------------- */
-
-    const portfolio =
-      await getInvestmentSnapshot();
-
-
-    const position =
-      portfolio.positions.find(
-        (
-          item,
-        ) =>
-          item.asset.id ===
-          asset.id,
-      );
-
-
-    const allocationPercent =
-      position
-        ?.allocation_percent ??
-      null;
-
-
-    /* -----------------------------------------------------
-     * REAL MARKET DATA
-     * -------------------------------------------------- */
-
-    const marketData =
-      await fetchInvestmentResearchData(
-        asset,
-      );
-
-
-    /* -----------------------------------------------------
-     * DETERMINISTIC TECHNICAL ENGINE
-     * -------------------------------------------------- */
-
-    const technical =
-      calculateInvestmentTechnicalSnapshot(
-        marketData.price_history,
-      );
-
-
-    /* -----------------------------------------------------
-     * FULL AUDITABLE EVIDENCE
-     * -------------------------------------------------- */
-
-    const evidence:
-      InvestmentMarketEvidence[] = [
-        ...marketData.evidence,
-
-        buildTechnicalEvidence(
-          asset,
-          technical,
-          marketData.fetched_at,
-        ),
-
-        buildPortfolioEvidence(
-          asset,
-          allocationPercent,
-          portfolio.currency,
-          marketData.fetched_at,
-        ),
-      ];
-
-
-    /* -----------------------------------------------------
-     * INVESTMENT COMMITTEE AI
-     * -------------------------------------------------- */
-
-    const committee =
-      await runInvestmentCommittee({
-        asset,
-
-        as_of:
-          marketData.fetched_at,
-
-        reference_price:
-          marketData.reference_price,
-
-        currency:
-          marketData.currency,
-
-        technical_snapshot:
-          technical,
-
-        portfolio: {
-          current_allocation_percent:
-            allocationPercent,
-
-          /*
-           * LIFE OS currently has no authoritative personal
-           * concentration ceiling.
-           *
-           * Never invent one.
-           */
-          preferred_max_allocation_percent:
-            null,
-        },
-
-        evidence,
-      });
-
-
-    /* -----------------------------------------------------
-     * APPEND-ONLY STORAGE
-     * -------------------------------------------------- */
-
-    await createInvestmentAIAnalysisPackage(
-      committee.package_input,
-    );
-
-  } catch (
-    error
-  ) {
-    const status =
-      getAnalysisFailureStatus(
-        error,
-      );
-
-
-    redirect(
-      `/investments/intelligence?status=${status}`,
-    );
-  }
-
-
-  /* -------------------------------------------------------
-   * REFRESH PAGE
-   * ---------------------------------------------------- */
-
-  revalidatePath(
-    "/investments/intelligence",
-  );
-
-
-  revalidatePath(
-    "/investments",
-  );
-
-
-  revalidatePath(
-    "/finance",
-  );
-
-
-  redirect(
-    "/investments/intelligence?status=analysis_complete",
-  );
-}
-
-
-/* =========================================================
- * 17. STATUS MESSAGE
- * ======================================================= */
-
-function getStatusMessage(
-  status:
-    string |
-    null,
-): {
-  text:
-    string;
-
-  tone:
-    "positive" |
-    "warning" |
-    "negative";
-} | null {
-  switch (
-    status
-  ) {
-    case "analysis_complete":
-      return {
-        text:
-          "تم التحليل وحفظ التوقعات بنجاح.",
-
-        tone:
-          "positive",
-      };
-
-
-    case "market_configuration":
-      return {
-        text:
-          "مزود بيانات السوق يحتاج إعداد قبل تشغيل التحليل.",
-
-        tone:
-          "warning",
-      };
-
-
-    case "rate_limited":
-      return {
-        text:
-          "مزود السوق وصل حد الطلبات مؤقتًا. جرّب لاحقًا.",
-
-        tone:
-          "warning",
-      };
-
-
-    case "market_data_unavailable":
-      return {
-        text:
-          "ما حصلنا بيانات سوق كافية لهذا الأصل حاليًا.",
-
-        tone:
-          "warning",
-      };
-
-
-    case "insufficient_evidence":
-      return {
-        text:
-          "الأدلة الحالية غير كافية لإصدار تحليل موثوق.",
-
-        tone:
-          "warning",
-      };
-
-
-    case "ai_unavailable":
-      return {
-        text:
-          "LIFE Invest AI غير متاح مؤقتًا.",
-
-        tone:
-          "warning",
-      };
-
-
-    case "inactive_asset":
-      return {
-        text:
-          "هذا الأصل غير نشط في المحفظة.",
-
-        tone:
-          "warning",
-      };
-
-
-    case "invalid_asset":
-      return {
-        text:
-          "الأصل المحدد غير صالح.",
-
-        tone:
-          "negative",
-      };
-
-
-    case "ai_invalid":
-    case "market_error":
-    case "data_error":
-    case "analysis_error":
-      return {
-        text:
-          "تعذر إكمال التحليل بأمان. لم يتم إنشاء توصية غير موثوقة.",
-
-        tone:
-          "negative",
-      };
-
-
-    default:
-      return null;
-  }
-}
-
-
-/* =========================================================
- * 18. BEST ANALYSIS
- * ======================================================= */
-
-function getBestCurrentAnalysis(
-  analyses:
-    InvestmentAIAnalysis[],
-): InvestmentAIAnalysis | null {
+function sortPositions(
+  positions:
+    InvestmentPosition[],
+): InvestmentPosition[] {
   return [
-    ...analyses,
-  ]
-    .filter(
-      (
-        analysis,
-      ) =>
-        analysis.overall_score !==
-        null,
-    )
-    .sort(
-      (
-        a,
-        b,
-      ) =>
-        (
-          b.overall_score ??
-          -1
-        ) -
-        (
-          a.overall_score ??
-          -1
-        ),
-    )[0] ??
-    null;
-}
+    ...positions,
+  ].sort(
+    (
+      a,
+      b,
+    ) => {
+      const aValue =
+        a.estimated_value;
 
+      const bValue =
+        b.estimated_value;
 
-/* =========================================================
- * 19. LATEST ANALYSIS LOOKUP
- * ======================================================= */
+      if (
+        aValue === null &&
+        bValue === null
+      ) {
+        return a.asset.ticker.localeCompare(
+          b.asset.ticker,
+        );
+      }
 
-function buildLatestAnalysisMap(
-  analyses:
-    InvestmentAIAnalysis[],
-): Map<
-  UUID,
-  InvestmentAIAnalysis
-> {
-  const map =
-    new Map<
-      UUID,
-      InvestmentAIAnalysis
-    >();
+      if (
+        aValue === null
+      ) {
+        return 1;
+      }
 
+      if (
+        bValue === null
+      ) {
+        return -1;
+      }
 
-  for (
-    const analysis of
-      analyses
-  ) {
-    if (
-      !analysis.asset_id
-    ) {
-      continue;
-    }
-
-
-    if (
-      !map.has(
-        analysis.asset_id,
-      )
-    ) {
-      map.set(
-        analysis.asset_id,
-        analysis,
+      return (
+        bValue -
+        aValue
       );
-    }
-  }
-
-
-  return map;
+    },
+  );
 }
 
 
 /* =========================================================
- * 20. ASSET LOOKUP
+ * 8. POSITION TABLE COLUMNS
  * ======================================================= */
 
-function buildAssetMap(
-  assets:
-    InvestmentAsset[],
-): Map<
-  UUID,
-  InvestmentAsset
-> {
+function buildPositionColumns(
+  portfolioCurrency: string,
+): readonly DataTableColumn<InvestmentPosition>[] {
+  return [
+    {
+      key:
+        "asset",
+
+      header:
+        "الأصل",
+
+      render:
+        (position) => (
+          <div>
+            <strong className="ticker">
+              {
+                position
+                  .asset
+                  .ticker
+              }
+            </strong>
+
+            <div
+              className="text-subtle text-small"
+              style={{
+                marginTop:
+                  "2px",
+              }}
+            >
+              {
+                position
+                  .asset
+                  .name
+              }
+            </div>
+          </div>
+        ),
+    },
+
+    {
+      key:
+        "market",
+
+      header:
+        "السوق",
+
+      render:
+        (position) => (
+          <div>
+            <span>
+              {
+                position
+                  .asset
+                  .market
+              }
+            </span>
+
+            <div
+              className="text-subtle text-small"
+              style={{
+                marginTop:
+                  "2px",
+              }}
+            >
+              {
+                getAssetTypeLabel(
+                  position
+                    .asset
+                    .asset_type,
+                )
+              }
+            </div>
+          </div>
+        ),
+    },
+
+    {
+      key:
+        "quantity",
+
+      header:
+        "الكمية",
+
+      align:
+        "end",
+
+      render:
+        (position) => (
+          <span className="number">
+            {
+              formatQuantity(
+                position
+                  .asset
+                  .quantity,
+              )
+            }
+          </span>
+        ),
+    },
+
+    {
+      key:
+        "average_cost",
+
+      header:
+        "متوسط التكلفة",
+
+      align:
+        "end",
+
+      render:
+        (position) => (
+          <span className="number">
+            {
+              formatPrice(
+                position
+                  .asset
+                  .average_cost,
+              )
+            }
+          </span>
+        ),
+    },
+
+    {
+      key:
+        "reference_price",
+
+      header:
+        "السعر المرجعي",
+
+      align:
+        "end",
+
+      render:
+        (position) =>
+          position
+            .asset
+            .reference_price !==
+          null ? (
+            <span className="number">
+              {
+                formatPrice(
+                  position
+                    .asset
+                    .reference_price,
+                )
+              }
+            </span>
+          ) : (
+            "—"
+          ),
+    },
+
+    {
+      key:
+        "value",
+
+      header:
+        "القيمة",
+
+      align:
+        "end",
+
+      render:
+        (position) =>
+          position
+            .estimated_value !==
+          null ? (
+            <span className="currency">
+              {
+                formatCurrency(
+                  position
+                    .estimated_value,
+                  position
+                    .asset
+                    .currency,
+                )
+              }
+            </span>
+          ) : (
+            "—"
+          ),
+    },
+
+    {
+      key:
+        "gain_loss",
+
+      header:
+        "الربح / الخسارة",
+
+      align:
+        "end",
+
+      render:
+        (position) => {
+          if (
+            position
+              .estimated_gain_loss ===
+            null
+          ) {
+            return "—";
+          }
+
+          return (
+            <div
+              className={
+                getGainLossClass(
+                  position
+                    .estimated_gain_loss,
+                )
+              }
+            >
+              <strong className="currency">
+                {
+                  formatSignedCurrency(
+                    position
+                      .estimated_gain_loss,
+                    position
+                      .asset
+                      .currency,
+                  )
+                }
+              </strong>
+
+              {position
+                .estimated_gain_loss_percent !==
+              null ? (
+                <div
+                  className="percentage text-small"
+                  style={{
+                    marginTop:
+                      "2px",
+                  }}
+                >
+                  {
+                    formatPercent(
+                      position
+                        .estimated_gain_loss_percent,
+                    )
+                  }
+                </div>
+              ) : null}
+            </div>
+          );
+        },
+    },
+
+    {
+      key:
+        "allocation",
+
+      header:
+        "من المحفظة",
+
+      align:
+        "center",
+
+      render:
+        (position) => {
+          /**
+           * Allocation is only available for positions safely
+           * included in the portfolio's base-currency total.
+           */
+          if (
+            position
+              .allocation_percent ===
+            null
+          ) {
+            return (
+              <span
+                className="text-subtle"
+                title={
+                  position
+                    .asset
+                    .currency !==
+                  portfolioCurrency
+                    ? "لا يتم دمج العملات المختلفة بدون FX Engine."
+                    : undefined
+                }
+              >
+                —
+              </span>
+            );
+          }
+
+          return (
+            <span className="percentage">
+              {
+                formatPercent(
+                  position
+                    .allocation_percent,
+                )
+              }
+            </span>
+          );
+        },
+    },
+
+    {
+      key:
+        "target",
+
+      header:
+        "تقدم الهدف",
+
+      align:
+        "center",
+
+      render:
+        (position) =>
+          position
+            .target_progress_percent !==
+          null ? (
+            <span className="percentage">
+              {
+                formatPercent(
+                  position
+                    .target_progress_percent,
+                )
+              }
+            </span>
+          ) : (
+            "—"
+          ),
+    },
+  ];
+}
+
+
+/* =========================================================
+ * 9. ASSET LOOKUP
+ * ======================================================= */
+
+function buildAssetLookup(
+  positions:
+    InvestmentPosition[],
+): Map<UUID, InvestmentPosition["asset"]> {
   return new Map(
-    assets.map(
-      (
-        asset,
-      ) => [
-        asset.id,
-        asset,
+    positions.map(
+      (position) => [
+        position.asset.id,
+        position.asset,
       ],
     ),
   );
@@ -1107,1399 +620,1062 @@ function buildAssetMap(
 
 
 /* =========================================================
- * 21. TRACK RECORD VIEW
+ * 10. TRANSACTION TABLE COLUMNS
  * ======================================================= */
 
-function TrackRecordSection({
-  trackRecord,
-}: {
-  trackRecord:
-    Awaited<
-      ReturnType<
-        typeof getInvestmentIntelligenceSnapshot
-      >
-    >[
-      "track_record"
-    ];
-}) {
-  if (
-    !trackRecord ||
-    trackRecord.evaluated_forecasts ===
-      0
-  ) {
-    return (
-      <EmptyState
-        compact
-        title="السجل يبدأ من أول توقع مكتمل"
-        description="بعد انتهاء أول Forecast وتسجيل السعر الفعلي، يبدأ LIFE OS بقياس الدقة تلقائيًا."
-      />
-    );
-  }
+function buildTransactionColumns(
+  assetLookup:
+    Map<
+      UUID,
+      InvestmentPosition["asset"]
+    >,
+): readonly DataTableColumn<InvestmentTransaction>[] {
+  return [
+    {
+      key:
+        "date",
 
+      header:
+        "التاريخ",
 
-  const grade =
-    getInvestmentTrackRecordGrade({
-      evaluated_forecasts:
-        trackRecord.evaluated_forecasts,
+      render:
+        (transaction) =>
+          formatDate(
+            transaction
+              .transaction_date,
+          ),
+    },
 
-      directional_accuracy_percent:
-        trackRecord
-          .directional_accuracy_percent,
+    {
+      key:
+        "asset",
 
-      average_brier_score:
-        trackRecord
-          .average_brier_score,
-    });
+      header:
+        "الأصل",
 
+      render:
+        (transaction) => {
+          const asset =
+            assetLookup.get(
+              transaction.asset_id,
+            );
 
-  const calibration =
-    trackRecord.average_brier_score ===
-    null
-      ? null
-      : calculateTrackRecordCalibrationScore(
-          trackRecord.average_brier_score,
-        );
+          return asset ? (
+            <div>
+              <strong className="ticker">
+                {asset.ticker}
+              </strong>
 
+              <div
+                className="text-subtle text-small"
+                style={{
+                  marginTop:
+                    "2px",
+                }}
+              >
+                {asset.name}
+              </div>
+            </div>
+          ) : (
+            "—"
+          );
+        },
+    },
 
-  return (
-    <div style={GRID_STYLE}>
-      <StatCard
-        label="التوقعات المقيمة"
-        value={
-          trackRecord
-            .evaluated_forecasts
-        }
-        helper={
-          trackRecord.evaluated_forecasts <
-          10
-            ? "العينة ما زالت صغيرة"
-            : "سجل قابل للقياس"
-        }
-      />
+    {
+      key:
+        "type",
 
-      <StatCard
-        label="دقة الاتجاه"
-        value={
-          trackRecord
-            .directional_accuracy_percent ===
-          null
-            ? "—"
-            : formatPercent(
-                trackRecord
-                  .directional_accuracy_percent,
-              )
-        }
-        tone={
-          trackRecord
-            .directional_accuracy_percent !==
-            null &&
-          trackRecord
-            .directional_accuracy_percent >=
-            55
-            ? "positive"
-            : "neutral"
-        }
-      />
+      header:
+        "العملية",
 
-      <StatCard
-        label="دقة النطاق"
-        value={
-          trackRecord
-            .base_range_accuracy_percent ===
-          null
-            ? "—"
-            : formatPercent(
-                trackRecord
-                  .base_range_accuracy_percent,
-              )
-        }
-      />
-
-      <StatCard
-        label="معايرة الاحتمالات"
-        value={
-          calibration ===
-          null
-            ? "—"
-            : formatPercent(
-                calibration,
-              )
-        }
-        helper={
-          getTrackRecordGradeLabel(
-            grade,
-          )
-        }
-      />
-    </div>
-  );
-}
-
-
-/* =========================================================
- * 22. FORECAST CARD
- * ======================================================= */
-
-function ForecastCard({
-  forecast,
-  asset,
-}: {
-  forecast:
-    InvestmentAIForecast;
-
-  asset:
-    InvestmentAsset |
-    undefined;
-}) {
-  return (
-    <article style={CARD_STYLE}>
-      <div
-        style={{
-          display:
-            "flex",
-
-          justifyContent:
-            "space-between",
-
-          gap:
-            "12px",
-
-          alignItems:
-            "flex-start",
-        }}
-      >
-        <div>
-          <strong className="ticker">
-            {
-              asset
-                ?.ticker ??
-              "—"
-            }
-          </strong>
-
-          <div
-            className="text-subtle text-small"
-            style={{
-              marginTop:
-                "3px",
-            }}
-          >
-            {
-              forecast.horizon_days
-            } يوم
-          </div>
-        </div>
-
-        <span
-          className={
-            getForecastBadgeClass(
-              forecast.direction,
-            )
-          }
-        >
-          {
-            getForecastDirectionLabel(
-              forecast.direction,
-            )
-          }
-        </span>
-      </div>
-
-      <div
-        style={{
-          marginTop:
-            "18px",
-
-          display:
-            "grid",
-
-          gridTemplateColumns:
-            "repeat(3, 1fr)",
-
-          gap:
-            "8px",
-        }}
-      >
-        <div>
-          <div className="text-subtle text-small">
-            صعود
-          </div>
-
-          <strong>
-            {
-              formatPercent(
-                forecast
-                  .up_probability,
-              )
-            }
-          </strong>
-        </div>
-
-        <div>
-          <div className="text-subtle text-small">
-            جانبي
-          </div>
-
-          <strong>
-            {
-              formatPercent(
-                forecast
-                  .flat_probability,
-              )
-            }
-          </strong>
-        </div>
-
-        <div>
-          <div className="text-subtle text-small">
-            هبوط
-          </div>
-
-          <strong>
-            {
-              formatPercent(
-                forecast
-                  .down_probability,
-              )
-            }
-          </strong>
-        </div>
-      </div>
-
-      <div
-        style={{
-          marginTop:
-            "18px",
-
-          paddingTop:
-            "14px",
-
-          borderTop:
-            "1px solid rgba(128, 128, 128, 0.15)",
-        }}
-      >
-        <div
-          className="text-subtle text-small"
-        >
-          Base Case
-        </div>
-
-        <strong>
-          {
-            formatCurrency(
-              forecast.base_low,
-              forecast.currency,
-            )
-          }
-          {" – "}
-          {
-            formatCurrency(
-              forecast.base_high,
-              forecast.currency,
-            )
-          }
-        </strong>
-      </div>
-
-      <div
-        style={{
-          marginTop:
-            "12px",
-        }}
-      >
-        <span className="text-subtle text-small">
-          العائد المتوقع بمنتصف النطاق
-        </span>
-
-        <div>
-          <strong>
-            {
-              formatPercent(
-                forecast
-                  .expected_return_mid_percent,
-              )
-            }
-          </strong>
-        </div>
-      </div>
-
-      <div
-        style={{
-          marginTop:
-            "12px",
-        }}
-      >
-        <span className="text-subtle text-small">
-          تاريخ التقييم
-        </span>
-
-        <div>
-          {
-            formatDate(
-              forecast.target_date,
-            )
-          }
-        </div>
-      </div>
-
-      <p
-        className="text-subtle text-small"
-        style={{
-          margin:
-            "14px 0 0",
-
-          lineHeight:
-            1.7,
-        }}
-      >
-        {forecast.thesis}
-      </p>
-    </article>
-  );
-}
-
-
-/* =========================================================
- * 23. ASSET INTELLIGENCE CARD
- * ======================================================= */
-
-function AssetIntelligenceCard({
-  asset,
-  analysis,
-}: {
-  asset:
-    InvestmentAsset;
-
-  analysis:
-    InvestmentAIAnalysis |
-    null;
-}) {
-  return (
-    <article style={CARD_STYLE}>
-      <div
-        style={{
-          display:
-            "flex",
-
-          justifyContent:
-            "space-between",
-
-          gap:
-            "12px",
-
-          alignItems:
-            "flex-start",
-        }}
-      >
-        <div>
-          <strong
-            className="ticker"
-            style={{
-              fontSize:
-                "1.1rem",
-            }}
-          >
-            {asset.ticker}
-          </strong>
-
-          <div
-            className="text-subtle text-small"
-            style={{
-              marginTop:
-                "3px",
-            }}
-          >
-            {asset.name}
-          </div>
-
-          <div
-            className="text-subtle text-small"
-            style={{
-              marginTop:
-                "3px",
-            }}
-          >
-            {asset.market}
-          </div>
-        </div>
-
-        {analysis ? (
+      render:
+        (transaction) => (
           <span
             className={
-              getRecommendationBadgeClass(
-                analysis.recommendation,
+              getTransactionBadgeClass(
+                transaction
+                  .transaction_type,
               )
             }
           >
             {
-              getInvestmentRecommendationLabel(
-                analysis.recommendation,
+              getTransactionTypeLabel(
+                transaction
+                  .transaction_type,
               )
             }
           </span>
-        ) : (
-          <span className="badge">
-            غير محلل
-          </span>
-        )}
-      </div>
+        ),
+    },
 
-      <div
-        style={{
-          marginTop:
-            "20px",
+    {
+      key:
+        "quantity",
 
-          display:
-            "flex",
+      header:
+        "الكمية",
 
-          justifyContent:
-            "space-between",
+      align:
+        "end",
 
-          gap:
-            "16px",
-        }}
-      >
-        <div>
-          <div className="text-subtle text-small">
-            LIFE Score
-          </div>
-
-          <strong
-            style={{
-              fontSize:
-                "1.4rem",
-            }}
-          >
-            {
-              formatAIScore(
-                analysis
-                  ?.overall_score ??
-                null,
-              )
-            }
-          </strong>
-        </div>
-
-        <div
-          style={{
-            textAlign:
-              "end",
-          }}
-        >
-          <div className="text-subtle text-small">
-            الثقة
-          </div>
-
-          <strong>
-            {
-              analysis
-                ? formatPercent(
-                    analysis.confidence,
-                  )
-                : "—"
-            }
-          </strong>
-        </div>
-      </div>
-
-      {analysis ? (
-        <>
-          <div
-            style={{
-              marginTop:
-                "14px",
-            }}
-          >
-            <span
-              className={
-                getStanceBadgeClass(
-                  analysis.stance,
-                )
-              }
-            >
+      render:
+        (transaction) =>
+          transaction.quantity !==
+          null ? (
+            <span className="number">
               {
-                getInvestmentStanceLabel(
-                  analysis.stance,
+                formatQuantity(
+                  transaction.quantity,
                 )
               }
             </span>
-          </div>
+          ) : (
+            "—"
+          ),
+    },
 
-          <p
-            style={{
-              margin:
-                "14px 0 0",
+    {
+      key:
+        "unit_price",
 
-              lineHeight:
-                1.7,
-            }}
-          >
-            {analysis.summary}
-          </p>
+      header:
+        "سعر الوحدة",
 
-          <div
-            className="text-subtle text-small"
-            style={{
-              marginTop:
-                "12px",
-            }}
-          >
-            آخر تحليل:{" "}
-            {
-              formatDate(
-                analysis.as_of,
-              )
-            }
-          </div>
-        </>
-      ) : (
-        <p
-          className="text-subtle"
-          style={{
-            margin:
-              "14px 0 0",
+      align:
+        "end",
 
-            lineHeight:
-              1.7,
-          }}
-        >
-          شغّل أول تحليل عشان يبدأ LIFE Invest AI يبني رأيه وسجل توقعاته.
-        </p>
-      )}
+      render:
+        (transaction) =>
+          transaction.unit_price !==
+          null ? (
+            <span className="number">
+              {
+                formatPrice(
+                  transaction
+                    .unit_price,
+                )
+              }
+            </span>
+          ) : (
+            "—"
+          ),
+    },
 
-      <div
-        style={{
-          marginTop:
-            "18px",
+    {
+      key:
+        "total",
 
-          paddingTop:
-            "16px",
+      header:
+        "الإجمالي",
 
-          borderTop:
-            "1px solid rgba(128, 128, 128, 0.15)",
-        }}
-      >
-        <div
-          style={{
-            display:
-              "flex",
+      align:
+        "end",
 
-            justifyContent:
-              "space-between",
+      render:
+        (transaction) => {
+          const asset =
+            assetLookup.get(
+              transaction.asset_id,
+            );
 
-            gap:
-              "12px",
-
-            marginBottom:
-              "12px",
-          }}
-        >
-          <span className="text-subtle text-small">
-            الكمية
-          </span>
-
-          <strong>
-            {
-              formatQuantity(
-                asset.quantity,
-              )
-            }
-          </strong>
-        </div>
-
-        <div
-          style={{
-            display:
-              "flex",
-
-            justifyContent:
-              "space-between",
-
-            gap:
-              "12px",
-
-            marginBottom:
-              "12px",
-          }}
-        >
-          <span className="text-subtle text-small">
-            متوسط التكلفة
-          </span>
-
-          <strong>
-            {
-              formatPrice(
-                asset.average_cost,
-              )
-            }
-          </strong>
-        </div>
-
-        <form
-          action={
-            analyzeInvestmentAssetAction
+          if (
+            !asset
+          ) {
+            return (
+              <span className="number">
+                {
+                  transaction
+                    .total_amount
+                }
+              </span>
+            );
           }
-        >
-          <input
-            type="hidden"
-            name="asset_id"
-            value={asset.id}
-          />
 
-          <button
-            type="submit"
-            style={
-              ANALYZE_BUTTON_STYLE
-            }
-          >
-            {
-              analysis
-                ? "تحديث التحليل"
-                : "تحليل الآن"
-            }
-          </button>
-        </form>
-      </div>
-    </article>
-  );
+          return (
+            <span className="currency">
+              {
+                formatCurrency(
+                  transaction
+                    .total_amount,
+                  asset.currency,
+                )
+              }
+            </span>
+          );
+        },
+    },
+
+    {
+      key:
+        "fees",
+
+      header:
+        "الرسوم",
+
+      align:
+        "end",
+
+      render:
+        (transaction) => {
+          const asset =
+            assetLookup.get(
+              transaction.asset_id,
+            );
+
+          if (
+            !asset
+          ) {
+            return (
+              <span className="number">
+                {transaction.fees}
+              </span>
+            );
+          }
+
+          return (
+            <span className="currency">
+              {
+                formatCurrency(
+                  transaction.fees,
+                  asset.currency,
+                )
+              }
+            </span>
+          );
+        },
+    },
+  ];
 }
 
 
 /* =========================================================
- * 24. MAIN PAGE
+ * 11. INVESTMENTS PAGE
  * ======================================================= */
 
-export default async function InvestmentIntelligencePage({
-  searchParams,
-}: InvestmentIntelligencePageProps) {
+export default async function InvestmentsPage() {
+  await requireAAL2Identity();
 
-  /* -------------------------------------------------------
-   * AUTH
-   * ---------------------------------------------------- */
+  const [
+    investmentSnapshot,
+    transactionRows,
+  ] =
+    await Promise.all([
+      getInvestmentSnapshot(),
+      listInvestmentTransactions(),
+    ]);
 
-  await requireAuthenticatedIdentity();
-
-
-  /* -------------------------------------------------------
-   * QUERY STATUS
-   * ---------------------------------------------------- */
-
-  const params =
-    searchParams
-      ? await searchParams
-      : {};
-
-
-  const rawStatus =
-    params.status;
-
-
-  const status =
-    typeof rawStatus ===
-    "string"
-      ? rawStatus
-      : null;
-
-
-  const statusMessage =
-    getStatusMessage(
-      status,
+  const positions =
+    sortPositions(
+      investmentSnapshot
+        .positions,
     );
 
-
-  /* -------------------------------------------------------
-   * DATA
-   * ---------------------------------------------------- */
-
-  const snapshot =
-    await getInvestmentIntelligenceSnapshot();
-
-
-  const latestAnalysisMap =
-    buildLatestAnalysisMap(
-      snapshot.latest_analyses,
+  const activePositions =
+    positions.filter(
+      (position) =>
+        position.asset.is_active,
     );
 
-
-  const assetMap =
-    buildAssetMap(
-      snapshot.assets,
+  const transactions =
+    transactionRows.slice(
+      0,
+      10,
     );
 
-
-  const bestAnalysis =
-    getBestCurrentAnalysis(
-      snapshot.latest_analyses,
+  const assetLookup =
+    buildAssetLookup(
+      positions,
     );
 
+  const positionColumns =
+    buildPositionColumns(
+      investmentSnapshot.currency,
+    );
 
-  const bestAsset =
-    bestAnalysis
-      ?.asset_id
-      ? assetMap.get(
-          bestAnalysis.asset_id,
-        )
-      : undefined;
+  const transactionColumns =
+    buildTransactionColumns(
+      assetLookup,
+    );
 
-
-  const analyzedAssetCount =
-    new Set(
-      snapshot.latest_analyses
-        .map(
-          (
-            analysis,
-          ) =>
-            analysis.asset_id,
-        )
-        .filter(
-          (
-            assetId,
-          ): assetId is UUID =>
-            assetId !==
-            null,
-        ),
-    ).size;
-
-
-  /* -------------------------------------------------------
-   * TRACK RECORD HEADLINE
-   * ---------------------------------------------------- */
-
-  const directionalAccuracy =
-    snapshot.track_record
-      ?.directional_accuracy_percent ??
-    null;
-
-
-  /* -------------------------------------------------------
-   * RENDER
-   * ---------------------------------------------------- */
 
   return (
     <AppShell>
+      <div className="page">
 
-      <PageHeader
-        eyebrow="الاستثمارات"
-        title="LIFE Invest AI"
-        description="محلل استثماري شخصي يجمع السوق، الأرقام، الشارت، الأخبار ومحفظتك — ثم يسجل توقعاته ويحاسب نفسه عليها."
-        action={
-          <Link
-            href="/investments"
+        {/* =================================================
+         * HEADER
+         * =============================================== */}
+
+        <PageHeader
+          eyebrow="المحفظة"
+          title="الاستثمارات"
+          description="وضع محفظتك، أهداف الضخ، وتقدم كل أصل بدون تنفيذ أي صفقة تلقائيًا."
+          meta={
+            <span>
+              العملة الأساسية:{" "}
+              <strong className="ltr">
+                {
+                  investmentSnapshot
+                    .currency
+                }
+              </strong>
+            </span>
+          }
+        />
+
+
+        {/* =================================================
+         * PORTFOLIO SUMMARY
+         * =============================================== */}
+
+        <section
+          className="page-section"
+          aria-labelledby="investment-summary-title"
+        >
+          <div className="section-header">
+            <div className="section-header__content">
+              <h2
+                id="investment-summary-title"
+                className="section-title"
+              >
+                وضع المحفظة
+              </h2>
+
+              <p className="section-description">
+                الأرقام الأساسية للمحفظة بالعملة الرئيسية.
+              </p>
+            </div>
+          </div>
+
+
+          <div className="stats-grid">
+
+            <StatCard
+              label="القيمة التقديرية"
+              value={
+                formatCurrency(
+                  investmentSnapshot
+                    .total_estimated_value,
+                  investmentSnapshot
+                    .currency,
+                )
+              }
+              tone="neutral"
+              helper="للأصول المسعرة ضمن العملة الأساسية."
+              icon="◈"
+            />
+
+
+            <StatCard
+              label="التكلفة"
+              value={
+                formatCurrency(
+                  investmentSnapshot
+                    .total_cost_basis,
+                  investmentSnapshot
+                    .currency,
+                )
+              }
+              tone="neutral"
+              helper="أساس التكلفة للأصول ضمن العملة الأساسية."
+              icon="="
+            />
+
+
+            <StatCard
+              label="الربح / الخسارة"
+              value={
+                formatSignedCurrency(
+                  investmentSnapshot
+                    .total_estimated_gain_loss,
+                  investmentSnapshot
+                    .currency,
+                )
+              }
+              tone={
+                getGainLossTone(
+                  investmentSnapshot
+                    .total_estimated_gain_loss,
+                )
+              }
+              helper="تقديري بناءً على الأسعار المرجعية المسجلة."
+              icon="↗"
+            />
+
+
+            <StatCard
+              label="هدف الضخ الشهري"
+              value={
+                formatCurrency(
+                  investmentSnapshot
+                    .total_monthly_contribution_target,
+                  investmentSnapshot
+                    .currency,
+                )
+              }
+              tone="neutral"
+              helper="إجمالي الأهداف الشهرية المسجلة للأصول."
+              icon="+"
+            />
+
+          </div>
+        </section>
+
+
+        {/* =================================================
+         * LIFE INVEST AI
+         * =============================================== */}
+
+        <section
+          className="page-section"
+          aria-labelledby="life-invest-ai-title"
+        >
+          <article
+            className="card"
             style={{
-              textDecoration:
-                "none",
+              display:
+                "grid",
+
+              gridTemplateColumns:
+                "minmax(0, 1fr) auto",
+
+              gap:
+                "18px",
+
+              alignItems:
+                "center",
             }}
           >
-            ← المحفظة
-          </Link>
-        }
-      />
+            <div>
+              <div
+                className="badge badge--accent"
+                style={{
+                  marginBottom:
+                    "10px",
+                }}
+              >
+                ✦ إضافة ذكية
+              </div>
+
+              <h2
+                id="life-invest-ai-title"
+                className="section-title"
+                style={{
+                  margin:
+                    0,
+                }}
+              >
+                LIFE Invest AI
+              </h2>
+
+              <p
+                className="text-subtle"
+                style={{
+                  margin:
+                    "8px 0 0",
+
+                  maxWidth:
+                    "720px",
+
+                  lineHeight:
+                    1.7,
+                }}
+              >
+                تحليل إضافي للسوق ومحفظتك يجمع البيانات، الشارت، النتائج والأخبار ويعطيك رأيًا احتماليًا مع سجل حقيقي لدقة توقعاته.
+              </p>
+
+              <p
+                className="text-subtle text-small"
+                style={{
+                  margin:
+                    "8px 0 0",
+                }}
+              >
+                أداة مساعدة فقط — القرار والتنفيذ يظلان بيدك.
+              </p>
+            </div>
+
+            <Link
+              href="/investments/intelligence"
+              aria-label="فتح LIFE Invest AI"
+              style={{
+                display:
+                  "inline-flex",
+
+                alignItems:
+                  "center",
+
+                justifyContent:
+                  "center",
+
+                minHeight:
+                  "44px",
+
+                padding:
+                  "10px 16px",
+
+                borderRadius:
+                  "12px",
+
+                textDecoration:
+                  "none",
+
+                fontWeight:
+                  700,
+
+                whiteSpace:
+                  "nowrap",
+
+                background:
+                  "#111827",
+
+                color:
+                  "#ffffff",
+              }}
+            >
+              فتح التحليل
+            </Link>
+          </article>
+        </section>
 
 
-      {/* ===================================================
-       * STATUS
-       * ================================================= */}
+        {/* =================================================
+         * INVESTMENT PRINCIPLE
+         * =============================================== */}
 
-      {statusMessage ? (
-        <div
-          className={[
-            "badge",
-            statusMessage.tone ===
-              "positive"
-              ? "badge--positive"
-              : statusMessage.tone ===
-                  "warning"
-                ? "badge--warning"
-                : "badge--negative",
-          ].join(" ")}
-          style={{
-            display:
-              "block",
-
-            width:
-              "100%",
-
-            padding:
-              "12px 14px",
-
-            marginBottom:
-              "22px",
-
-            whiteSpace:
-              "normal",
-          }}
+        <section
+          className="page-section"
+          aria-labelledby="investment-signal-title"
         >
-          {
-            statusMessage.text
-          }
-        </div>
-      ) : null}
+          <div className="section-header">
+            <div className="section-header__content">
+              <h2
+                id="investment-signal-title"
+                className="section-title"
+              >
+                قاعدة LIFE OS
+              </h2>
+            </div>
+          </div>
+
+          <div
+            className="alert"
+            role="note"
+          >
+            LIFE OS يقرأ ويحلل ويقترح فقط. لا يشتري، لا يبيع، ولا يرسل أوامر للوسيط المالي.
+          </div>
+        </section>
 
 
-      {/* ===================================================
-       * HEADLINE
-       * ================================================= */}
+        {/* =================================================
+         * POSITIONS
+         * =============================================== */}
 
-      <div style={GRID_STYLE}>
+        <section
+          className="page-section"
+          aria-labelledby="positions-title"
+        >
+          <div className="section-header">
+            <div className="section-header__content">
+              <h2
+                id="positions-title"
+                className="section-title"
+              >
+                الأصول
+              </h2>
 
-        <StatCard
-          label="أفضل فرصة حاليًا"
-          value={
-            bestAsset
-              ?.ticker ??
-            "—"
-          }
-          helper={
-            bestAnalysis
-              ? getInvestmentRecommendationLabel(
-                  bestAnalysis
-                    .recommendation,
-                )
-              : "ابدأ أول تحليل"
-          }
-          tone={
-            getScoreTone(
-              bestAnalysis
-                ?.overall_score ??
+              <p className="section-description">
+                الكمية، التكلفة، السعر المرجعي، والقرب من الهدف لكل أصل.
+              </p>
+            </div>
+          </div>
+
+
+          {activePositions.length > 0 ? (
+            <DataTable
+              rows={
+                activePositions
+              }
+              columns={
+                positionColumns
+              }
+              getRowKey={
+                (position) =>
+                  position.asset.id
+              }
+              caption="الأصول الاستثمارية النشطة"
+            />
+          ) : (
+            <EmptyState
+              icon="↗"
+              title="لا توجد أصول استثمارية نشطة"
+              description="عندما تسجل أول أصل، سيظهر هنا مع الكمية ومتوسط التكلفة والقيمة والتقدم نحو الهدف."
+            />
+          )}
+        </section>
+
+
+        {/* =================================================
+         * TARGET PROGRESS
+         * =============================================== */}
+
+        <section
+          className="page-section"
+          aria-labelledby="investment-targets-title"
+        >
+          <div className="section-header">
+            <div className="section-header__content">
+              <h2
+                id="investment-targets-title"
+                className="section-title"
+              >
+                أهداف الكميات
+              </h2>
+
+              <p className="section-description">
+                ركز فقط على الأصول التي لها كمية مستهدفة مسجلة.
+              </p>
+            </div>
+          </div>
+
+
+          {activePositions.some(
+            (position) =>
+              position.asset
+                .target_quantity !==
               null,
-            )
-          }
-        />
-
-        <StatCard
-          label="أفضل LIFE Score"
-          value={
-            formatAIScore(
-              bestAnalysis
-                ?.overall_score ??
-              null,
-            )
-          }
-          helper={
-            bestAnalysis
-              ? getInvestmentStanceLabel(
-                  bestAnalysis.stance,
+          ) ? (
+            <div className="grid grid--2">
+              {activePositions
+                .filter(
+                  (position) =>
+                    position.asset
+                      .target_quantity !==
+                    null,
                 )
-              : "لا توجد تحليلات بعد"
-          }
-          tone={
-            getScoreTone(
-              bestAnalysis
-                ?.overall_score ??
-              null,
-            )
-          }
-        />
+                .map(
+                  (position) => {
+                    const progress =
+                      position
+                        .target_progress_percent ??
+                      0;
 
-        <StatCard
-          label="دقة الاتجاه"
-          value={
-            directionalAccuracy ===
-            null
-              ? "—"
-              : formatPercent(
-                  directionalAccuracy,
-                )
-          }
-          helper={
-            snapshot.track_record
-              ?.evaluated_forecasts
-              ? `${snapshot.track_record.evaluated_forecasts} توقع مقيم`
-              : "يبدأ القياس بعد انتهاء التوقعات"
-          }
-        />
+                    return (
+                      <article
+                        key={
+                          position
+                            .asset
+                            .id
+                        }
+                        className="card"
+                      >
+                        <div className="space-between">
+                          <div>
+                            <strong className="ticker">
+                              {
+                                position
+                                  .asset
+                                  .ticker
+                              }
+                            </strong>
 
-        <StatCard
-          label="التوقعات المفتوحة"
-          value={
-            snapshot
-              .open_forecasts
-              .length
-          }
-          helper={
-            `${analyzedAssetCount} أصل محلل`
-          }
-        />
+                            <div
+                              className="text-subtle text-small"
+                              style={{
+                                marginTop:
+                                  "3px",
+                              }}
+                            >
+                              {
+                                position
+                                  .asset
+                                  .name
+                              }
+                            </div>
+                          </div>
+
+                          <strong className="percentage">
+                            {
+                              formatPercent(
+                                progress,
+                              )
+                            }
+                          </strong>
+                        </div>
+
+
+                        <div
+                          className="progress"
+                          style={{
+                            marginTop:
+                              "16px",
+                          }}
+                          aria-label={
+                            `التقدم ${formatPercent(progress)}`
+                          }
+                        >
+                          <div
+                            className="progress__value"
+                            style={{
+                              width:
+                                `${Math.min(
+                                  100,
+                                  Math.max(
+                                    0,
+                                    progress,
+                                  ),
+                                )}%`,
+                            }}
+                          />
+                        </div>
+
+
+                        <div
+                          className="stack stack--small"
+                          style={{
+                            marginTop:
+                              "16px",
+                          }}
+                        >
+                          <div className="space-between">
+                            <span className="text-muted text-small">
+                              الحالي
+                            </span>
+
+                            <strong className="number">
+                              {
+                                formatQuantity(
+                                  position
+                                    .asset
+                                    .quantity,
+                                )
+                              }
+                            </strong>
+                          </div>
+
+                          <div className="space-between">
+                            <span className="text-muted text-small">
+                              الهدف
+                            </span>
+
+                            <strong className="number">
+                              {
+                                formatQuantity(
+                                  position
+                                    .asset
+                                    .target_quantity ??
+                                  0,
+                                )
+                              }
+                            </strong>
+                          </div>
+
+                          <div className="space-between">
+                            <span className="text-muted text-small">
+                              هدف الضخ الشهري
+                            </span>
+
+                            <strong className="currency">
+                              {
+                                position
+                                  .asset
+                                  .monthly_contribution_target !==
+                                null
+                                  ? formatCurrency(
+                                      position
+                                        .asset
+                                        .monthly_contribution_target,
+                                      position
+                                        .asset
+                                        .currency,
+                                    )
+                                  : "—"
+                              }
+                            </strong>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  },
+                )}
+            </div>
+          ) : (
+            <EmptyState
+              compact
+              icon="◎"
+              title="لا توجد أهداف كمية مسجلة"
+              description="يمكن الاحتفاظ بالأصل بدون هدف كمية؛ LIFE OS لن يخترع هدفًا من تلقاء نفسه."
+            />
+          )}
+        </section>
+
+
+        {/* =================================================
+         * RECENT TRANSACTIONS
+         * =============================================== */}
+
+        <section
+          className="page-section"
+          aria-labelledby="investment-transactions-title"
+        >
+          <div className="section-header">
+            <div className="section-header__content">
+              <h2
+                id="investment-transactions-title"
+                className="section-title"
+              >
+                آخر العمليات
+              </h2>
+
+              <p className="section-description">
+                آخر 10 عمليات استثمارية مسجلة في LIFE OS.
+              </p>
+            </div>
+          </div>
+
+
+          <DataTable
+            rows={
+              transactions
+            }
+            columns={
+              transactionColumns
+            }
+            getRowKey={
+              (transaction) =>
+                transaction.id
+            }
+            caption="آخر العمليات الاستثمارية"
+            emptyMessage="لا توجد عمليات استثمارية مسجلة حاليًا."
+            compact
+          />
+        </section>
+
+
+        {/* =================================================
+         * CROSS-CURRENCY NOTE
+         * =============================================== */}
+
+        {activePositions.some(
+          (position) =>
+            position.asset.currency !==
+            investmentSnapshot.currency,
+        ) ? (
+          <section className="page-section">
+            <div
+              className="alert alert--warning"
+              role="note"
+            >
+              توجد أصول بعملة مختلفة عن{" "}
+              <strong className="ltr">
+                {
+                  investmentSnapshot
+                    .currency
+                }
+              </strong>
+              . LIFE OS V1 لا يدمج العملات المختلفة في إجمالي واحد بدون سعر صرف موثوق.
+            </div>
+          </section>
+        ) : null}
 
       </div>
-
-
-      {/* ===================================================
-       * ASSETS
-       * ================================================= */}
-
-      <section style={SECTION_STYLE}>
-        <SectionHeader
-          title="محفظتي × LIFE Invest AI"
-          description="اختر أي أصل لتشغيل تحليل جديد. ما يتم شراء أو بيع أي شيء."
-        />
-
-        {snapshot.assets.length ===
-        0 ? (
-          <EmptyState
-            title="ما عندك استثمارات مسجلة"
-            description="أضف أصولك أولًا من صفحة الاستثمارات."
-            action={
-              <Link href="/investments">
-                فتح الاستثمارات
-              </Link>
-            }
-          />
-        ) : (
-          <div style={GRID_STYLE}>
-            {
-              snapshot.assets.map(
-                (
-                  asset,
-                ) => (
-                  <AssetIntelligenceCard
-                    key={asset.id}
-                    asset={asset}
-                    analysis={
-                      latestAnalysisMap.get(
-                        asset.id,
-                      ) ??
-                      null
-                    }
-                  />
-                ),
-              )
-            }
-          </div>
-        )}
-      </section>
-
-
-      {/* ===================================================
-       * TRACK RECORD
-       * ================================================= */}
-
-      <section style={SECTION_STYLE}>
-        <SectionHeader
-          title="Track Record"
-          description="الأداء الحقيقي للتوقعات القديمة — بدون حذف الخسائر أو تعديل الماضي."
-        />
-
-        <TrackRecordSection
-          trackRecord={
-            snapshot.track_record
-          }
-        />
-      </section>
-
-
-      {/* ===================================================
-       * ACTIVE FORECASTS
-       * ================================================= */}
-
-      <section style={SECTION_STYLE}>
-        <SectionHeader
-          title="التوقعات المفتوحة"
-          description="كل توقع محفوظ بتاريخ صدوره ويظل ثابتًا حتى موعد تقييمه."
-        />
-
-        {snapshot
-          .open_forecasts
-          .length ===
-        0 ? (
-          <EmptyState
-            compact
-            title="ما عندنا توقعات مفتوحة بعد"
-            description="شغّل تحليل على أحد أصولك ليتم إنشاء توقعات احتمالية."
-          />
-        ) : (
-          <div style={GRID_STYLE}>
-            {
-              snapshot
-                .open_forecasts
-                .map(
-                  (
-                    forecast,
-                  ) => (
-                    <ForecastCard
-                      key={
-                        forecast.id
-                      }
-                      forecast={
-                        forecast
-                      }
-                      asset={
-                        assetMap.get(
-                          forecast
-                            .asset_id,
-                        )
-                      }
-                    />
-                  ),
-                )
-            }
-          </div>
-        )}
-      </section>
-
-
-      {/* ===================================================
-       * LATEST RESULTS
-       * ================================================= */}
-
-      <section style={SECTION_STYLE}>
-        <SectionHeader
-          title="آخر النتائج"
-          description="كيف كان توقع LIFE Invest AI مقارنة بالسعر الحقيقي؟"
-        />
-
-        {snapshot
-          .recent_outcomes
-          .length ===
-        0 ? (
-          <EmptyState
-            compact
-            title="لسه ما انتهى أي Forecast"
-            description="عقب انتهاء أول فترة توقع، يبدأ هنا سجل الصح والخطأ."
-          />
-        ) : (
-          <div style={GRID_STYLE}>
-            {
-              snapshot
-                .recent_outcomes
-                .slice(
-                  0,
-                  6,
-                )
-                .map(
-                  (
-                    outcome,
-                  ) => (
-                    <article
-                      key={
-                        outcome.id
-                      }
-                      style={
-                        CARD_STYLE
-                      }
-                    >
-                      <div
-                        style={{
-                          display:
-                            "flex",
-
-                          justifyContent:
-                            "space-between",
-
-                          gap:
-                            "12px",
-                        }}
-                      >
-                        <strong>
-                          {
-                            outcome
-                              .direction_correct
-                              ? "الاتجاه صحيح ✓"
-                              : "الاتجاه غير صحيح"
-                          }
-                        </strong>
-
-                        <span
-                          className={
-                            outcome
-                              .direction_correct
-                              ? "badge badge--positive"
-                              : "badge badge--negative"
-                          }
-                        >
-                          {
-                            outcome
-                              .actual_direction
-                          }
-                        </span>
-                      </div>
-
-                      <div
-                        style={{
-                          marginTop:
-                            "16px",
-                        }}
-                      >
-                        <div
-                          className="text-subtle text-small"
-                        >
-                          الحركة الفعلية
-                        </div>
-
-                        <strong>
-                          {
-                            formatPercent(
-                              outcome
-                                .actual_change_percent,
-                            )
-                          }
-                        </strong>
-                      </div>
-
-                      <div
-                        style={{
-                          marginTop:
-                            "12px",
-                        }}
-                      >
-                        <div
-                          className="text-subtle text-small"
-                        >
-                          خطأ التوقع
-                        </div>
-
-                        <strong>
-                          {
-                            formatPercent(
-                              outcome
-                                .absolute_error_percent,
-                            )
-                          }
-                        </strong>
-                      </div>
-
-                      <div
-                        style={{
-                          marginTop:
-                            "12px",
-                        }}
-                      >
-                        <div
-                          className="text-subtle text-small"
-                        >
-                          Base Range
-                        </div>
-
-                        <strong>
-                          {
-                            outcome
-                              .base_range_hit
-                              ? "داخل النطاق ✓"
-                              : "خارج النطاق"
-                          }
-                        </strong>
-                      </div>
-
-                      <div
-                        style={{
-                          marginTop:
-                            "12px",
-                        }}
-                      >
-                        <div
-                          className="text-subtle text-small"
-                        >
-                          Brier Score
-                        </div>
-
-                        <strong>
-                          {
-                            outcome
-                              .brier_score
-                          }
-                        </strong>
-                      </div>
-                    </article>
-                  ),
-                )
-            }
-          </div>
-        )}
-      </section>
-
-
-      {/* ===================================================
-       * METHODOLOGY
-       * ================================================= */}
-
-      <section
-        style={{
-          ...SECTION_STYLE,
-          ...CARD_STYLE,
-        }}
-      >
-        <SectionHeader
-          title="كيف LIFE Invest AI يفكر؟"
-        />
-
-        <div
-          style={{
-            display:
-              "grid",
-
-            gap:
-              "8px",
-          }}
-        >
-          <div>
-            بيانات السوق الحقيقية
-          </div>
-
-          <div>
-            ↓
-          </div>
-
-          <div>
-            Fundamental + Technical + News + Macro
-          </div>
-
-          <div>
-            ↓
-          </div>
-
-          <div>
-            Portfolio Fit + Risk
-          </div>
-
-          <div>
-            ↓
-          </div>
-
-          <div>
-            Investment Committee AI
-          </div>
-
-          <div>
-            ↓
-          </div>
-
-          <div>
-            LIFE Score + احتمالات Bull / Base / Bear
-          </div>
-
-          <div>
-            ↓
-          </div>
-
-          <div>
-            توقع محفوظ لا يتغير
-          </div>
-
-          <div>
-            ↓
-          </div>
-
-          <strong>
-            Track Record حقيقي
-          </strong>
-        </div>
-
-        <p
-          className="text-subtle text-small"
-          style={{
-            margin:
-              "18px 0 0",
-
-            lineHeight:
-              1.7,
-          }}
-        >
-          LIFE Invest AI أداة تحليل ومساندة قرار فقط. ما عنده أي صلاحية شراء أو بيع أو تنفيذ أوامر استثمارية.
-        </p>
-      </section>
-
+      <section className="page-section"><div className="section-header"><div className="section-header__content"><h2 className="section-title">إضافة بيانات الاستثمار</h2></div></div><div className="card" style={{ display: "flex", flexWrap: "wrap", gap: ".65rem" }}><DataEntryButton kind="investment_asset" /><DataEntryButton kind="investment_transaction" /></div></section>
     </AppShell>
   );
 }
 
 
 /* =========================================================
- * 25. EXPLICIT ACTION RULE
+ * 12. SOURCE OF TRUTH
  * ======================================================= */
 
 /**
- * Analysis starts only when:
+ * Portfolio arithmetic is NOT calculated by this page.
  *
- * user clicks:
+ * Source:
  *
- * تحليل الآن
+ * lib/data.ts
+ *      ↓
+ * calculateInvestmentSnapshot()
  *
- *
- * No background autonomous analysis is introduced here.
+ * This page only presents the resulting deterministic
+ * InvestmentSnapshot.
  */
 
 
 /* =========================================================
- * 26. UI RULE
+ * 13. REFERENCE PRICE RULE
  * ======================================================= */
 
 /**
- * The normal Investments page remains the primary portfolio
- * page.
+ * reference_price is a stored reference value.
  *
+ * It does not automatically mean:
  *
+ * - live broker price
+ * - executable market quote
+ * - guaranteed sale price
+ *
+ * V1 does not execute brokerage transactions.
+ */
+
+
+/* =========================================================
+ * 14. CROSS-CURRENCY RULE
+ * ======================================================= */
+
+/**
+ * LIFE OS V1 has no authoritative FX engine.
+ *
+ * Therefore:
+ *
+ * AED + USD + another currency
+ *
+ * are never silently added together as though they were the
+ * same monetary unit.
+ *
+ * Individual foreign-currency positions remain visible.
+ */
+
+
+/* =========================================================
+ * 15. TARGET RULE
+ * ======================================================= */
+
+/**
+ * target_quantity and monthly_contribution_target are user /
+ * application planning values.
+ *
+ * AI does not silently create, modify or execute them.
+ */
+
+
+/* =========================================================
+ * 16. TRANSACTION RULE
+ * ======================================================= */
+
+/**
+ * Investment transactions stored here are records.
+ *
+ * Recording:
+ *
+ * "buy"
+ *
+ * means that LIFE OS has a record describing a purchase.
+ *
+ * It does NOT mean LIFE OS itself sent an order to a broker.
+ */
+
+
+/* =========================================================
+ * 17. AI RULE
+ * ======================================================= */
+
+/**
+ * Opening Investments does not send portfolio data to
+ * OpenAI.
+ *
+ * LIFE Invest AI remains an optional subpage.
+ *
+ * Opening the normal Investments page does NOT automatically
+ * run market analysis or send the portfolio to OpenAI.
+ *
+ * Analysis starts only after the user explicitly opens the
+ * intelligence layer and requests analysis.
+ */
+
+
+/* =========================================================
+ * 18. SECURITY RULE
+ * ======================================================= */
+
+/**
+ * Server request
+ *      ↓
+ * requireAAL2Identity()
+ *      ↓
+ * investment data functions
+ *      ↓
+ * authenticated user ownership
+ *      ↓
+ * PostgreSQL RLS
+ *
+ * No user_id comes from the browser or AI.
+ */
+
+
+/* =========================================================
+ * 19. EXECUTION BOUNDARY
+ * ======================================================= */
+
+/**
+ * LIFE OS investments can:
+ *
+ * display ✅
+ * calculate ✅
+ * compare ✅
+ * analyze ✅
+ * recommend ✅
+ *
+ * It cannot:
+ *
+ * buy ❌
+ * sell ❌
+ * transfer money ❌
+ * place broker orders ❌
+ * rebalance automatically ❌
+ */
+
+
+/* =========================================================
+ * 20. LIFE INVEST AI BOUNDARY
+ * ======================================================= */
+
+/**
  * LIFE Invest AI is an optional intelligence layer.
  *
+ * It does NOT replace the normal portfolio experience.
  *
- * It does not replace:
  *
- * portfolio holdings
- * transactions
+ * Main page:
+ *
+ * holdings
  * cost basis
- * investment plan
- */
-
-
-/* =========================================================
- * 27. ACCURACY RULE
- * ======================================================= */
-
-/**
- * UI never displays:
- *
- * "95% AI accuracy"
- *
- * unless immutable historical outcomes mathematically produce
- * that number.
- */
-
-
-/* =========================================================
- * 28. RECOMMENDATION RULE
- * ======================================================= */
-
-/**
- * Recommendation is displayed as:
- *
- * accumulate
- * hold
- * watch
- * avoid
+ * value
+ * targets
+ * transactions
  *
  *
- * It is advisory only.
+ * Optional intelligence page:
  *
- * No button on this page performs:
- *
- * buy
- * sell
- * transfer
- */
-
-
-/* =========================================================
- * 29. FINAL LIFE INVEST AI UI
- * ======================================================= */
-
-/**
- * Portfolio
- *      ↓
- * Analyze
- *      ↓
- * Evidence
- *      ↓
- * LIFE Score
- *      ↓
- * Recommendation
- *      ↓
- * Probability Forecast
- *      ↓
- * Immutable history
- *      ↓
+ * market evidence
+ * technical analysis
+ * AI interpretation
+ * probabilistic forecasts
  * Track Record
+ */
+
+
+/* =========================================================
+ * 21. FINAL INVESTMENT RULE
+ * ======================================================= */
+
+/**
+ * Investments page should answer:
+ *
+ * What do I own?
+ * What did it cost?
+ * What is its reference value?
+ * Am I up or down?
+ * How much am I targeting monthly?
+ * How close am I to each quantity target?
+ * What was recently recorded?
+ *
+ *
+ * LIFE Invest AI stays one optional click deeper.
  *
  *
  * Simple outside.
- *
  * Intelligent underneath.
  */
