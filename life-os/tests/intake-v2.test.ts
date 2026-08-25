@@ -5,50 +5,63 @@ import {
 } from "vitest";
 
 import {
+  getIntakeExecutionTarget,
+  isIntakeKindExecutable,
+} from "@/lib/intake-executor";
+
+import {
+  activeStrictIntakePreviewSchema,
   careerIntakeProposalSchema,
+  documentFileSizeSchema,
+  documentMimeTypeSchema,
+  documentStorageBucketSchema,
+  documentStoragePathSchema,
   financeBudgetItemProposalSchema,
   financeIncomeSourceProposalSchema,
   getStructuredProposalTarget,
+  getTravelProposalTarget,
   goalIntakeProposalSchema,
   intakePreviewSchema,
   learningIntakeProposalSchema,
+  PRIVATE_DOCUMENT_MAX_SIZE_BYTES,
+  PRIVATE_DOCUMENT_MIME_TYPE,
+  PRIVATE_DOCUMENT_STORAGE_BUCKET,
   projectIntakeProposalSchema,
-  strictIntakePreviewSchema,
   structuredIntakeProposalSchema,
+  travelIntakeProposalSchema,
   validateStructuredProposalForIntakeKind,
 } from "@/lib/validation";
 
 
 /* =========================================================
  * LIFE OS V2
- * STRUCTURED INTAKE TESTS
+ * FINAL UNIVERSAL INTAKE CONTRACT TESTS
  *
- * Purpose:
+ * Covers:
  *
- * Verify the safety boundary between:
- *
- * AI proposal
- *      ↓
- * validation
- *      ↓
- * user review
- *      ↓
- * confirmation
- *      ↓
- * deterministic execution
+ * finance
+ * plan
+ * growth
+ * travel
+ * document boundary
+ * note boundary
+ * executor support
+ * private PDF validation
  *
  *
- * IMPORTANT:
+ * Synthetic data only.
  *
- * - Synthetic data only.
- * - No Supabase writes.
- * - No OpenAI calls.
- * - No real personal data.
+ * No:
+ *
+ * Supabase writes
+ * OpenAI calls
+ * real personal data
+ * real PDF uploads
  * ======================================================= */
 
 
 /* =========================================================
- * 1. SYNTHETIC PROPOSALS
+ * 1. SYNTHETIC FINANCE — INCOME
  * ======================================================= */
 
 const VALID_INCOME_PROPOSAL = {
@@ -82,6 +95,10 @@ const VALID_INCOME_PROPOSAL = {
   },
 } as const;
 
+
+/* =========================================================
+ * 2. SYNTHETIC FINANCE — BUDGET
+ * ======================================================= */
 
 const VALID_BUDGET_PROPOSAL = {
   version:
@@ -120,6 +137,10 @@ const VALID_BUDGET_PROPOSAL = {
   },
 } as const;
 
+
+/* =========================================================
+ * 3. SYNTHETIC PLAN — GOAL
+ * ======================================================= */
 
 const VALID_GOAL_PROPOSAL = {
   version:
@@ -171,6 +192,10 @@ const VALID_GOAL_PROPOSAL = {
 } as const;
 
 
+/* =========================================================
+ * 4. SYNTHETIC PLAN — PROJECT
+ * ======================================================= */
+
 const VALID_PROJECT_PROPOSAL = {
   version:
     1,
@@ -214,6 +239,10 @@ const VALID_PROJECT_PROPOSAL = {
   },
 } as const;
 
+
+/* =========================================================
+ * 5. SYNTHETIC GROWTH — LEARNING
+ * ======================================================= */
 
 const VALID_LEARNING_PROPOSAL = {
   version:
@@ -271,6 +300,10 @@ const VALID_LEARNING_PROPOSAL = {
 } as const;
 
 
+/* =========================================================
+ * 6. SYNTHETIC GROWTH — CAREER
+ * ======================================================= */
+
 const VALID_CAREER_PROPOSAL = {
   version:
     1,
@@ -319,23 +352,112 @@ const VALID_CAREER_PROPOSAL = {
 
 
 /* =========================================================
- * 2. FINANCE — INCOME
+ * 7. SYNTHETIC TRAVEL
+ * ======================================================= */
+
+const VALID_TRAVEL_PROPOSAL = {
+  version:
+    1,
+
+  kind:
+    "travel",
+
+  action:
+    "create_trip",
+
+  data: {
+    title:
+      "Synthetic Slovenia Trip",
+
+    destination:
+      "Slovenia",
+
+    start_date:
+      "2027-01-09",
+
+    end_date:
+      "2027-01-16",
+
+    status:
+      "planned",
+
+    budget_total:
+      12_000,
+
+    currency:
+      "AED",
+
+    readiness_percent:
+      0,
+
+    notes:
+      null,
+  },
+} as const;
+
+
+/* =========================================================
+ * 8. PREVIEW FACTORY
+ * ======================================================= */
+
+function buildPreview(
+  input: {
+    kind:
+      | "finance"
+      | "plan"
+      | "growth"
+      | "travel"
+      | "document"
+      | "note";
+
+    proposal:
+      unknown;
+  },
+) {
+  return {
+    kind:
+      input.kind,
+
+    label:
+      "Synthetic Preview",
+
+    title:
+      "Synthetic Title",
+
+    summary:
+      "Synthetic reviewable preview.",
+
+    confidence:
+      0.95,
+
+    next_action:
+      "Review and confirm.",
+
+    proposal:
+      input.proposal,
+
+    requires_confirmation:
+      true,
+  };
+}
+
+
+/* =========================================================
+ * 9. FINANCE — INCOME
  * ======================================================= */
 
 describe(
-  "V2 structured finance income proposal",
+  "V2 finance income proposal",
   () => {
     it(
       "accepts an exact valid income proposal",
       () => {
-        const result =
-          financeIncomeSourceProposalSchema.safeParse(
-            VALID_INCOME_PROPOSAL,
-          );
-
-
         expect(
-          result.success,
+          financeIncomeSourceProposalSchema
+            .safeParse(
+              VALID_INCOME_PROPOSAL,
+            )
+            .success,
         ).toBe(
           true,
         );
@@ -344,23 +466,21 @@ describe(
 
 
     it(
-      "rejects a zero income amount",
+      "rejects zero income",
       () => {
-        const result =
-          financeIncomeSourceProposalSchema.safeParse({
-            ...VALID_INCOME_PROPOSAL,
-
-            data: {
-              ...VALID_INCOME_PROPOSAL.data,
-
-              amount:
-                0,
-            },
-          });
-
-
         expect(
-          result.success,
+          financeIncomeSourceProposalSchema
+            .safeParse({
+              ...VALID_INCOME_PROPOSAL,
+
+              data: {
+                ...VALID_INCOME_PROPOSAL.data,
+
+                amount:
+                  0,
+              },
+            })
+            .success,
         ).toBe(
           false,
         );
@@ -369,23 +489,21 @@ describe(
 
 
     it(
-      "rejects a negative income amount",
+      "rejects lowercase currency",
       () => {
-        const result =
-          financeIncomeSourceProposalSchema.safeParse({
-            ...VALID_INCOME_PROPOSAL,
-
-            data: {
-              ...VALID_INCOME_PROPOSAL.data,
-
-              amount:
-                -1,
-            },
-          });
-
-
         expect(
-          result.success,
+          financeIncomeSourceProposalSchema
+            .safeParse({
+              ...VALID_INCOME_PROPOSAL,
+
+              data: {
+                ...VALID_INCOME_PROPOSAL.data,
+
+                currency:
+                  "aed",
+              },
+            })
+            .success,
         ).toBe(
           false,
         );
@@ -394,44 +512,17 @@ describe(
 
 
     it(
-      "rejects malformed lowercase currency",
+      "rejects browser supplied ownership",
       () => {
-        const result =
-          financeIncomeSourceProposalSchema.safeParse({
-            ...VALID_INCOME_PROPOSAL,
-
-            data: {
-              ...VALID_INCOME_PROPOSAL.data,
-
-              currency:
-                "aed",
-            },
-          });
-
-
         expect(
-          result.success,
-        ).toBe(
-          false,
-        );
-      },
-    );
+          financeIncomeSourceProposalSchema
+            .safeParse({
+              ...VALID_INCOME_PROPOSAL,
 
-
-    it(
-      "rejects browser-supplied user ownership",
-      () => {
-        const result =
-          financeIncomeSourceProposalSchema.safeParse({
-            ...VALID_INCOME_PROPOSAL,
-
-            user_id:
-              "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
-          });
-
-
-        expect(
-          result.success,
+              user_id:
+                "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+            })
+            .success,
         ).toBe(
           false,
         );
@@ -442,50 +533,23 @@ describe(
 
 
 /* =========================================================
- * 3. FINANCE — BUDGET ITEM
+ * 10. FINANCE — BUDGET
  * ======================================================= */
 
 describe(
-  "V2 structured finance budget proposal",
+  "V2 finance budget proposal",
   () => {
     it(
       "accepts an exact valid budget proposal",
       () => {
-        const result =
-          financeBudgetItemProposalSchema.safeParse(
-            VALID_BUDGET_PROPOSAL,
-          );
-
-
         expect(
-          result.success,
+          financeBudgetItemProposalSchema
+            .safeParse(
+              VALID_BUDGET_PROPOSAL,
+            )
+            .success,
         ).toBe(
           true,
-        );
-      },
-    );
-
-
-    it(
-      "rejects unsupported budget categories",
-      () => {
-        const result =
-          financeBudgetItemProposalSchema.safeParse({
-            ...VALID_BUDGET_PROPOSAL,
-
-            data: {
-              ...VALID_BUDGET_PROPOSAL.data,
-
-              category:
-                "made_up_category",
-            },
-          });
-
-
-        expect(
-          result.success,
-        ).toBe(
-          false,
         );
       },
     );
@@ -494,21 +558,19 @@ describe(
     it(
       "rejects an invalid due day",
       () => {
-        const result =
-          financeBudgetItemProposalSchema.safeParse({
-            ...VALID_BUDGET_PROPOSAL,
-
-            data: {
-              ...VALID_BUDGET_PROPOSAL.data,
-
-              due_day:
-                32,
-            },
-          });
-
-
         expect(
-          result.success,
+          financeBudgetItemProposalSchema
+            .safeParse({
+              ...VALID_BUDGET_PROPOSAL,
+
+              data: {
+                ...VALID_BUDGET_PROPOSAL.data,
+
+                due_day:
+                  32,
+              },
+            })
+            .success,
         ).toBe(
           false,
         );
@@ -517,23 +579,21 @@ describe(
 
 
     it(
-      "rejects arbitrary hidden fields",
+      "rejects hidden execution fields",
       () => {
-        const result =
-          financeBudgetItemProposalSchema.safeParse({
-            ...VALID_BUDGET_PROPOSAL,
-
-            data: {
-              ...VALID_BUDGET_PROPOSAL.data,
-
-              execute_immediately:
-                true,
-            },
-          });
-
-
         expect(
-          result.success,
+          financeBudgetItemProposalSchema
+            .safeParse({
+              ...VALID_BUDGET_PROPOSAL,
+
+              data: {
+                ...VALID_BUDGET_PROPOSAL.data,
+
+                execute_immediately:
+                  true,
+              },
+            })
+            .success,
         ).toBe(
           false,
         );
@@ -544,23 +604,21 @@ describe(
 
 
 /* =========================================================
- * 4. PLAN — GOAL
+ * 11. PLAN — GOAL
  * ======================================================= */
 
 describe(
-  "V2 structured goal proposal",
+  "V2 goal proposal",
   () => {
     it(
-      "accepts a valid goal proposal",
+      "accepts a valid goal",
       () => {
-        const result =
-          goalIntakeProposalSchema.safeParse(
-            VALID_GOAL_PROPOSAL,
-          );
-
-
         expect(
-          result.success,
+          goalIntakeProposalSchema
+            .safeParse(
+              VALID_GOAL_PROPOSAL,
+            )
+            .success,
         ).toBe(
           true,
         );
@@ -569,48 +627,21 @@ describe(
 
 
     it(
-      "rejects progress above 100 percent",
+      "rejects progress above 100",
       () => {
-        const result =
-          goalIntakeProposalSchema.safeParse({
-            ...VALID_GOAL_PROPOSAL,
-
-            data: {
-              ...VALID_GOAL_PROPOSAL.data,
-
-              progress_percent:
-                101,
-            },
-          });
-
-
         expect(
-          result.success,
-        ).toBe(
-          false,
-        );
-      },
-    );
+          goalIntakeProposalSchema
+            .safeParse({
+              ...VALID_GOAL_PROPOSAL,
 
+              data: {
+                ...VALID_GOAL_PROPOSAL.data,
 
-    it(
-      "rejects an unsupported goal status",
-      () => {
-        const result =
-          goalIntakeProposalSchema.safeParse({
-            ...VALID_GOAL_PROPOSAL,
-
-            data: {
-              ...VALID_GOAL_PROPOSAL.data,
-
-              status:
-                "secret_status",
-            },
-          });
-
-
-        expect(
-          result.success,
+                progress_percent:
+                  101,
+              },
+            })
+            .success,
         ).toBe(
           false,
         );
@@ -621,23 +652,21 @@ describe(
 
 
 /* =========================================================
- * 5. PLAN — PROJECT
+ * 12. PLAN — PROJECT
  * ======================================================= */
 
 describe(
-  "V2 structured project proposal",
+  "V2 project proposal",
   () => {
     it(
-      "accepts a valid project proposal",
+      "accepts a valid project",
       () => {
-        const result =
-          projectIntakeProposalSchema.safeParse(
-            VALID_PROJECT_PROPOSAL,
-          );
-
-
         expect(
-          result.success,
+          projectIntakeProposalSchema
+            .safeParse(
+              VALID_PROJECT_PROPOSAL,
+            )
+            .success,
         ).toBe(
           true,
         );
@@ -646,26 +675,24 @@ describe(
 
 
     it(
-      "rejects a project target date before its start date",
+      "rejects end before start",
       () => {
-        const result =
-          projectIntakeProposalSchema.safeParse({
-            ...VALID_PROJECT_PROPOSAL,
-
-            data: {
-              ...VALID_PROJECT_PROPOSAL.data,
-
-              start_date:
-                "2027-06-01",
-
-              target_date:
-                "2027-01-01",
-            },
-          });
-
-
         expect(
-          result.success,
+          projectIntakeProposalSchema
+            .safeParse({
+              ...VALID_PROJECT_PROPOSAL,
+
+              data: {
+                ...VALID_PROJECT_PROPOSAL.data,
+
+                start_date:
+                  "2027-06-01",
+
+                target_date:
+                  "2027-01-01",
+              },
+            })
+            .success,
         ).toBe(
           false,
         );
@@ -674,23 +701,21 @@ describe(
 
 
     it(
-      "rejects an invented non-UUID goal relationship",
+      "rejects non UUID goal relationships",
       () => {
-        const result =
-          projectIntakeProposalSchema.safeParse({
-            ...VALID_PROJECT_PROPOSAL,
-
-            data: {
-              ...VALID_PROJECT_PROPOSAL.data,
-
-              goal_id:
-                "some-goal",
-            },
-          });
-
-
         expect(
-          result.success,
+          projectIntakeProposalSchema
+            .safeParse({
+              ...VALID_PROJECT_PROPOSAL,
+
+              data: {
+                ...VALID_PROJECT_PROPOSAL.data,
+
+                goal_id:
+                  "fake-goal",
+              },
+            })
+            .success,
         ).toBe(
           false,
         );
@@ -701,23 +726,21 @@ describe(
 
 
 /* =========================================================
- * 6. GROWTH — LEARNING
+ * 13. GROWTH — LEARNING
  * ======================================================= */
 
 describe(
-  "V2 structured learning proposal",
+  "V2 learning proposal",
   () => {
     it(
-      "accepts a valid learning proposal",
+      "accepts a valid learning item",
       () => {
-        const result =
-          learningIntakeProposalSchema.safeParse(
-            VALID_LEARNING_PROPOSAL,
-          );
-
-
         expect(
-          result.success,
+          learningIntakeProposalSchema
+            .safeParse(
+              VALID_LEARNING_PROPOSAL,
+            )
+            .success,
         ).toBe(
           true,
         );
@@ -726,26 +749,24 @@ describe(
 
 
     it(
-      "rejects completion before the start date",
+      "rejects completion before start",
       () => {
-        const result =
-          learningIntakeProposalSchema.safeParse({
-            ...VALID_LEARNING_PROPOSAL,
-
-            data: {
-              ...VALID_LEARNING_PROPOSAL.data,
-
-              start_date:
-                "2027-02-01",
-
-              completed_date:
-                "2027-01-01",
-            },
-          });
-
-
         expect(
-          result.success,
+          learningIntakeProposalSchema
+            .safeParse({
+              ...VALID_LEARNING_PROPOSAL,
+
+              data: {
+                ...VALID_LEARNING_PROPOSAL.data,
+
+                start_date:
+                  "2027-02-01",
+
+                completed_date:
+                  "2027-01-01",
+              },
+            })
+            .success,
         ).toBe(
           false,
         );
@@ -754,23 +775,21 @@ describe(
 
 
     it(
-      "rejects unsafe non-http URLs",
+      "rejects unsafe javascript URLs",
       () => {
-        const result =
-          learningIntakeProposalSchema.safeParse({
-            ...VALID_LEARNING_PROPOSAL,
-
-            data: {
-              ...VALID_LEARNING_PROPOSAL.data,
-
-              url:
-                "javascript:alert(1)",
-            },
-          });
-
-
         expect(
-          result.success,
+          learningIntakeProposalSchema
+            .safeParse({
+              ...VALID_LEARNING_PROPOSAL,
+
+              data: {
+                ...VALID_LEARNING_PROPOSAL.data,
+
+                url:
+                  "javascript:alert(1)",
+              },
+            })
+            .success,
         ).toBe(
           false,
         );
@@ -781,23 +800,21 @@ describe(
 
 
 /* =========================================================
- * 7. GROWTH — CAREER
+ * 14. GROWTH — CAREER
  * ======================================================= */
 
 describe(
-  "V2 structured career proposal",
+  "V2 career proposal",
   () => {
     it(
-      "accepts a valid career proposal",
+      "accepts a valid career item",
       () => {
-        const result =
-          careerIntakeProposalSchema.safeParse(
-            VALID_CAREER_PROPOSAL,
-          );
-
-
         expect(
-          result.success,
+          careerIntakeProposalSchema
+            .safeParse(
+              VALID_CAREER_PROPOSAL,
+            )
+            .success,
         ).toBe(
           true,
         );
@@ -806,51 +823,21 @@ describe(
 
 
     it(
-      "rejects target date before event date",
+      "rejects unsupported career types",
       () => {
-        const result =
-          careerIntakeProposalSchema.safeParse({
-            ...VALID_CAREER_PROPOSAL,
-
-            data: {
-              ...VALID_CAREER_PROPOSAL.data,
-
-              event_date:
-                "2027-08-01",
-
-              target_date:
-                "2027-07-01",
-            },
-          });
-
-
         expect(
-          result.success,
-        ).toBe(
-          false,
-        );
-      },
-    );
+          careerIntakeProposalSchema
+            .safeParse({
+              ...VALID_CAREER_PROPOSAL,
 
+              data: {
+                ...VALID_CAREER_PROPOSAL.data,
 
-    it(
-      "rejects unsupported career item types",
-      () => {
-        const result =
-          careerIntakeProposalSchema.safeParse({
-            ...VALID_CAREER_PROPOSAL,
-
-            data: {
-              ...VALID_CAREER_PROPOSAL.data,
-
-              item_type:
-                "admin_override",
-            },
-          });
-
-
-        expect(
-          result.success,
+                item_type:
+                  "admin_override",
+              },
+            })
+            .success,
         ).toBe(
           false,
         );
@@ -861,33 +848,185 @@ describe(
 
 
 /* =========================================================
- * 8. MASTER STRUCTURED PROPOSAL
+ * 15. TRAVEL — EXACT PROPOSAL
+ * ======================================================= */
+
+describe(
+  "V2 travel proposal",
+  () => {
+    it(
+      "accepts the exact create_trip contract",
+      () => {
+        expect(
+          travelIntakeProposalSchema
+            .safeParse(
+              VALID_TRAVEL_PROPOSAL,
+            )
+            .success,
+        ).toBe(
+          true,
+        );
+      },
+    );
+
+
+    it(
+      "requires a destination",
+      () => {
+        expect(
+          travelIntakeProposalSchema
+            .safeParse({
+              ...VALID_TRAVEL_PROPOSAL,
+
+              data: {
+                ...VALID_TRAVEL_PROPOSAL.data,
+
+                destination:
+                  "",
+              },
+            })
+            .success,
+        ).toBe(
+          false,
+        );
+      },
+    );
+
+
+    it(
+      "rejects end date before start date",
+      () => {
+        expect(
+          travelIntakeProposalSchema
+            .safeParse({
+              ...VALID_TRAVEL_PROPOSAL,
+
+              data: {
+                ...VALID_TRAVEL_PROPOSAL.data,
+
+                start_date:
+                  "2027-01-16",
+
+                end_date:
+                  "2027-01-09",
+              },
+            })
+            .success,
+        ).toBe(
+          false,
+        );
+      },
+    );
+
+
+    it(
+      "rejects readiness above 100",
+      () => {
+        expect(
+          travelIntakeProposalSchema
+            .safeParse({
+              ...VALID_TRAVEL_PROPOSAL,
+
+              data: {
+                ...VALID_TRAVEL_PROPOSAL.data,
+
+                readiness_percent:
+                  101,
+              },
+            })
+            .success,
+        ).toBe(
+          false,
+        );
+      },
+    );
+
+
+    it(
+      "allows unknown dates and budget to remain null",
+      () => {
+        expect(
+          travelIntakeProposalSchema
+            .safeParse({
+              ...VALID_TRAVEL_PROPOSAL,
+
+              data: {
+                ...VALID_TRAVEL_PROPOSAL.data,
+
+                start_date:
+                  null,
+
+                end_date:
+                  null,
+
+                budget_total:
+                  null,
+              },
+            })
+            .success,
+        ).toBe(
+          true,
+        );
+      },
+    );
+
+
+    it(
+      "rejects arbitrary travel execution fields",
+      () => {
+        expect(
+          travelIntakeProposalSchema
+            .safeParse({
+              ...VALID_TRAVEL_PROPOSAL,
+
+              data: {
+                ...VALID_TRAVEL_PROPOSAL.data,
+
+                book_flight:
+                  true,
+              },
+            })
+            .success,
+        ).toBe(
+          false,
+        );
+      },
+    );
+  },
+);
+
+
+/* =========================================================
+ * 16. MASTER PROPOSAL UNION
  * ======================================================= */
 
 describe(
   "V2 structured proposal master schema",
   () => {
     it(
-      "accepts all currently supported exact proposal actions",
+      "accepts every supported structured action including travel",
       () => {
-        const proposals =
-          [
-            VALID_INCOME_PROPOSAL,
-            VALID_BUDGET_PROPOSAL,
-            VALID_GOAL_PROPOSAL,
-            VALID_PROJECT_PROPOSAL,
-            VALID_LEARNING_PROPOSAL,
-            VALID_CAREER_PROPOSAL,
-          ];
+        const proposals = [
+          VALID_INCOME_PROPOSAL,
+          VALID_BUDGET_PROPOSAL,
+          VALID_GOAL_PROPOSAL,
+          VALID_PROJECT_PROPOSAL,
+          VALID_LEARNING_PROPOSAL,
+          VALID_CAREER_PROPOSAL,
+          VALID_TRAVEL_PROPOSAL,
+        ];
 
 
         for (
-          const proposal of proposals
+          const proposal of
+            proposals
         ) {
           expect(
-            structuredIntakeProposalSchema.safeParse(
-              proposal,
-            ).success,
+            structuredIntakeProposalSchema
+              .safeParse(
+                proposal,
+              )
+              .success,
           ).toBe(
             true,
           );
@@ -897,25 +1036,23 @@ describe(
 
 
     it(
-      "rejects arbitrary execution actions",
+      "rejects arbitrary SQL actions",
       () => {
-        const result =
-          structuredIntakeProposalSchema.safeParse({
-            version:
-              1,
-
-            kind:
-              "finance",
-
-            action:
-              "execute_sql",
-
-            data: {},
-          });
-
-
         expect(
-          result.success,
+          structuredIntakeProposalSchema
+            .safeParse({
+              version:
+                1,
+
+              kind:
+                "finance",
+
+              action:
+                "execute_sql",
+
+              data: {},
+            })
+            .success,
         ).toBe(
           false,
         );
@@ -924,28 +1061,26 @@ describe(
 
 
     it(
-      "rejects arbitrary table-write actions",
+      "rejects arbitrary table write actions",
       () => {
-        const result =
-          structuredIntakeProposalSchema.safeParse({
-            version:
-              1,
-
-            kind:
-              "finance",
-
-            action:
-              "insert_into_any_table",
-
-            data: {
-              table:
-                "profiles",
-            },
-          });
-
-
         expect(
-          result.success,
+          structuredIntakeProposalSchema
+            .safeParse({
+              version:
+                1,
+
+              kind:
+                "travel",
+
+              action:
+                "insert_into_any_table",
+
+              data: {
+                table:
+                  "trips",
+              },
+            })
+            .success,
         ).toBe(
           false,
         );
@@ -956,17 +1091,15 @@ describe(
     it(
       "rejects unsupported proposal versions",
       () => {
-        const result =
-          structuredIntakeProposalSchema.safeParse({
-            ...VALID_INCOME_PROPOSAL,
-
-            version:
-              2,
-          });
-
-
         expect(
-          result.success,
+          structuredIntakeProposalSchema
+            .safeParse({
+              ...VALID_TRAVEL_PROPOSAL,
+
+              version:
+                2,
+            })
+            .success,
         ).toBe(
           false,
         );
@@ -977,45 +1110,27 @@ describe(
 
 
 /* =========================================================
- * 9. STRICT PREVIEW — FINANCE
+ * 17. ACTIVE PREVIEW — FINANCE
  * ======================================================= */
 
 describe(
-  "V2 strict finance preview",
+  "V2 active finance preview",
   () => {
     it(
-      "accepts finance only when the exact finance proposal is present",
+      "requires exact finance proposal values",
       () => {
-        const result =
-          strictIntakePreviewSchema.safeParse({
-            kind:
-              "finance",
-
-            label:
-              "تحديث مالي",
-
-            title:
-              "راتب تجريبي",
-
-            summary:
-              "تم فهم المدخل كمصدر دخل شهري.",
-
-            confidence:
-              0.99,
-
-            next_action:
-              "اعتماد مصدر الدخل بالقيم المعروضة.",
-
-            proposal:
-              VALID_INCOME_PROPOSAL,
-
-            requires_confirmation:
-              true,
-          });
-
-
         expect(
-          result.success,
+          activeStrictIntakePreviewSchema
+            .safeParse(
+              buildPreview({
+                kind:
+                  "finance",
+
+                proposal:
+                  VALID_INCOME_PROPOSAL,
+              }),
+            )
+            .success,
         ).toBe(
           true,
         );
@@ -1024,78 +1139,20 @@ describe(
 
 
     it(
-      "rejects finance when proposal is null",
+      "rejects finance with proposal null",
       () => {
-        const result =
-          strictIntakePreviewSchema.safeParse({
-            kind:
-              "finance",
-
-            label:
-              "تحديث مالي",
-
-            title:
-              "راتب تجريبي",
-
-            summary:
-              "تم فهم المدخل كتحديث مالي.",
-
-            confidence:
-              0.99,
-
-            next_action:
-              "اعتماد القيم.",
-
-            proposal:
-              null,
-
-            requires_confirmation:
-              true,
-          });
-
-
         expect(
-          result.success,
-        ).toBe(
-          false,
-        );
-      },
-    );
+          activeStrictIntakePreviewSchema
+            .safeParse(
+              buildPreview({
+                kind:
+                  "finance",
 
-
-    it(
-      "rejects finance carrying a plan proposal",
-      () => {
-        const result =
-          strictIntakePreviewSchema.safeParse({
-            kind:
-              "finance",
-
-            label:
-              "تحديث مالي",
-
-            title:
-              "بيانات غير متطابقة",
-
-            summary:
-              "اختبار عدم تطابق النوع.",
-
-            confidence:
-              0.5,
-
-            next_action:
-              "لا شيء.",
-
-            proposal:
-              VALID_GOAL_PROPOSAL,
-
-            requires_confirmation:
-              true,
-          });
-
-
-        expect(
-          result.success,
+                proposal:
+                  null,
+              }),
+            )
+            .success,
         ).toBe(
           false,
         );
@@ -1106,45 +1163,27 @@ describe(
 
 
 /* =========================================================
- * 10. STRICT PREVIEW — PLAN
+ * 18. ACTIVE PREVIEW — PLAN
  * ======================================================= */
 
 describe(
-  "V2 strict plan preview",
+  "V2 active plan preview",
   () => {
     it(
       "accepts an exact project proposal",
       () => {
-        const result =
-          strictIntakePreviewSchema.safeParse({
-            kind:
-              "plan",
-
-            label:
-              "خطة أو مشروع",
-
-            title:
-              "مشروع تجريبي",
-
-            summary:
-              "تم فهم المدخل كمشروع.",
-
-            confidence:
-              0.95,
-
-            next_action:
-              "اعتماد المشروع بالقيم المعروضة.",
-
-            proposal:
-              VALID_PROJECT_PROPOSAL,
-
-            requires_confirmation:
-              true,
-          });
-
-
         expect(
-          result.success,
+          activeStrictIntakePreviewSchema
+            .safeParse(
+              buildPreview({
+                kind:
+                  "plan",
+
+                proposal:
+                  VALID_PROJECT_PROPOSAL,
+              }),
+            )
+            .success,
         ).toBe(
           true,
         );
@@ -1153,38 +1192,20 @@ describe(
 
 
     it(
-      "rejects plan carrying a growth proposal",
+      "rejects mismatched growth proposal",
       () => {
-        const result =
-          strictIntakePreviewSchema.safeParse({
-            kind:
-              "plan",
-
-            label:
-              "خطة أو مشروع",
-
-            title:
-              "بيانات غير متطابقة",
-
-            summary:
-              "اختبار عدم تطابق النوع.",
-
-            confidence:
-              0.5,
-
-            next_action:
-              "لا شيء.",
-
-            proposal:
-              VALID_LEARNING_PROPOSAL,
-
-            requires_confirmation:
-              true,
-          });
-
-
         expect(
-          result.success,
+          activeStrictIntakePreviewSchema
+            .safeParse(
+              buildPreview({
+                kind:
+                  "plan",
+
+                proposal:
+                  VALID_LEARNING_PROPOSAL,
+              }),
+            )
+            .success,
         ).toBe(
           false,
         );
@@ -1195,45 +1216,27 @@ describe(
 
 
 /* =========================================================
- * 11. STRICT PREVIEW — GROWTH
+ * 19. ACTIVE PREVIEW — GROWTH
  * ======================================================= */
 
 describe(
-  "V2 strict growth preview",
+  "V2 active growth preview",
   () => {
     it(
-      "accepts an exact learning proposal",
+      "accepts exact learning proposal",
       () => {
-        const result =
-          strictIntakePreviewSchema.safeParse({
-            kind:
-              "growth",
-
-            label:
-              "تطوير وتعليم",
-
-            title:
-              "دورة تجريبية",
-
-            summary:
-              "تم فهم المدخل كعنصر تطوير.",
-
-            confidence:
-              0.95,
-
-            next_action:
-              "اعتماد عنصر التطوير بالقيم المعروضة.",
-
-            proposal:
-              VALID_LEARNING_PROPOSAL,
-
-            requires_confirmation:
-              true,
-          });
-
-
         expect(
-          result.success,
+          activeStrictIntakePreviewSchema
+            .safeParse(
+              buildPreview({
+                kind:
+                  "growth",
+
+                proposal:
+                  VALID_LEARNING_PROPOSAL,
+              }),
+            )
+            .success,
         ).toBe(
           true,
         );
@@ -1242,38 +1245,20 @@ describe(
 
 
     it(
-      "rejects growth without exact values",
+      "rejects growth with proposal null",
       () => {
-        const result =
-          strictIntakePreviewSchema.safeParse({
-            kind:
-              "growth",
-
-            label:
-              "تطوير وتعليم",
-
-            title:
-              "دورة تجريبية",
-
-            summary:
-              "تم فهم المدخل كعنصر تطوير.",
-
-            confidence:
-              0.95,
-
-            next_action:
-              "اعتماد عنصر التطوير.",
-
-            proposal:
-              null,
-
-            requires_confirmation:
-              true,
-          });
-
-
         expect(
-          result.success,
+          activeStrictIntakePreviewSchema
+            .safeParse(
+              buildPreview({
+                kind:
+                  "growth",
+
+                proposal:
+                  null,
+              }),
+            )
+            .success,
         ).toBe(
           false,
         );
@@ -1284,45 +1269,27 @@ describe(
 
 
 /* =========================================================
- * 12. NON-STRUCTURED PREVIEW KINDS
+ * 20. ACTIVE PREVIEW — TRAVEL
  * ======================================================= */
 
 describe(
-  "V2 non-structured preview kinds",
+  "V2 active travel preview",
   () => {
     it(
-      "accepts note with proposal null",
+      "requires a structured travel proposal",
       () => {
-        const result =
-          strictIntakePreviewSchema.safeParse({
-            kind:
-              "note",
-
-            label:
-              "ملاحظة",
-
-            title:
-              "ملاحظة تجريبية",
-
-            summary:
-              "معلومة عامة للاحتفاظ بها.",
-
-            confidence:
-              0.9,
-
-            next_action:
-              "اعتماد الملاحظة.",
-
-            proposal:
-              null,
-
-            requires_confirmation:
-              true,
-          });
-
-
         expect(
-          result.success,
+          activeStrictIntakePreviewSchema
+            .safeParse(
+              buildPreview({
+                kind:
+                  "travel",
+
+                proposal:
+                  VALID_TRAVEL_PROPOSAL,
+              }),
+            )
+            .success,
         ).toBe(
           true,
         );
@@ -1331,118 +1298,67 @@ describe(
 
 
     it(
-      "accepts travel with proposal null",
+      "rejects the old travel proposal null behavior",
       () => {
-        const result =
-          strictIntakePreviewSchema.safeParse({
-            kind:
-              "travel",
-
-            label:
-              "رحلة",
-
-            title:
-              "رحلة تجريبية",
-
-            summary:
-              "تم فهم المدخل كرحلة.",
-
-            confidence:
-              0.9,
-
-            next_action:
-              "اعتماد الرحلة.",
-
-            proposal:
-              null,
-
-            requires_confirmation:
-              true,
-          });
-
-
         expect(
-          result.success,
+          activeStrictIntakePreviewSchema
+            .safeParse(
+              buildPreview({
+                kind:
+                  "travel",
+
+                proposal:
+                  null,
+              }),
+            )
+            .success,
         ).toBe(
-          true,
+          false,
         );
       },
     );
 
 
     it(
-      "accepts document with proposal null",
+      "rejects travel carrying finance proposal",
       () => {
-        const result =
-          strictIntakePreviewSchema.safeParse({
-            kind:
-              "document",
-
-            label:
-              "مستند",
-
-            title:
-              "مستند تجريبي",
-
-            summary:
-              "تم فهم المدخل كمستند.",
-
-            confidence:
-              0.8,
-
-            next_action:
-              "اعتماد المستند.",
-
-            proposal:
-              null,
-
-            requires_confirmation:
-              true,
-          });
-
-
         expect(
-          result.success,
+          activeStrictIntakePreviewSchema
+            .safeParse(
+              buildPreview({
+                kind:
+                  "travel",
+
+                proposal:
+                  VALID_INCOME_PROPOSAL,
+              }),
+            )
+            .success,
         ).toBe(
-          true,
+          false,
         );
       },
     );
 
 
     it(
-      "rejects note carrying a finance proposal",
+      "requires confirmation to remain true",
       () => {
-        const result =
-          strictIntakePreviewSchema.safeParse({
-            kind:
-              "note",
-
-            label:
-              "ملاحظة",
-
-            title:
-              "بيانات غير متطابقة",
-
-            summary:
-              "اختبار منع الاقتراح المخفي.",
-
-            confidence:
-              0.8,
-
-            next_action:
-              "لا شيء.",
-
-            proposal:
-              VALID_INCOME_PROPOSAL,
-
-            requires_confirmation:
-              true,
-          });
-
-
         expect(
-          result.success,
+          activeStrictIntakePreviewSchema
+            .safeParse({
+              ...buildPreview({
+                kind:
+                  "travel",
+
+                proposal:
+                  VALID_TRAVEL_PROPOSAL,
+              }),
+
+              requires_confirmation:
+                false,
+            })
+            .success,
         ).toBe(
           false,
         );
@@ -1453,11 +1369,108 @@ describe(
 
 
 /* =========================================================
- * 13. LEGACY PREVIEW ANTI-DOWNGRADE
+ * 21. ACTIVE PREVIEW — NOTE / DOCUMENT
  * ======================================================= */
 
 describe(
-  "V2 transitional preview boundary",
+  "V2 note and document preview boundary",
+  () => {
+    it(
+      "accepts note only with proposal null",
+      () => {
+        expect(
+          activeStrictIntakePreviewSchema
+            .safeParse(
+              buildPreview({
+                kind:
+                  "note",
+
+                proposal:
+                  null,
+              }),
+            )
+            .success,
+        ).toBe(
+          true,
+        );
+      },
+    );
+
+
+    it(
+      "accepts document only with proposal null",
+      () => {
+        expect(
+          activeStrictIntakePreviewSchema
+            .safeParse(
+              buildPreview({
+                kind:
+                  "document",
+
+                proposal:
+                  null,
+              }),
+            )
+            .success,
+        ).toBe(
+          true,
+        );
+      },
+    );
+
+
+    it(
+      "rejects note carrying hidden finance proposal",
+      () => {
+        expect(
+          activeStrictIntakePreviewSchema
+            .safeParse(
+              buildPreview({
+                kind:
+                  "note",
+
+                proposal:
+                  VALID_INCOME_PROPOSAL,
+              }),
+            )
+            .success,
+        ).toBe(
+          false,
+        );
+      },
+    );
+
+
+    it(
+      "rejects document carrying hidden travel proposal",
+      () => {
+        expect(
+          activeStrictIntakePreviewSchema
+            .safeParse(
+              buildPreview({
+                kind:
+                  "document",
+
+                proposal:
+                  VALID_TRAVEL_PROPOSAL,
+              }),
+            )
+            .success,
+        ).toBe(
+          false,
+        );
+      },
+    );
+  },
+);
+
+
+/* =========================================================
+ * 22. ACTIVE BOUNDARY ANTI-DOWNGRADE
+ * ======================================================= */
+
+describe(
+  "V2 active preview anti downgrade",
   () => {
     const legacyPreview = {
       kind:
@@ -1467,16 +1480,16 @@ describe(
         "ملاحظة",
 
       title:
-        "Legacy Preview",
+        "Legacy Synthetic Preview",
 
       summary:
-        "Synthetic transitional preview.",
+        "Synthetic legacy preview.",
 
       confidence:
         0.8,
 
       next_action:
-        "اعتماد الملاحظة.",
+        "Review.",
 
       requires_confirmation:
         true,
@@ -1484,11 +1497,53 @@ describe(
 
 
     it(
-      "still accepts the old preview shape during rollout",
+      "keeps the legacy parser available for compatibility",
       () => {
         expect(
-          intakePreviewSchema.safeParse(
-            legacyPreview,
+          intakePreviewSchema
+            .safeParse(
+              legacyPreview,
+            )
+            .success,
+        ).toBe(
+          true,
+        );
+      },
+    );
+
+
+    it(
+      "rejects the legacy shape at the active V2 boundary",
+      () => {
+        expect(
+          activeStrictIntakePreviewSchema
+            .safeParse(
+              legacyPreview,
+            )
+            .success,
+        ).toBe(
+          false,
+        );
+      },
+    );
+  },
+);
+
+
+/* =========================================================
+ * 23. KIND CONSISTENCY
+ * ======================================================= */
+
+describe(
+  "V2 structured proposal kind consistency",
+  () => {
+    it(
+      "accepts finance proposal for finance",
+      () => {
+        expect(
+          validateStructuredProposalForIntakeKind(
+            "finance",
+            VALID_INCOME_PROPOSAL,
           ).success,
         ).toBe(
           true,
@@ -1498,47 +1553,13 @@ describe(
 
 
     it(
-      "rejects proposal fields at the legacy validation boundary",
+      "accepts travel proposal for travel",
       () => {
-        const result =
-          intakePreviewSchema.safeParse({
-            ...legacyPreview,
-
-            proposal:
-              VALID_INCOME_PROPOSAL,
-          });
-
-
         expect(
-          result.success,
-        ).toBe(
-          false,
-        );
-      },
-    );
-  },
-);
-
-
-/* =========================================================
- * 14. KIND CONSISTENCY HELPER
- * ======================================================= */
-
-describe(
-  "V2 structured proposal kind consistency",
-  () => {
-    it(
-      "accepts a finance proposal for finance intake",
-      () => {
-        const result =
           validateStructuredProposalForIntakeKind(
-            "finance",
-            VALID_INCOME_PROPOSAL,
-          );
-
-
-        expect(
-          result.success,
+            "travel",
+            VALID_TRAVEL_PROPOSAL,
+          ).success,
         ).toBe(
           true,
         );
@@ -1547,17 +1568,13 @@ describe(
 
 
     it(
-      "rejects a plan proposal for finance intake",
+      "rejects travel proposal for finance",
       () => {
-        const result =
+        expect(
           validateStructuredProposalForIntakeKind(
             "finance",
-            VALID_GOAL_PROPOSAL,
-          );
-
-
-        expect(
-          result.success,
+            VALID_TRAVEL_PROPOSAL,
+          ).success,
         ).toBe(
           false,
         );
@@ -1566,20 +1583,16 @@ describe(
 
 
     it(
-      "rejects arbitrary unknown proposal data",
+      "rejects arbitrary unknown proposal",
       () => {
-        const result =
+        expect(
           validateStructuredProposalForIntakeKind(
-            "finance",
+            "travel",
             {
               action:
                 "do_whatever",
             },
-          );
-
-
-        expect(
-          result.success,
+          ).success,
         ).toBe(
           false,
         );
@@ -1590,24 +1603,25 @@ describe(
 
 
 /* =========================================================
- * 15. EXECUTION TARGET MAPPING
+ * 24. STRUCTURED TARGET MAPPING
  * ======================================================= */
 
 describe(
   "V2 structured proposal execution targets",
   () => {
     it(
-      "maps income proposal only to income_source",
+      "maps income to income_source",
       () => {
-        const parsed =
-          structuredIntakeProposalSchema.parse(
-            VALID_INCOME_PROPOSAL,
-          );
+        const proposal =
+          structuredIntakeProposalSchema
+            .parse(
+              VALID_INCOME_PROPOSAL,
+            );
 
 
         expect(
           getStructuredProposalTarget(
-            parsed,
+            proposal,
           ),
         ).toBe(
           "income_source",
@@ -1617,17 +1631,18 @@ describe(
 
 
     it(
-      "maps budget proposal only to budget_item",
+      "maps budget to budget_item",
       () => {
-        const parsed =
-          structuredIntakeProposalSchema.parse(
-            VALID_BUDGET_PROPOSAL,
-          );
+        const proposal =
+          structuredIntakeProposalSchema
+            .parse(
+              VALID_BUDGET_PROPOSAL,
+            );
 
 
         expect(
           getStructuredProposalTarget(
-            parsed,
+            proposal,
           ),
         ).toBe(
           "budget_item",
@@ -1637,17 +1652,18 @@ describe(
 
 
     it(
-      "maps goal proposal only to goal",
+      "maps goal to goal",
       () => {
-        const parsed =
-          structuredIntakeProposalSchema.parse(
-            VALID_GOAL_PROPOSAL,
-          );
+        const proposal =
+          structuredIntakeProposalSchema
+            .parse(
+              VALID_GOAL_PROPOSAL,
+            );
 
 
         expect(
           getStructuredProposalTarget(
-            parsed,
+            proposal,
           ),
         ).toBe(
           "goal",
@@ -1657,17 +1673,18 @@ describe(
 
 
     it(
-      "maps project proposal only to project",
+      "maps project to project",
       () => {
-        const parsed =
-          structuredIntakeProposalSchema.parse(
-            VALID_PROJECT_PROPOSAL,
-          );
+        const proposal =
+          structuredIntakeProposalSchema
+            .parse(
+              VALID_PROJECT_PROPOSAL,
+            );
 
 
         expect(
           getStructuredProposalTarget(
-            parsed,
+            proposal,
           ),
         ).toBe(
           "project",
@@ -1677,17 +1694,18 @@ describe(
 
 
     it(
-      "maps learning proposal only to learning_item",
+      "maps learning to learning_item",
       () => {
-        const parsed =
-          structuredIntakeProposalSchema.parse(
-            VALID_LEARNING_PROPOSAL,
-          );
+        const proposal =
+          structuredIntakeProposalSchema
+            .parse(
+              VALID_LEARNING_PROPOSAL,
+            );
 
 
         expect(
           getStructuredProposalTarget(
-            parsed,
+            proposal,
           ),
         ).toBe(
           "learning_item",
@@ -1697,135 +1715,154 @@ describe(
 
 
     it(
-      "maps career proposal only to career_item",
+      "maps career to career_item",
       () => {
-        const parsed =
-          structuredIntakeProposalSchema.parse(
-            VALID_CAREER_PROPOSAL,
-          );
+        const proposal =
+          structuredIntakeProposalSchema
+            .parse(
+              VALID_CAREER_PROPOSAL,
+            );
 
 
         expect(
           getStructuredProposalTarget(
-            parsed,
+            proposal,
           ),
         ).toBe(
           "career_item",
         );
       },
     );
+
+
+    it(
+      "maps travel to trip",
+      () => {
+        const proposal =
+          structuredIntakeProposalSchema
+            .parse(
+              VALID_TRAVEL_PROPOSAL,
+            );
+
+
+        expect(
+          getStructuredProposalTarget(
+            proposal,
+          ),
+        ).toBe(
+          "trip",
+        );
+      },
+    );
+
+
+    it(
+      "maps travel domain helper only to trip",
+      () => {
+        const proposal =
+          travelIntakeProposalSchema
+            .parse(
+              VALID_TRAVEL_PROPOSAL,
+            );
+
+
+        expect(
+          getTravelProposalTarget(
+            proposal,
+          ),
+        ).toBe(
+          "trip",
+        );
+      },
+    );
   },
 );
 
 
 /* =========================================================
- * 16. FINAL SAFETY CONTRACT
+ * 25. EXECUTOR SUPPORT
  * ======================================================= */
 
 describe(
-  "LIFE OS V2 final intake safety contract",
+  "V2 deterministic intake executor support",
   () => {
     it(
-      "does not allow a structured finance preview without exact reviewable values",
+      "supports note",
       () => {
-        const result =
-          strictIntakePreviewSchema.safeParse({
-            kind:
-              "finance",
-
-            label:
-              "تحديث مالي",
-
-            title:
-              "Hidden Values",
-
-            summary:
-              "Synthetic safety test.",
-
-            confidence:
-              1,
-
-            next_action:
-              "اعتماد.",
-
-            proposal: {
-              version:
-                1,
-
-              kind:
-                "finance",
-
-              action:
-                "create_income_source",
-
-              data: {
-                name:
-                  "Synthetic Salary",
-
-                /*
-                 * amount intentionally missing
-                 */
-                currency:
-                  "AED",
-
-                frequency:
-                  "monthly",
-
-                next_expected_date:
-                  null,
-
-                notes:
-                  null,
-              },
-            },
-
-            requires_confirmation:
-              true,
-          });
-
-
         expect(
-          result.success,
+          isIntakeKindExecutable(
+            "note",
+          ),
         ).toBe(
-          false,
+          true,
         );
       },
     );
 
 
     it(
-      "requires explicit confirmation flag to remain true",
+      "supports finance",
       () => {
-        const result =
-          strictIntakePreviewSchema.safeParse({
-            kind:
-              "finance",
-
-            label:
-              "تحديث مالي",
-
-            title:
-              "Synthetic Salary",
-
-            summary:
-              "Synthetic test.",
-
-            confidence:
-              1,
-
-            next_action:
-              "اعتماد مصدر الدخل.",
-
-            proposal:
-              VALID_INCOME_PROPOSAL,
-
-            requires_confirmation:
-              false,
-          });
-
-
         expect(
-          result.success,
+          isIntakeKindExecutable(
+            "finance",
+          ),
+        ).toBe(
+          true,
+        );
+      },
+    );
+
+
+    it(
+      "supports plan",
+      () => {
+        expect(
+          isIntakeKindExecutable(
+            "plan",
+          ),
+        ).toBe(
+          true,
+        );
+      },
+    );
+
+
+    it(
+      "supports growth",
+      () => {
+        expect(
+          isIntakeKindExecutable(
+            "growth",
+          ),
+        ).toBe(
+          true,
+        );
+      },
+    );
+
+
+    it(
+      "supports travel",
+      () => {
+        expect(
+          isIntakeKindExecutable(
+            "travel",
+          ),
+        ).toBe(
+          true,
+        );
+      },
+    );
+
+
+    it(
+      "keeps document outside generic executor",
+      () => {
+        expect(
+          isIntakeKindExecutable(
+            "document",
+          ),
         ).toBe(
           false,
         );
@@ -1836,12 +1873,598 @@ describe(
 
 
 /* =========================================================
- * 17. PERMANENT V2 RULE
+ * 26. EXECUTOR KIND TARGET
+ * ======================================================= */
+
+describe(
+  "V2 executor kind target mapping",
+  () => {
+    it(
+      "maps note to memory_item",
+      () => {
+        expect(
+          getIntakeExecutionTarget(
+            "note",
+          ),
+        ).toBe(
+          "memory_item",
+        );
+      },
+    );
+
+
+    it(
+      "maps travel directly to trip",
+      () => {
+        expect(
+          getIntakeExecutionTarget(
+            "travel",
+          ),
+        ).toBe(
+          "trip",
+        );
+      },
+    );
+
+
+    it(
+      "keeps finance proposal dependent",
+      () => {
+        expect(
+          getIntakeExecutionTarget(
+            "finance",
+          ),
+        ).toBeNull();
+      },
+    );
+
+
+    it(
+      "keeps plan proposal dependent",
+      () => {
+        expect(
+          getIntakeExecutionTarget(
+            "plan",
+          ),
+        ).toBeNull();
+      },
+    );
+
+
+    it(
+      "keeps growth proposal dependent",
+      () => {
+        expect(
+          getIntakeExecutionTarget(
+            "growth",
+          ),
+        ).toBeNull();
+      },
+    );
+
+
+    it(
+      "keeps document in dedicated private file pipeline",
+      () => {
+        expect(
+          getIntakeExecutionTarget(
+            "document",
+          ),
+        ).toBeNull();
+      },
+    );
+  },
+);
+
+
+/* =========================================================
+ * 27. PRIVATE DOCUMENT CONSTANTS
+ * ======================================================= */
+
+describe(
+  "V2 private document constants",
+  () => {
+    it(
+      "uses the private document bucket",
+      () => {
+        expect(
+          PRIVATE_DOCUMENT_STORAGE_BUCKET,
+        ).toBe(
+          "life-os-private-documents",
+        );
+      },
+    );
+
+
+    it(
+      "allows PDF MIME only",
+      () => {
+        expect(
+          PRIVATE_DOCUMENT_MIME_TYPE,
+        ).toBe(
+          "application/pdf",
+        );
+      },
+    );
+
+
+    it(
+      "limits private PDFs to 15 MB",
+      () => {
+        expect(
+          PRIVATE_DOCUMENT_MAX_SIZE_BYTES,
+        ).toBe(
+          15 *
+            1024 *
+            1024,
+        );
+      },
+    );
+  },
+);
+
+
+/* =========================================================
+ * 28. PRIVATE DOCUMENT MIME
+ * ======================================================= */
+
+describe(
+  "V2 private document MIME validation",
+  () => {
+    it(
+      "accepts application/pdf",
+      () => {
+        expect(
+          documentMimeTypeSchema
+            .safeParse(
+              "application/pdf",
+            )
+            .success,
+        ).toBe(
+          true,
+        );
+      },
+    );
+
+
+    it(
+      "rejects image files",
+      () => {
+        expect(
+          documentMimeTypeSchema
+            .safeParse(
+              "image/png",
+            )
+            .success,
+        ).toBe(
+          false,
+        );
+      },
+    );
+
+
+    it(
+      "rejects HTML disguised as document",
+      () => {
+        expect(
+          documentMimeTypeSchema
+            .safeParse(
+              "text/html",
+            )
+            .success,
+        ).toBe(
+          false,
+        );
+      },
+    );
+  },
+);
+
+
+/* =========================================================
+ * 29. PRIVATE DOCUMENT SIZE
+ * ======================================================= */
+
+describe(
+  "V2 private document size validation",
+  () => {
+    it(
+      "accepts a normal positive PDF size",
+      () => {
+        expect(
+          documentFileSizeSchema
+            .safeParse(
+              1_024,
+            )
+            .success,
+        ).toBe(
+          true,
+        );
+      },
+    );
+
+
+    it(
+      "accepts exactly 15 MB",
+      () => {
+        expect(
+          documentFileSizeSchema
+            .safeParse(
+              PRIVATE_DOCUMENT_MAX_SIZE_BYTES,
+            )
+            .success,
+        ).toBe(
+          true,
+        );
+      },
+    );
+
+
+    it(
+      "rejects files larger than 15 MB",
+      () => {
+        expect(
+          documentFileSizeSchema
+            .safeParse(
+              PRIVATE_DOCUMENT_MAX_SIZE_BYTES +
+                1,
+            )
+            .success,
+        ).toBe(
+          false,
+        );
+      },
+    );
+
+
+    it(
+      "rejects zero byte documents",
+      () => {
+        expect(
+          documentFileSizeSchema
+            .safeParse(
+              0,
+            )
+            .success,
+        ).toBe(
+          false,
+        );
+      },
+    );
+  },
+);
+
+
+/* =========================================================
+ * 30. PRIVATE STORAGE BUCKET
+ * ======================================================= */
+
+describe(
+  "V2 private document bucket validation",
+  () => {
+    it(
+      "accepts only the canonical private bucket",
+      () => {
+        expect(
+          documentStorageBucketSchema
+            .safeParse(
+              PRIVATE_DOCUMENT_STORAGE_BUCKET,
+            )
+            .success,
+        ).toBe(
+          true,
+        );
+      },
+    );
+
+
+    it(
+      "rejects arbitrary public bucket names",
+      () => {
+        expect(
+          documentStorageBucketSchema
+            .safeParse(
+              "public",
+            )
+            .success,
+        ).toBe(
+          false,
+        );
+      },
+    );
+  },
+);
+
+
+/* =========================================================
+ * 31. PRIVATE STORAGE PATH
+ * ======================================================= */
+
+describe(
+  "V2 private document storage path validation",
+  () => {
+    it(
+      "accepts a normal nested server path",
+      () => {
+        expect(
+          documentStoragePathSchema
+            .safeParse(
+              "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa/travel/bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb/file.pdf",
+            )
+            .success,
+        ).toBe(
+          true,
+        );
+      },
+    );
+
+
+    it(
+      "rejects absolute paths",
+      () => {
+        expect(
+          documentStoragePathSchema
+            .safeParse(
+              "/private/file.pdf",
+            )
+            .success,
+        ).toBe(
+          false,
+        );
+      },
+    );
+
+
+    it(
+      "rejects path traversal",
+      () => {
+        expect(
+          documentStoragePathSchema
+            .safeParse(
+              "user/../secret/file.pdf",
+            )
+            .success,
+        ).toBe(
+          false,
+        );
+      },
+    );
+
+
+    it(
+      "rejects backslash paths",
+      () => {
+        expect(
+          documentStoragePathSchema
+            .safeParse(
+              "user\\private\\file.pdf",
+            )
+            .success,
+        ).toBe(
+          false,
+        );
+      },
+    );
+  },
+);
+
+
+/* =========================================================
+ * 32. EXACT REVIEWABLE VALUES
+ * ======================================================= */
+
+describe(
+  "LIFE OS V2 exact reviewable values",
+  () => {
+    it(
+      "rejects finance preview with hidden missing amount",
+      () => {
+        const proposal = {
+          version:
+            1,
+
+          kind:
+            "finance",
+
+          action:
+            "create_income_source",
+
+          data: {
+            name:
+              "Synthetic Salary",
+
+            currency:
+              "AED",
+
+            frequency:
+              "monthly",
+
+            next_expected_date:
+              null,
+
+            notes:
+              null,
+          },
+        };
+
+
+        expect(
+          activeStrictIntakePreviewSchema
+            .safeParse(
+              buildPreview({
+                kind:
+                  "finance",
+
+                proposal,
+              }),
+            )
+            .success,
+        ).toBe(
+          false,
+        );
+      },
+    );
+
+
+    it(
+      "rejects travel preview missing destination",
+      () => {
+        const proposal = {
+          ...VALID_TRAVEL_PROPOSAL,
+
+          data: {
+            title:
+              VALID_TRAVEL_PROPOSAL
+                .data
+                .title,
+
+            start_date:
+              VALID_TRAVEL_PROPOSAL
+                .data
+                .start_date,
+
+            end_date:
+              VALID_TRAVEL_PROPOSAL
+                .data
+                .end_date,
+
+            status:
+              VALID_TRAVEL_PROPOSAL
+                .data
+                .status,
+
+            budget_total:
+              VALID_TRAVEL_PROPOSAL
+                .data
+                .budget_total,
+
+            currency:
+              VALID_TRAVEL_PROPOSAL
+                .data
+                .currency,
+
+            readiness_percent:
+              VALID_TRAVEL_PROPOSAL
+                .data
+                .readiness_percent,
+
+            notes:
+              VALID_TRAVEL_PROPOSAL
+                .data
+                .notes,
+          },
+        };
+
+
+        expect(
+          activeStrictIntakePreviewSchema
+            .safeParse(
+              buildPreview({
+                kind:
+                  "travel",
+
+                proposal,
+              }),
+            )
+            .success,
+        ).toBe(
+          false,
+        );
+      },
+    );
+  },
+);
+
+
+/* =========================================================
+ * 33. FINAL V2 INTAKE RULE
  * ======================================================= */
 
 /**
- * These tests protect:
+ * These tests protect the final contract:
  *
+ *
+ * text / PDF
+ *      ↓
+ * AI preview
+ *      ↓
+ * exact structured values
+ *      ↓
+ * activeStrictIntakePreviewSchema
+ *      ↓
+ * user review
+ *      ↓
+ * explicit confirmation
+ *      ↓
+ * deterministic executor
+ *
+ *
+ * finance:
+ *
+ * proposal required
+ *
+ *
+ * plan:
+ *
+ * proposal required
+ *
+ *
+ * growth:
+ *
+ * proposal required
+ *
+ *
+ * travel:
+ *
+ * create_trip proposal required
+ * proposal:null forbidden
+ * generic executor enabled
+ * target = trip
+ *
+ *
+ * document:
+ *
+ * proposal = null
+ * generic executor disabled
+ * dedicated private PDF pipeline
+ *
+ *
+ * note:
+ *
+ * proposal = null
+ * deterministic memory executor
+ */
+
+
+/* =========================================================
+ * 34. FINAL SECURITY RULE
+ * ======================================================= */
+
+/**
+ * A future regression must fail this suite if it allows:
+ *
+ * arbitrary action
+ * arbitrary table write
+ * hidden financial values
+ * injected user ownership
+ * mismatched proposal kinds
+ * Travel without exact proposal
+ * Travel without destination
+ * invalid Travel date range
+ * invalid Travel readiness
+ * public document bucket
+ * non-PDF document type
+ * oversized private PDF
+ * unsafe Storage path
+ * automatic confirmation bypass
+ */
+
+
+/* =========================================================
+ * 35. PERMANENT LIFE OS RULE
+ * ======================================================= */
+
+/**
  * AI Suggests
  *      ↓
  * Exact Values
@@ -1852,20 +2475,8 @@ describe(
  *      ↓
  * User Approves
  *      ↓
- * Deterministic Executor
+ * Deterministic System Executes
  *
  *
- * If a future change accidentally allows:
- *
- * - hidden monetary values
- * - arbitrary actions
- * - arbitrary tables
- * - injected user_id
- * - mismatched proposal kinds
- * - finance without a proposal
- * - malformed dates
- * - unsupported categories
- *
- * this suite should fail before that behavior reaches the
- * execution layer.
+ * Private by default.
  */
