@@ -6,6 +6,8 @@ import {
   AppShell,
 } from "@/components/app-shell";
 
+import { DataEntryButton } from "@/components/data-entry/data-entry-button";
+
 import {
   EmptyState,
 } from "@/components/empty-state";
@@ -1310,6 +1312,7 @@ export default async function TravelPage() {
         </section>
 
       </div>
+      <section className="page-section"><div className="card" style={{ display: "flex", flexWrap: "wrap", gap: ".65rem" }}><DataEntryButton kind="trip" /><DataEntryButton kind="document" /></div></section>
     </AppShell>
   );
 }
