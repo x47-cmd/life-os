@@ -225,7 +225,7 @@ export default async function SettingsPage() {
           description="الإعدادات الأساسية، حالة الأمان، وسياسة الخصوصية والذكاء الاصطناعي."
           meta={
             <span>
-              الحساب الخاص محمي بـ MFA
+              الحساب الخاص محمي بالبريد وكلمة المرور
             </span>
           }
         />
@@ -402,7 +402,7 @@ export default async function SettingsPage() {
                 </div>
 
                 <span className="badge badge--positive">
-                  AAL2
+                  AAL1
                 </span>
               </div>
 
@@ -426,11 +426,11 @@ export default async function SettingsPage() {
 
                 <div className="space-between">
                   <span className="text-muted text-small">
-                    TOTP / MFA
+                    البريد الإلكتروني
                   </span>
 
                   <span className="badge badge--positive">
-                    إلزامي
+                    مطلوب
                   </span>
                 </div>
 
@@ -440,7 +440,7 @@ export default async function SettingsPage() {
                   </span>
 
                   <strong className="ltr">
-                    aal2
+                    aal1
                   </strong>
                 </div>
               </div>
@@ -972,3 +972,4 @@ export default async function SettingsPage() {
  * Simple outside.
  * Intelligent underneath.
  */
+
