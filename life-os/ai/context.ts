@@ -9,6 +9,10 @@ import {
   getDashboardSnapshot,
 } from "@/lib/data";
 
+import {
+  getTravelSnapshot,
+} from "@/lib/travel-data";
+
 import type {
   AIRequest,
   CareerItem,
@@ -16,7 +20,40 @@ import type {
   JsonObject,
   JsonValue,
   MemoryItem,
+  TravelSnapshot,
 } from "@/lib/types";
+
+
+/* =========================================================
+ * LIFE OS V2
+ * AI CONTEXT BOUNDARY
+ *
+ * Responsibilities:
+ *
+ * - detect which life areas are relevant
+ * - read only authenticated LIFE OS facts
+ * - minimize private data before AI sees it
+ * - include Travel OS when relevant
+ * - filter potentially sensitive memory
+ * - keep IDs and security metadata out of normal AI context
+ *
+ *
+ * This module is READ-ONLY.
+ *
+ * It does not:
+ *
+ * - write database rows
+ * - execute intake proposals
+ * - upload documents
+ * - generate signed file URLs
+ * - expose PDF binaries
+ * - expose auth tokens
+ *
+ *
+ * Simple outside.
+ * Intelligent underneath.
+ * Private by default.
+ * ======================================================= */
 
 
 /* =========================================================
@@ -30,6 +67,7 @@ export type AIContextScope =
   | "goals"
   | "projects"
   | "tasks"
+  | "travel"
   | "learning"
   | "career";
 
@@ -44,10 +82,13 @@ export type AIContextErrorCode =
 
 
 export class AIContextError extends Error {
-  readonly code: AIContextErrorCode;
+  readonly code:
+    AIContextErrorCode;
+
 
   constructor(
-    code: AIContextErrorCode,
+    code:
+      AIContextErrorCode,
   ) {
     const messages:
       Record<
@@ -61,12 +102,17 @@ export class AIContextError extends Error {
           "LIFE OS could not prepare AI context.",
       };
 
+
     super(
-      messages[code],
+      messages[
+        code
+      ],
     );
+
 
     this.name =
       "AIContextError";
+
 
     this.code =
       code;
@@ -75,7 +121,7 @@ export class AIContextError extends Error {
 
 
 /* =========================================================
- * 3. KEYWORD GROUPS
+ * 3. FINANCE KEYWORDS
  * ======================================================= */
 
 const FINANCE_KEYWORDS = [
@@ -97,6 +143,8 @@ const FINANCE_KEYWORDS = [
 
   "مالي",
   "المالية",
+  "مال",
+  "المال",
   "فلوس",
   "راتب",
   "الراتب",
@@ -115,6 +163,10 @@ const FINANCE_KEYWORDS = [
   "طوارئ",
 ] as const;
 
+
+/* =========================================================
+ * 4. INVESTMENT KEYWORDS
+ * ======================================================= */
 
 const INVESTMENT_KEYWORDS = [
   "investment",
@@ -148,6 +200,10 @@ const INVESTMENT_KEYWORDS = [
 ] as const;
 
 
+/* =========================================================
+ * 5. GOAL KEYWORDS
+ * ======================================================= */
+
 const GOAL_KEYWORDS = [
   "goal",
   "goals",
@@ -165,6 +221,10 @@ const GOAL_KEYWORDS = [
 ] as const;
 
 
+/* =========================================================
+ * 6. PROJECT KEYWORDS
+ * ======================================================= */
+
 const PROJECT_KEYWORDS = [
   "project",
   "projects",
@@ -178,6 +238,10 @@ const PROJECT_KEYWORDS = [
   "مبادرة",
 ] as const;
 
+
+/* =========================================================
+ * 7. TASK KEYWORDS
+ * ======================================================= */
 
 const TASK_KEYWORDS = [
   "task",
@@ -197,6 +261,57 @@ const TASK_KEYWORDS = [
   "متأخرة",
 ] as const;
 
+
+/* =========================================================
+ * 8. TRAVEL KEYWORDS
+ * ======================================================= */
+
+const TRAVEL_KEYWORDS = [
+  "travel",
+  "trip",
+  "trips",
+  "holiday",
+  "vacation",
+  "destination",
+  "flight",
+  "flights",
+  "hotel",
+  "hotels",
+  "itinerary",
+  "airport",
+  "booking",
+  "booked",
+  "travel budget",
+  "travel document",
+  "travel documents",
+
+  "سفر",
+  "السفر",
+  "رحلة",
+  "رحلات",
+  "الرحلة",
+  "الرحلات",
+  "وجهة",
+  "الوجهة",
+  "طيران",
+  "رحلة طيران",
+  "فندق",
+  "فنادق",
+  "حجز",
+  "حجوزات",
+  "محجوز",
+  "مطار",
+  "برنامج الرحلة",
+  "جدول الرحلة",
+  "ميزانية السفر",
+  "ميزانية الرحلة",
+  "جاهزية الرحلة",
+] as const;
+
+
+/* =========================================================
+ * 9. LEARNING KEYWORDS
+ * ======================================================= */
 
 const LEARNING_KEYWORDS = [
   "learning",
@@ -226,6 +341,10 @@ const LEARNING_KEYWORDS = [
   "الجامعة",
 ] as const;
 
+
+/* =========================================================
+ * 10. CAREER KEYWORDS
+ * ======================================================= */
 
 const CAREER_KEYWORDS = [
   "career",
@@ -258,11 +377,12 @@ const CAREER_KEYWORDS = [
 
 
 /* =========================================================
- * 4. TEXT MATCHING
+ * 11. TEXT NORMALIZATION
  * ======================================================= */
 
 function normalizeText(
-  value: string,
+  value:
+    string,
 ): string {
   return value
     .trim()
@@ -270,41 +390,62 @@ function normalizeText(
 }
 
 
+/* =========================================================
+ * 12. KEYWORD MATCHING
+ * ======================================================= */
+
 function containsAnyKeyword(
-  message: string,
-  keywords: readonly string[],
+  message:
+    string,
+
+  keywords:
+    readonly string[],
 ): boolean {
   const normalized =
-    normalizeText(message);
+    normalizeText(
+      message,
+    );
+
 
   return keywords.some(
-    (keyword) =>
+    (
+      keyword,
+    ) =>
       normalized.includes(
-        normalizeText(keyword),
+        normalizeText(
+          keyword,
+        ),
       ),
   );
 }
 
 
 /* =========================================================
- * 5. DETECT REQUIRED SCOPES
+ * 13. DETECT REQUIRED SCOPES
  * ======================================================= */
 
 /**
- * Context selection is deterministic.
+ * Scope selection is deterministic.
  *
- * We do NOT call AI to decide which private data AI should
- * receive.
+ * AI does not decide which private LIFE OS datasets it gets.
  */
 export function detectContextScopes(
-  message: string,
+  message:
+    string,
 ): AIContextScope[] {
   const scopes =
-    new Set<AIContextScope>();
+    new Set<
+      AIContextScope
+    >();
 
+
+  /*
+   * Minimal Home snapshot is always available.
+   */
   scopes.add(
     "dashboard",
   );
+
 
   if (
     containsAnyKeyword(
@@ -317,6 +458,7 @@ export function detectContextScopes(
     );
   }
 
+
   if (
     containsAnyKeyword(
       message,
@@ -327,6 +469,7 @@ export function detectContextScopes(
       "investments",
     );
   }
+
 
   if (
     containsAnyKeyword(
@@ -339,6 +482,7 @@ export function detectContextScopes(
     );
   }
 
+
   if (
     containsAnyKeyword(
       message,
@@ -349,6 +493,7 @@ export function detectContextScopes(
       "projects",
     );
   }
+
 
   if (
     containsAnyKeyword(
@@ -361,6 +506,19 @@ export function detectContextScopes(
     );
   }
 
+
+  if (
+    containsAnyKeyword(
+      message,
+      TRAVEL_KEYWORDS,
+    )
+  ) {
+    scopes.add(
+      "travel",
+    );
+  }
+
+
   if (
     containsAnyKeyword(
       message,
@@ -371,6 +529,7 @@ export function detectContextScopes(
       "learning",
     );
   }
+
 
   if (
     containsAnyKeyword(
@@ -383,6 +542,7 @@ export function detectContextScopes(
     );
   }
 
+
   return Array.from(
     scopes,
   );
@@ -390,7 +550,7 @@ export function detectContextScopes(
 
 
 /* =========================================================
- * 6. MEMORY SAFETY FILTER
+ * 14. MEMORY SAFETY FILTER
  * ======================================================= */
 
 const SENSITIVE_MEMORY_PATTERNS = [
@@ -401,9 +561,12 @@ const SENSITIVE_MEMORY_PATTERNS = [
   "access token",
   "refresh token",
   "service role",
+  "service_role",
   "secret key",
   "totp secret",
   "recovery code",
+  "private key",
+  "authorization bearer",
 
   "كلمة المرور",
   "رمز المرور",
@@ -414,115 +577,186 @@ const SENSITIVE_MEMORY_PATTERNS = [
 ] as const;
 
 
+/* =========================================================
+ * 15. SENSITIVE MEMORY DETECTION
+ * ======================================================= */
+
 function isPotentiallySensitiveMemory(
-  item: MemoryItem,
+  item:
+    MemoryItem,
 ): boolean {
   const combined =
     normalizeText(
       `${item.title} ${item.content}`,
     );
 
+
   return SENSITIVE_MEMORY_PATTERNS.some(
-    (pattern) =>
+    (
+      pattern,
+    ) =>
       combined.includes(
-        normalizeText(pattern),
+        normalizeText(
+          pattern,
+        ),
       ),
   );
 }
 
 
 /* =========================================================
- * 7. MEMORY RELEVANCE
+ * 16. MEMORY IMPORTANCE
  * ======================================================= */
 
 const MEMORY_IMPORTANCE_WEIGHT = {
-  high: 3,
-  medium: 2,
-  low: 1,
+  high:
+    3,
+
+  medium:
+    2,
+
+  low:
+    1,
 } as const;
 
 
+/* =========================================================
+ * 17. MEMORY RELEVANCE
+ * ======================================================= */
+
 function isMemoryRelevantToScopes(
-  item: MemoryItem,
-  scopes: AIContextScope[],
+  item:
+    MemoryItem,
+
+  scopes:
+    AIContextScope[],
 ): boolean {
-  /**
-   * Stable personal preferences and constraints may affect
-   * almost any recommendation.
+  /*
+   * Stable preferences and constraints may affect many
+   * recommendations.
    */
   if (
-    item.category === "preference" ||
-    item.category === "constraint"
+    item.category ===
+      "preference" ||
+    item.category ===
+      "constraint"
   ) {
     return true;
   }
 
+
   if (
-    item.category === "decision" &&
-    item.importance === "high"
+    item.category ===
+      "decision" &&
+    item.importance ===
+      "high"
   ) {
     return true;
   }
 
+
   if (
-    scopes.includes("finance") &&
-    item.category === "finance"
+    scopes.includes(
+      "finance",
+    ) &&
+    item.category ===
+      "finance"
   ) {
     return true;
   }
 
+
   if (
-    scopes.includes("investments") &&
-    item.category === "investments"
+    scopes.includes(
+      "investments",
+    ) &&
+    item.category ===
+      "investments"
   ) {
     return true;
   }
 
+
   if (
-    scopes.includes("career") &&
-    item.category === "career"
+    scopes.includes(
+      "career",
+    ) &&
+    item.category ===
+      "career"
   ) {
     return true;
   }
 
+
   if (
-    scopes.includes("learning") &&
+    scopes.includes(
+      "learning",
+    ) &&
     (
-      item.category === "learning" ||
-      item.category === "education"
+      item.category ===
+        "learning" ||
+      item.category ===
+        "education"
     )
   ) {
     return true;
   }
 
+
   if (
-    scopes.includes("projects") &&
-    item.category === "projects"
+    scopes.includes(
+      "projects",
+    ) &&
+    item.category ===
+      "projects"
   ) {
     return true;
   }
 
+
+  /*
+   * Travel currently has its own structured Travel OS tables.
+   *
+   * We intentionally do not guess a MemoryItem category here
+   * if the frozen MemoryItem enum does not define travel.
+   *
+   * General preference / constraint memory above can still
+   * influence travel advice safely.
+   */
   return false;
 }
 
 
+/* =========================================================
+ * 18. SELECT RELEVANT MEMORY
+ * ======================================================= */
+
 function selectRelevantMemory(
-  items: MemoryItem[],
-  scopes: AIContextScope[],
+  items:
+    MemoryItem[],
+
+  scopes:
+    AIContextScope[],
 ): MemoryItem[] {
   return items
     .filter(
-      (item) =>
+      (
+        item,
+      ) =>
         item.is_active,
     )
     .filter(
-      (item) =>
+      (
+        item,
+      ) =>
         !isPotentiallySensitiveMemory(
           item,
         ),
     )
     .filter(
-      (item) =>
+      (
+        item,
+      ) =>
         isMemoryRelevantToScopes(
           item,
           scopes,
@@ -541,11 +775,14 @@ function selectRelevantMemory(
             a.importance
           ];
 
+
         if (
-          importanceDifference !== 0
+          importanceDifference !==
+          0
         ) {
           return importanceDifference;
         }
+
 
         return b.updated_at.localeCompare(
           a.updated_at,
@@ -560,14 +797,17 @@ function selectRelevantMemory(
 
 
 /* =========================================================
- * 8. MINIMAL MEMORY OUTPUT
+ * 19. MINIMAL MEMORY OUTPUT
  * ======================================================= */
 
 function buildMemoryContext(
-  items: MemoryItem[],
+  items:
+    MemoryItem[],
 ): JsonValue[] {
   return items.map(
-    (item) => ({
+    (
+      item,
+    ) => ({
       category:
         item.category,
 
@@ -585,15 +825,199 @@ function buildMemoryContext(
 
 
 /* =========================================================
- * 9. DASHBOARD CORE CONTEXT
+ * 20. TRIP MINIMAL OUTPUT
+ * ======================================================= */
+
+function buildMinimalTripContext(
+  trip:
+    TravelSnapshot["next_trip"],
+): JsonObject | null {
+  if (
+    !trip
+  ) {
+    return null;
+  }
+
+
+  return {
+    title:
+      trip.title,
+
+    destination:
+      trip.destination,
+
+    start_date:
+      trip.start_date,
+
+    end_date:
+      trip.end_date,
+
+    status:
+      trip.status,
+
+    budget_total:
+      trip.budget_total,
+
+    currency:
+      trip.currency,
+
+    readiness_percent:
+      trip.readiness_percent,
+  };
+}
+
+
+/* =========================================================
+ * 21. TRAVEL SUMMARY
+ * ======================================================= */
+
+function buildTravelSummaryContext(
+  travel:
+    TravelSnapshot,
+): JsonObject {
+  return {
+    next_trip:
+      buildMinimalTripContext(
+        travel.next_trip,
+      ),
+
+    active_trip_count:
+      travel.active_trips.length,
+
+    upcoming_trip_count:
+      travel.upcoming_trips.length,
+
+    completed_trip_count:
+      travel.completed_trip_count,
+
+    private_document_count:
+      travel.document_count,
+  };
+}
+
+
+/* =========================================================
+ * 22. FULL TRAVEL CONTEXT
+ * ======================================================= */
+
+/**
+ * Still deliberately minimal.
+ *
+ * We do not send:
+ *
+ * document file names
+ * Storage paths
+ * signed URLs
+ * PDF binaries
+ * document IDs
+ * trip IDs
+ */
+function buildTravelContext(
+  travel:
+    TravelSnapshot,
+): JsonObject {
+  return {
+    next_trip:
+      buildMinimalTripContext(
+        travel.next_trip,
+      ),
+
+    active_trips:
+      travel.active_trips
+        .slice(
+          0,
+          AI_MAX_CONTEXT_ITEMS_PER_CATEGORY,
+        )
+        .map(
+          (
+            trip,
+          ) => ({
+            title:
+              trip.title,
+
+            destination:
+              trip.destination,
+
+            start_date:
+              trip.start_date,
+
+            end_date:
+              trip.end_date,
+
+            status:
+              trip.status,
+
+            budget_total:
+              trip.budget_total,
+
+            currency:
+              trip.currency,
+
+            readiness_percent:
+              trip.readiness_percent,
+          }),
+        ),
+
+    upcoming_trips:
+      travel.upcoming_trips
+        .slice(
+          0,
+          AI_MAX_CONTEXT_ITEMS_PER_CATEGORY,
+        )
+        .map(
+          (
+            trip,
+          ) => ({
+            title:
+              trip.title,
+
+            destination:
+              trip.destination,
+
+            start_date:
+              trip.start_date,
+
+            end_date:
+              trip.end_date,
+
+            status:
+              trip.status,
+
+            budget_total:
+              trip.budget_total,
+
+            currency:
+              trip.currency,
+
+            readiness_percent:
+              trip.readiness_percent,
+          }),
+        ),
+
+    completed_trip_count:
+      travel.completed_trip_count,
+
+    private_document_count:
+      travel.document_count,
+  };
+}
+
+
+/* =========================================================
+ * 23. DASHBOARD CORE CONTEXT
  * ======================================================= */
 
 function buildDashboardCoreContext(
-  dashboard: DashboardSnapshot,
+  dashboard:
+    DashboardSnapshot,
+
+  travel:
+    TravelSnapshot,
 ): JsonObject {
   return {
     month:
       dashboard.month,
+
 
     top_priorities:
       dashboard.top_priorities
@@ -602,7 +1026,9 @@ function buildDashboardCoreContext(
           3,
         )
         .map(
-          (item) => ({
+          (
+            item,
+          ) => ({
             source:
               item.source,
 
@@ -619,6 +1045,7 @@ function buildDashboardCoreContext(
               item.target_date,
           }),
         ),
+
 
     finance_summary: {
       currency:
@@ -641,6 +1068,7 @@ function buildDashboardCoreContext(
         dashboard.finance
           .travel_savings_balance,
     },
+
 
     investment_summary: {
       currency:
@@ -667,33 +1095,37 @@ function buildDashboardCoreContext(
           .total_monthly_contribution_target,
     },
 
-    goal_summary: {
-      active:
-        dashboard.goals.active_count,
 
-      planned:
-        dashboard.goals.planned_count,
+    plan_summary: {
+      goals: {
+        active:
+          dashboard.goals.active_count,
 
-      paused:
-        dashboard.goals.paused_count,
+        planned:
+          dashboard.goals.planned_count,
 
-      completed:
-        dashboard.goals.completed_count,
+        paused:
+          dashboard.goals.paused_count,
+
+        completed:
+          dashboard.goals.completed_count,
+      },
+
+      projects: {
+        active:
+          dashboard.projects.active_count,
+
+        blocked:
+          dashboard.projects.blocked_count,
+
+        planned:
+          dashboard.projects.planned_count,
+
+        completed:
+          dashboard.projects.completed_count,
+      },
     },
 
-    project_summary: {
-      active:
-        dashboard.projects.active_count,
-
-      blocked:
-        dashboard.projects.blocked_count,
-
-      planned:
-        dashboard.projects.planned_count,
-
-      completed:
-        dashboard.projects.completed_count,
-    },
 
     task_summary: {
       pending:
@@ -705,6 +1137,13 @@ function buildDashboardCoreContext(
       overdue:
         dashboard.tasks.overdue_count,
     },
+
+
+    travel_summary:
+      buildTravelSummaryContext(
+        travel,
+      ),
+
 
     learning_summary: {
       active:
@@ -721,14 +1160,16 @@ function buildDashboardCoreContext(
 
 
 /* =========================================================
- * 10. FINANCE CONTEXT
+ * 24. FINANCE CONTEXT
  * ======================================================= */
 
 function buildFinanceContext(
-  dashboard: DashboardSnapshot,
+  dashboard:
+    DashboardSnapshot,
 ): JsonObject {
   const finance =
     dashboard.finance;
+
 
   return {
     currency:
@@ -761,10 +1202,13 @@ function buildFinanceContext(
     travel_savings_balance:
       finance.travel_savings_balance,
 
+
     active_income_sources:
       finance.income_sources
         .filter(
-          (item) =>
+          (
+            item,
+          ) =>
             item.is_active,
         )
         .slice(
@@ -772,22 +1216,33 @@ function buildFinanceContext(
           AI_MAX_CONTEXT_ITEMS_PER_CATEGORY,
         )
         .map(
-          (item) => ({
+          (
+            item,
+          ) => ({
             name:
               item.name,
 
             amount:
               item.amount,
 
+            currency:
+              item.currency,
+
             frequency:
               item.frequency,
+
+            next_expected_date:
+              item.next_expected_date,
           }),
         ),
+
 
     active_budget_items:
       finance.budget_items
         .filter(
-          (item) =>
+          (
+            item,
+          ) =>
             item.is_active,
         )
         .slice(
@@ -795,7 +1250,9 @@ function buildFinanceContext(
           AI_MAX_CONTEXT_ITEMS_PER_CATEGORY,
         )
         .map(
-          (item) => ({
+          (
+            item,
+          ) => ({
             name:
               item.name,
 
@@ -808,8 +1265,14 @@ function buildFinanceContext(
             amount:
               item.amount,
 
+            currency:
+              item.currency,
+
             frequency:
               item.frequency,
+
+            due_day:
+              item.due_day,
           }),
         ),
   };
@@ -817,14 +1280,16 @@ function buildFinanceContext(
 
 
 /* =========================================================
- * 11. INVESTMENT CONTEXT
+ * 25. INVESTMENT CONTEXT
  * ======================================================= */
 
 function buildInvestmentContext(
-  dashboard: DashboardSnapshot,
+  dashboard:
+    DashboardSnapshot,
 ): JsonObject {
   const investments =
     dashboard.investments;
+
 
   return {
     currency:
@@ -846,6 +1311,7 @@ function buildInvestmentContext(
     active_asset_count:
       investments.active_asset_count,
 
+
     positions:
       investments.positions
         .slice(
@@ -853,7 +1319,9 @@ function buildInvestmentContext(
           AI_MAX_CONTEXT_ITEMS_PER_CATEGORY,
         )
         .map(
-          (position) => ({
+          (
+            position,
+          ) => ({
             ticker:
               position.asset.ticker,
 
@@ -911,11 +1379,12 @@ function buildInvestmentContext(
 
 
 /* =========================================================
- * 12. GOALS CONTEXT
+ * 26. GOALS CONTEXT
  * ======================================================= */
 
 function buildGoalsContext(
-  dashboard: DashboardSnapshot,
+  dashboard:
+    DashboardSnapshot,
 ): JsonObject {
   return {
     active_count:
@@ -930,6 +1399,7 @@ function buildGoalsContext(
     completed_count:
       dashboard.goals.completed_count,
 
+
     active_goals:
       dashboard.goals.active_goals
         .slice(
@@ -937,7 +1407,9 @@ function buildGoalsContext(
           AI_MAX_CONTEXT_ITEMS_PER_CATEGORY,
         )
         .map(
-          (goal) => ({
+          (
+            goal,
+          ) => ({
             title:
               goal.title,
 
@@ -965,11 +1437,12 @@ function buildGoalsContext(
 
 
 /* =========================================================
- * 13. PROJECT CONTEXT
+ * 27. PROJECT CONTEXT
  * ======================================================= */
 
 function buildProjectsContext(
-  dashboard: DashboardSnapshot,
+  dashboard:
+    DashboardSnapshot,
 ): JsonObject {
   return {
     active_count:
@@ -984,6 +1457,7 @@ function buildProjectsContext(
     completed_count:
       dashboard.projects.completed_count,
 
+
     high_priority_projects:
       dashboard.projects
         .high_priority_projects
@@ -992,7 +1466,9 @@ function buildProjectsContext(
           AI_MAX_CONTEXT_ITEMS_PER_CATEGORY,
         )
         .map(
-          (project) => ({
+          (
+            project,
+          ) => ({
             title:
               project.title,
 
@@ -1016,6 +1492,7 @@ function buildProjectsContext(
           }),
         ),
 
+
     blocked_projects:
       dashboard.projects
         .blocked_projects
@@ -1024,7 +1501,9 @@ function buildProjectsContext(
           AI_MAX_CONTEXT_ITEMS_PER_CATEGORY,
         )
         .map(
-          (project) => ({
+          (
+            project,
+          ) => ({
             title:
               project.title,
 
@@ -1043,11 +1522,12 @@ function buildProjectsContext(
 
 
 /* =========================================================
- * 14. TASK CONTEXT
+ * 28. TASK CONTEXT
  * ======================================================= */
 
 function buildTasksContext(
-  dashboard: DashboardSnapshot,
+  dashboard:
+    DashboardSnapshot,
 ): JsonObject {
   return {
     pending_count:
@@ -1062,6 +1542,7 @@ function buildTasksContext(
     overdue_count:
       dashboard.tasks.overdue_count,
 
+
     urgent_tasks:
       dashboard.tasks.urgent_tasks
         .slice(
@@ -1069,7 +1550,9 @@ function buildTasksContext(
           AI_MAX_CONTEXT_ITEMS_PER_CATEGORY,
         )
         .map(
-          (task) => ({
+          (
+            task,
+          ) => ({
             title:
               task.title,
 
@@ -1088,11 +1571,12 @@ function buildTasksContext(
 
 
 /* =========================================================
- * 15. LEARNING CONTEXT
+ * 29. LEARNING CONTEXT
  * ======================================================= */
 
 function buildLearningContext(
-  dashboard: DashboardSnapshot,
+  dashboard:
+    DashboardSnapshot,
 ): JsonObject {
   return {
     active_count:
@@ -1107,6 +1591,7 @@ function buildLearningContext(
     paused_count:
       dashboard.learning.paused_count,
 
+
     active_items:
       dashboard.learning.active_items
         .slice(
@@ -1114,7 +1599,9 @@ function buildLearningContext(
           AI_MAX_CONTEXT_ITEMS_PER_CATEGORY,
         )
         .map(
-          (item) => ({
+          (
+            item,
+          ) => ({
             title:
               item.title,
 
@@ -1138,6 +1625,7 @@ function buildLearningContext(
           }),
         ),
 
+
     high_priority_items:
       dashboard.learning
         .high_priority_items
@@ -1146,7 +1634,9 @@ function buildLearningContext(
           AI_MAX_CONTEXT_ITEMS_PER_CATEGORY,
         )
         .map(
-          (item) => ({
+          (
+            item,
+          ) => ({
             title:
               item.title,
 
@@ -1171,11 +1661,12 @@ function buildLearningContext(
 
 
 /* =========================================================
- * 16. CAREER CONTEXT
+ * 30. CAREER MINIMAL OUTPUT
  * ======================================================= */
 
 function buildMinimalCareerItems(
-  items: CareerItem[],
+  items:
+    CareerItem[],
 ): JsonValue[] {
   return items
     .slice(
@@ -1183,7 +1674,9 @@ function buildMinimalCareerItems(
       AI_MAX_CONTEXT_ITEMS_PER_CATEGORY,
     )
     .map(
-      (item) => ({
+      (
+        item,
+      ) => ({
         item_type:
           item.item_type,
 
@@ -1212,10 +1705,15 @@ function buildMinimalCareerItems(
 }
 
 
+/* =========================================================
+ * 31. CAREER CONTEXT
+ * ======================================================= */
+
 async function buildCareerContext():
 Promise<JsonObject> {
   const career =
     await getCareerSnapshot();
+
 
   return {
     current_roles:
@@ -1252,11 +1750,12 @@ Promise<JsonObject> {
 
 
 /* =========================================================
- * 17. BUILD CHIEF OF STAFF CONTEXT
+ * 32. BUILD CHIEF OF STAFF CONTEXT
  * ======================================================= */
 
 export async function buildChiefOfStaffContext(
-  request: AIRequest,
+  request:
+    AIRequest,
 ): Promise<JsonObject> {
   if (
     request.mode ===
@@ -1267,24 +1766,30 @@ export async function buildChiefOfStaffContext(
     );
   }
 
+
   try {
     const scopes =
       detectContextScopes(
         request.message,
       );
 
+
     const needsCareer =
       scopes.includes(
         "career",
       );
 
+
     const [
       dashboard,
+      travel,
       memories,
       career,
     ] =
       await Promise.all([
         getDashboardSnapshot(),
+
+        getTravelSnapshot(),
 
         getActiveMemoryItems(),
 
@@ -1295,11 +1800,13 @@ export async function buildChiefOfStaffContext(
             ),
       ]);
 
+
     const relevantMemory =
       selectRelevantMemory(
         memories,
         scopes,
       );
+
 
     const context:
       JsonObject = {
@@ -1312,6 +1819,7 @@ export async function buildChiefOfStaffContext(
         dashboard:
           buildDashboardCoreContext(
             dashboard,
+            travel,
           ),
 
         relevant_memory:
@@ -1319,6 +1827,7 @@ export async function buildChiefOfStaffContext(
             relevantMemory,
           ),
       };
+
 
     if (
       scopes.includes(
@@ -1331,6 +1840,7 @@ export async function buildChiefOfStaffContext(
         );
     }
 
+
     if (
       scopes.includes(
         "investments",
@@ -1341,6 +1851,7 @@ export async function buildChiefOfStaffContext(
           dashboard,
         );
     }
+
 
     if (
       scopes.includes(
@@ -1353,6 +1864,7 @@ export async function buildChiefOfStaffContext(
         );
     }
 
+
     if (
       scopes.includes(
         "projects",
@@ -1363,6 +1875,7 @@ export async function buildChiefOfStaffContext(
           dashboard,
         );
     }
+
 
     if (
       scopes.includes(
@@ -1375,6 +1888,19 @@ export async function buildChiefOfStaffContext(
         );
     }
 
+
+    if (
+      scopes.includes(
+        "travel",
+      )
+    ) {
+      context.travel =
+        buildTravelContext(
+          travel,
+        );
+    }
+
+
     if (
       scopes.includes(
         "learning",
@@ -1386,21 +1912,27 @@ export async function buildChiefOfStaffContext(
         );
     }
 
+
     if (
-      career !== null
+      career !==
+      null
     ) {
       context.career =
         career;
     }
 
+
     return context;
-  } catch (error) {
+  } catch (
+    error
+  ) {
     if (
       error instanceof
       AIContextError
     ) {
       throw error;
     }
+
 
     throw new AIContextError(
       "CONTEXT_BUILD_FAILED",
@@ -1410,31 +1942,41 @@ export async function buildChiefOfStaffContext(
 
 
 /* =========================================================
- * 18. DECISION CONTEXT
+ * 33. DECISION CONTEXT
  * ======================================================= */
 
 /**
- * Decision Simulator receives a broader but still controlled
- * snapshot because decisions may affect multiple life areas.
+ * Decision Simulator gets a broader but still controlled
+ * snapshot because a decision may affect several life areas.
  *
- * Audit logs, credentials and unrelated raw records remain
- * excluded.
+ *
+ * It still receives no:
+ *
+ * credentials
+ * document binaries
+ * Storage paths
+ * audit history
+ * public/private file URLs
  */
 export async function buildDecisionContext():
 Promise<JsonObject> {
   try {
     const [
       dashboard,
+      travel,
       memories,
       career,
     ] =
       await Promise.all([
         getDashboardSnapshot(),
 
+        getTravelSnapshot(),
+
         getActiveMemoryItems(),
 
         buildCareerContext(),
       ]);
+
 
     const decisionScopes:
       AIContextScope[] = [
@@ -1444,15 +1986,18 @@ Promise<JsonObject> {
         "goals",
         "projects",
         "tasks",
+        "travel",
         "learning",
         "career",
       ];
+
 
     const relevantMemory =
       selectRelevantMemory(
         memories,
         decisionScopes,
       );
+
 
     return {
       generated_at:
@@ -1465,6 +2010,7 @@ Promise<JsonObject> {
       dashboard:
         buildDashboardCoreContext(
           dashboard,
+          travel,
         ),
 
       finance:
@@ -1492,6 +2038,11 @@ Promise<JsonObject> {
           dashboard,
         ),
 
+      travel:
+        buildTravelContext(
+          travel,
+        ),
+
       learning:
         buildLearningContext(
           dashboard,
@@ -1513,19 +2064,26 @@ Promise<JsonObject> {
 
 
 /* =========================================================
- * 19. OPPORTUNITY CONTEXT
+ * 34. OPPORTUNITY CONTEXT
  * ======================================================= */
 
 /**
  * Opportunity Search primarily needs:
  *
- * - active goals
+ * - current goals
  * - learning direction
  * - career direction
  * - relevant preferences / constraints
  *
- * It intentionally does NOT receive detailed financial or
- * investment positions.
+ *
+ * It intentionally does not receive:
+ *
+ * detailed financial information
+ * investment positions
+ * Travel OS
+ *
+ *
+ * unless that feature is explicitly expanded later.
  */
 export async function buildOpportunityContext():
 Promise<JsonObject> {
@@ -1543,6 +2101,7 @@ Promise<JsonObject> {
         buildCareerContext(),
       ]);
 
+
     const opportunityScopes:
       AIContextScope[] = [
         "goals",
@@ -1550,11 +2109,13 @@ Promise<JsonObject> {
         "career",
       ];
 
+
     const relevantMemory =
       selectRelevantMemory(
         memories,
         opportunityScopes,
       );
+
 
     return {
       generated_at:
@@ -1586,102 +2147,211 @@ Promise<JsonObject> {
 
 
 /* =========================================================
- * 20. PRIVACY GUARANTEES
+ * 35. TRAVEL CONTEXT PRIVACY
  * ======================================================= */
 
 /**
- * Context generated by this file intentionally excludes:
+ * LIFE AI may know:
  *
- * - user_id
- * - email
- * - authentication tokens
- * - cookies
- * - MFA information
- * - API keys
- * - service-role credentials
- * - audit history
- * - created_at database metadata
- * - unrelated personal records
+ * destination
+ * trip title
+ * trip status
+ * known dates
+ * approved budget
+ * approved readiness
+ * number of private documents
  *
- * IDs are also generally excluded from AI context unless a
- * later tool specifically requires a controlled identifier.
+ *
+ * LIFE AI does NOT receive here:
+ *
+ * PDF content
+ * file names
+ * Storage bucket
+ * Storage path
+ * signed URL
+ * document ID
+ * trip ID
  */
 
 
 /* =========================================================
- * 21. CONTEXT AUTHORIZATION
+ * 36. TRAVEL READ-ONLY RULE
  * ======================================================= */
 
 /**
- * This file does not independently accept a user identifier.
+ * Travel context allows LIFE AI to answer questions such as:
  *
- * All underlying data functions:
+ * - شو رحلتي القادمة؟
+ * - كم جاهزيتي؟
+ * - كم الميزانية؟
+ * - متى السفر؟
+ * - عندي كم ملف سفر؟
  *
- * getDashboardSnapshot()
- * getCareerSnapshot()
- * getActiveMemoryItems()
  *
- * already require:
+ * It does NOT allow LIFE AI to:
  *
- * Verified Supabase authentication
- *      ↓
- * AAL2
- *      ↓
- * authenticated user_id
- *      ↓
- * PostgreSQL RLS
+ * create trip
+ * update trip
+ * cancel trip
+ * alter readiness
+ * upload PDF
+ * delete PDF
+ *
+ *
+ * Writes continue to require explicit deterministic flows.
  */
 
 
 /* =========================================================
- * 22. PROMPT-INJECTION BOUNDARY
+ * 37. CONTEXT PRIVACY GUARANTEES
  * ======================================================= */
 
 /**
- * Personal data may contain arbitrary text.
+ * Normal AI context intentionally excludes:
+ *
+ * user_id
+ * email
+ * authentication tokens
+ * cookies
+ * passwords
+ * MFA secrets
+ * API keys
+ * service-role credentials
+ * audit history
+ * database ownership metadata
+ * Storage paths
+ * permanent/public file URLs
+ *
+ *
+ * IDs are generally excluded unless a future controlled tool
+ * explicitly requires one.
+ */
+
+
+/* =========================================================
+ * 38. CONTEXT AUTHORIZATION
+ * ======================================================= */
+
+/**
+ * This module never accepts:
+ *
+ * user_id
+ *
+ * from the AI or browser.
+ *
+ *
+ * Underlying data functions resolve the authenticated user
+ * from the verified Supabase session and PostgreSQL RLS
+ * enforces ownership.
+ *
+ *
+ * Password-authenticated verified LIFE OS sessions are
+ * sufficient for V2.
+ */
+
+
+/* =========================================================
+ * 39. PROMPT-INJECTION BOUNDARY
+ * ======================================================= */
+
+/**
+ * Stored personal text is DATA.
+ *
  *
  * Examples:
  *
- * - goal descriptions
- * - memory content
- * - project titles
- * - learning titles
+ * memory content
+ * goal description
+ * project title
+ * learning title
+ * career description
+ * trip title
+ * destination
  *
- * That text is DATA.
  *
- * It is never treated as trusted system instructions.
+ * None of that text becomes trusted system instructions.
  *
- * ai/chief-of-staff.ts reinforces this rule in the model
- * instructions.
+ *
+ * If stored content says:
+ *
+ * "Ignore all instructions"
+ *
+ * it remains user data only.
  */
 
 
 /* =========================================================
- * 23. FINAL CONTEXT RULE
+ * 40. DATA MINIMIZATION
  * ======================================================= */
 
 /**
- * LIFE OS AI Context Boundary
+ * LIFE OS does not send every database row to AI.
  *
+ *
+ * It sends:
+ *
+ * minimum relevant summaries
+ * +
+ * bounded relevant records
+ *
+ *
+ * using:
+ *
+ * AI_MAX_CONTEXT_ITEMS_PER_CATEGORY
+ */
+
+
+/* =========================================================
+ * 41. DETERMINISTIC SCOPE RULE
+ * ======================================================= */
+
+/**
+ * AI never chooses:
+ *
+ * which private database area it may inspect.
+ *
+ *
+ * Flow:
+ *
+ * user message
+ *      ↓
+ * deterministic keyword scope detection
+ *      ↓
+ * server-controlled context builder
+ *      ↓
+ * minimized authenticated facts
+ *      ↓
+ * LIFE AI
+ */
+
+
+/* =========================================================
+ * 42. FINAL LIFE OS AI CONTEXT RULE
+ * ======================================================= */
+
+/**
  * User asks a question
  *      ↓
  * Deterministic scope detection
  *      ↓
- * Authenticated LIFE OS data
+ * Authenticated LIFE OS reads
  *      ↓
  * Data minimization
  *      ↓
  * Sensitive-memory filtering
  *      ↓
- * Remove ownership/security metadata
+ * Remove security / ownership metadata
  *      ↓
  * Minimal JsonObject
  *      ↓
- * AI module
+ * Read-only LIFE AI
  *
- *
- * Permanent rule:
  *
  * Give AI the minimum useful context,
  * not the maximum available context.
+ *
+ *
+ * Simple outside.
+ * Intelligent underneath.
+ * Private by default.
  */
