@@ -8,6 +8,8 @@ import {
   AppShell,
 } from "@/components/app-shell";
 
+import { DataEntryButton } from "@/components/data-entry/data-entry-button";
+
 import {
   EmptyState,
 } from "@/components/empty-state";
@@ -1154,6 +1156,7 @@ export default async function DashboardPage() {
         </p>
 
       </div>
+      <section className="page-section"><div className="section-header"><div className="section-header__content"><h2 className="section-title">إضافة سريعة</h2><p className="section-description">أضف المعلومة في مكانها الصحيح.</p></div></div><div className="card" style={{ display: "flex", flexWrap: "wrap", gap: ".65rem" }}><DataEntryButton kind="income" /><DataEntryButton kind="goal" /><DataEntryButton kind="task" /><DataEntryButton kind="trip" /></div></section>
     </AppShell>
   );
 }
