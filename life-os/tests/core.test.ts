@@ -6,7 +6,25 @@ import {
 
 import {
   AI_TOOL_NAMES,
+  APPLICATION_SAFETY_DEFAULTS,
+  APP_PHASE,
+  APP_VERSION,
+  DEFAULT_CURRENCY,
+  DEFAULT_TIMEZONE,
+  GROWTH_ROUTE,
+  HOME_ROUTE,
+  LIFE_AI_ROUTE,
+  LIFE_OS_TABLES,
+  LIFE_OS_TRAVEL_TABLES,
   MAX_DASHBOARD_PRIORITIES,
+  MAX_DASHBOARD_TRIPS,
+  MONEY_ROUTE,
+  NAVIGATION_ITEMS,
+  PLANS_ROUTE,
+  PRIVATE_DOCUMENT_STORAGE_BUCKET,
+  PROTECTED_ROUTES,
+  REQUIRED_AUTHENTICATION_LEVEL,
+  TRAVEL_ROUTE,
 } from "@/lib/constants";
 
 import {
@@ -31,15 +49,33 @@ import type {
 
 
 /* =========================================================
- * 1. SYNTHETIC TEST HELPERS
+ * LIFE OS V2
+ * FINAL CORE TESTS
+ *
+ * Protects:
+ *
+ * - deterministic finance
+ * - deterministic investments
+ * - exactly six primary life areas
+ * - Travel as a first-class V2 area
+ * - AAL1 application contract
+ * - complete V2 table registry
+ * - protected Travel / onboarding routes
+ * - AI allow-list boundaries
+ * - autonomous execution disabled
+ *
+ *
+ * Synthetic data only.
+ *
+ * No database.
+ * No OpenAI.
+ * No production secrets.
  * ======================================================= */
 
-/**
- * Tests use synthetic values only.
- *
- * No real LIFE OS financial information belongs in the test
- * suite or GitHub repository.
- */
+
+/* =========================================================
+ * 1. SYNTHETIC HELPERS
+ * ======================================================= */
 
 function income(
   overrides:
@@ -96,7 +132,7 @@ function budget(
       "Synthetic Expense",
 
     category:
-      "test",
+      "other",
 
     item_type:
       "expense",
@@ -186,14 +222,409 @@ function asset(
 
 
 /* =========================================================
- * 2. FINANCE — BASIC MONTHLY TOTALS
+ * 2. APPLICATION VERSION
+ * ======================================================= */
+
+describe(
+  "LIFE OS V2 application identity",
+  () => {
+    it(
+      "uses the final V2 phase",
+      () => {
+        expect(
+          APP_PHASE,
+        ).toBe(
+          "V2",
+        );
+      },
+    );
+
+
+    it(
+      "uses the final V2 version",
+      () => {
+        expect(
+          APP_VERSION,
+        ).toBe(
+          "2.0.0",
+        );
+      },
+    );
+
+
+    it(
+      "uses AED as the default currency",
+      () => {
+        expect(
+          DEFAULT_CURRENCY,
+        ).toBe(
+          "AED",
+        );
+      },
+    );
+
+
+    it(
+      "uses Dubai timezone as the default",
+      () => {
+        expect(
+          DEFAULT_TIMEZONE,
+        ).toBe(
+          "Asia/Dubai",
+        );
+      },
+    );
+  },
+);
+
+
+/* =========================================================
+ * 3. FINAL PRIMARY NAVIGATION
+ * ======================================================= */
+
+describe(
+  "LIFE OS V2 primary navigation",
+  () => {
+    it(
+      "contains exactly six primary destinations",
+      () => {
+        expect(
+          NAVIGATION_ITEMS,
+        ).toHaveLength(
+          6,
+        );
+      },
+    );
+
+
+    it(
+      "contains no duplicate primary routes",
+      () => {
+        const routes =
+          NAVIGATION_ITEMS.map(
+            (
+              item,
+            ) =>
+              item.href,
+          );
+
+
+        expect(
+          new Set(
+            routes,
+          ).size,
+        ).toBe(
+          routes.length,
+        );
+      },
+    );
+
+
+    it(
+      "uses the final six labels in order",
+      () => {
+        expect(
+          NAVIGATION_ITEMS.map(
+            (
+              item,
+            ) =>
+              item.label,
+          ),
+        ).toEqual([
+          "الرئيسية",
+          "المال",
+          "خططي",
+          "السفر",
+          "التطوير",
+          "LIFE AI",
+        ]);
+      },
+    );
+
+
+    it(
+      "uses the final six routes in order",
+      () => {
+        expect(
+          NAVIGATION_ITEMS.map(
+            (
+              item,
+            ) =>
+              item.href,
+          ),
+        ).toEqual([
+          "/dashboard",
+          "/finance",
+          "/goals",
+          "/travel",
+          "/learning",
+          "/assistant",
+        ]);
+      },
+    );
+
+
+    it(
+      "keeps canonical route constants aligned",
+      () => {
+        expect(
+          HOME_ROUTE,
+        ).toBe(
+          "/dashboard",
+        );
+
+        expect(
+          MONEY_ROUTE,
+        ).toBe(
+          "/finance",
+        );
+
+        expect(
+          PLANS_ROUTE,
+        ).toBe(
+          "/goals",
+        );
+
+        expect(
+          TRAVEL_ROUTE,
+        ).toBe(
+          "/travel",
+        );
+
+        expect(
+          GROWTH_ROUTE,
+        ).toBe(
+          "/learning",
+        );
+
+        expect(
+          LIFE_AI_ROUTE,
+        ).toBe(
+          "/assistant",
+        );
+      },
+    );
+  },
+);
+
+
+/* =========================================================
+ * 4. AUTHENTICATION CONTRACT
+ * ======================================================= */
+
+describe(
+  "LIFE OS V2 authentication contract",
+  () => {
+    it(
+      "requires AAL1 for ordinary authenticated use",
+      () => {
+        expect(
+          REQUIRED_AUTHENTICATION_LEVEL,
+        ).toBe(
+          "aal1",
+        );
+      },
+    );
+
+
+    it(
+      "protects Travel",
+      () => {
+        expect(
+          PROTECTED_ROUTES,
+        ).toContain(
+          "/travel",
+        );
+      },
+    );
+
+
+    it(
+      "protects onboarding",
+      () => {
+        expect(
+          PROTECTED_ROUTES,
+        ).toContain(
+          "/onboarding",
+        );
+      },
+    );
+
+
+    it(
+      "protects every primary private destination",
+      () => {
+        for (
+          const item of
+            NAVIGATION_ITEMS
+        ) {
+          expect(
+            PROTECTED_ROUTES,
+          ).toContain(
+            item.href,
+          );
+        }
+      },
+    );
+  },
+);
+
+
+/* =========================================================
+ * 5. V2 TABLE REGISTRY
+ * ======================================================= */
+
+describe(
+  "LIFE OS V2 table registry",
+  () => {
+    it(
+      "contains the Universal Intake table",
+      () => {
+        expect(
+          LIFE_OS_TABLES,
+        ).toContain(
+          "intake_items",
+        );
+      },
+    );
+
+
+    it(
+      "contains the Travel trips table",
+      () => {
+        expect(
+          LIFE_OS_TABLES,
+        ).toContain(
+          "trips",
+        );
+      },
+    );
+
+
+    it(
+      "contains the private document metadata table",
+      () => {
+        expect(
+          LIFE_OS_TABLES,
+        ).toContain(
+          "documents",
+        );
+      },
+    );
+
+
+    it(
+      "contains all V2 application tables without duplicates",
+      () => {
+        expect(
+          LIFE_OS_TABLES,
+        ).toHaveLength(
+          17,
+        );
+
+
+        expect(
+          new Set(
+            LIFE_OS_TABLES,
+          ).size,
+        ).toBe(
+          LIFE_OS_TABLES.length,
+        );
+      },
+    );
+
+
+    it(
+      "keeps Travel domain tables explicit",
+      () => {
+        expect(
+          LIFE_OS_TRAVEL_TABLES,
+        ).toEqual([
+          "trips",
+          "documents",
+        ]);
+      },
+    );
+  },
+);
+
+
+/* =========================================================
+ * 6. PRIVATE DOCUMENT CONFIGURATION
+ * ======================================================= */
+
+describe(
+  "LIFE OS V2 private document configuration",
+  () => {
+    it(
+      "uses the canonical private bucket",
+      () => {
+        expect(
+          PRIVATE_DOCUMENT_STORAGE_BUCKET,
+        ).toBe(
+          "life-os-private-documents",
+        );
+      },
+    );
+
+
+    it(
+      "does not name the private bucket public",
+      () => {
+        expect(
+          PRIVATE_DOCUMENT_STORAGE_BUCKET
+            .toLowerCase(),
+        ).not.toContain(
+          "public",
+        );
+      },
+    );
+  },
+);
+
+
+/* =========================================================
+ * 7. DASHBOARD LIMITS
+ * ======================================================= */
+
+describe(
+  "LIFE OS V2 dashboard limits",
+  () => {
+    it(
+      "keeps exactly three primary priorities",
+      () => {
+        expect(
+          MAX_DASHBOARD_PRIORITIES,
+        ).toBe(
+          3,
+        );
+      },
+    );
+
+
+    it(
+      "keeps Travel dashboard lists intentionally bounded",
+      () => {
+        expect(
+          MAX_DASHBOARD_TRIPS,
+        ).toBe(
+          5,
+        );
+      },
+    );
+  },
+);
+
+
+/* =========================================================
+ * 8. FINANCE CALCULATIONS
  * ======================================================= */
 
 describe(
   "finance calculations",
   () => {
     it(
-      "calculates monthly income and allocations deterministically",
+      "calculates monthly allocations deterministically",
       () => {
         const result =
           calculateFinanceTotals(
@@ -203,13 +634,14 @@ describe(
                   12_000,
               }),
             ],
+
             [
               budget({
-                item_type:
-                  "expense",
-
                 amount:
                   4_000,
+
+                item_type:
+                  "expense",
               }),
 
               budget({
@@ -219,11 +651,11 @@ describe(
                 name:
                   "Synthetic Saving",
 
-                item_type:
-                  "saving",
-
                 amount:
                   2_000,
+
+                item_type:
+                  "saving",
               }),
 
               budget({
@@ -233,11 +665,11 @@ describe(
                 name:
                   "Synthetic Investment",
 
-                item_type:
-                  "investment",
-
                 amount:
                   1_500,
+
+                item_type:
+                  "investment",
               }),
 
               budget({
@@ -247,11 +679,11 @@ describe(
                 name:
                   "Synthetic Debt",
 
-                item_type:
-                  "debt",
-
                 amount:
                   2_500,
+
+                item_type:
+                  "debt",
               }),
             ],
           );
@@ -263,11 +695,13 @@ describe(
           12_000,
         );
 
+
         expect(
           result.total_expenses,
         ).toBe(
           4_000,
         );
+
 
         expect(
           result.total_savings,
@@ -275,11 +709,13 @@ describe(
           2_000,
         );
 
+
         expect(
           result.total_investments,
         ).toBe(
           1_500,
         );
+
 
         expect(
           result.total_debt_payments,
@@ -287,11 +723,13 @@ describe(
           2_500,
         );
 
+
         expect(
           result.total_allocations,
         ).toBe(
           10_000,
         );
+
 
         expect(
           result.available_amount,
@@ -302,12 +740,8 @@ describe(
     );
 
 
-    /* =====================================================
-     * 3. ANNUAL → MONTHLY
-     * =================================================== */
-
     it(
-      "converts annual recurring amounts to monthly equivalents",
+      "converts annual recurring values to monthly equivalents",
       () => {
         const result =
           calculateFinanceTotals(
@@ -320,6 +754,7 @@ describe(
                   "annual",
               }),
             ],
+
             [
               budget({
                 amount:
@@ -338,11 +773,13 @@ describe(
           10_000,
         );
 
+
         expect(
           result.total_expenses,
         ).toBe(
           1_000,
         );
+
 
         expect(
           result.available_amount,
@@ -352,10 +789,6 @@ describe(
       },
     );
 
-
-    /* =====================================================
-     * 4. INACTIVE RECORDS
-     * =================================================== */
 
     it(
       "ignores inactive finance records",
@@ -379,6 +812,7 @@ describe(
                   false,
               }),
             ],
+
             [
               budget({
                 amount:
@@ -405,11 +839,13 @@ describe(
           10_000,
         );
 
+
         expect(
           result.total_expenses,
         ).toBe(
           2_000,
         );
+
 
         expect(
           result.available_amount,
@@ -420,12 +856,8 @@ describe(
     );
 
 
-    /* =====================================================
-     * 5. NON-RECURRING RECORDS
-     * =================================================== */
-
     it(
-      "does not silently treat one-time amounts as recurring monthly amounts",
+      "does not silently make one-time values recurring",
       () => {
         const result =
           calculateFinanceTotals(
@@ -446,6 +878,7 @@ describe(
                   "one_time",
               }),
             ],
+
             [
               budget({
                 amount:
@@ -472,11 +905,13 @@ describe(
           10_000,
         );
 
+
         expect(
           result.total_expenses,
         ).toBe(
           2_000,
         );
+
 
         expect(
           result.available_amount,
@@ -487,12 +922,8 @@ describe(
     );
 
 
-    /* =====================================================
-     * 6. NEGATIVE AVAILABLE CASH
-     * =================================================== */
-
     it(
-      "preserves a real monthly deficit instead of hiding it",
+      "preserves a real negative monthly balance",
       () => {
         const result =
           calculateFinanceTotals(
@@ -502,6 +933,7 @@ describe(
                   5_000,
               }),
             ],
+
             [
               budget({
                 amount:
@@ -523,33 +955,28 @@ describe(
 
 
 /* =========================================================
- * 7. INVESTMENT CALCULATIONS
+ * 9. INVESTMENT CALCULATIONS
  * ======================================================= */
 
 describe(
   "investment calculations",
   () => {
     it(
-      "calculates cost basis, estimated value and gain loss deterministically",
+      "calculates cost basis value and gain loss deterministically",
       () => {
         const result =
-          calculateInvestmentSnapshot(
-            [
-              asset({
-                quantity:
-                  100,
+          calculateInvestmentSnapshot([
+            asset({
+              quantity:
+                100,
 
-                average_cost:
-                  10,
+              average_cost:
+                10,
 
-                reference_price:
-                  12,
-
-                currency:
-                  "AED",
-              }),
-            ],
-          );
+              reference_price:
+                12,
+            }),
+          ]);
 
 
         expect(
@@ -558,11 +985,13 @@ describe(
           "AED",
         );
 
+
         expect(
           result.total_cost_basis,
         ).toBe(
           1_000,
         );
+
 
         expect(
           result.total_estimated_value,
@@ -570,11 +999,13 @@ describe(
           1_200,
         );
 
+
         expect(
           result.total_estimated_gain_loss,
         ).toBe(
           200,
         );
+
 
         expect(
           result.active_asset_count,
@@ -585,51 +1016,46 @@ describe(
     );
 
 
-    /* =====================================================
-     * 8. MONTHLY CONTRIBUTION TARGET
-     * =================================================== */
-
     it(
-      "sums active monthly contribution targets",
+      "sums active monthly contribution targets only",
       () => {
         const result =
-          calculateInvestmentSnapshot(
-            [
-              asset({
-                monthly_contribution_target:
-                  500,
-              }),
+          calculateInvestmentSnapshot([
+            asset({
+              monthly_contribution_target:
+                500,
+            }),
 
-              asset({
-                id:
-                  "33333333-3333-4333-8333-333333333334",
+            asset({
+              id:
+                "33333333-3333-4333-8333-333333333334",
 
-                ticker:
-                  "TEST2",
+              ticker:
+                "TEST2",
 
-                monthly_contribution_target:
-                  750,
-              }),
+              monthly_contribution_target:
+                750,
+            }),
 
-              asset({
-                id:
-                  "33333333-3333-4333-8333-333333333335",
+            asset({
+              id:
+                "33333333-3333-4333-8333-333333333335",
 
-                ticker:
-                  "OFF",
+              ticker:
+                "OFF",
 
-                monthly_contribution_target:
-                  10_000,
+              monthly_contribution_target:
+                10_000,
 
-                is_active:
-                  false,
-              }),
-            ],
-          );
+              is_active:
+                false,
+            }),
+          ]);
 
 
         expect(
-          result.total_monthly_contribution_target,
+          result
+            .total_monthly_contribution_target,
         ).toBe(
           1_250,
         );
@@ -637,25 +1063,19 @@ describe(
     );
 
 
-    /* =====================================================
-     * 9. TARGET PROGRESS
-     * =================================================== */
-
     it(
-      "calculates quantity-target progress from stored values",
+      "calculates target quantity progress from stored values",
       () => {
         const result =
-          calculateInvestmentSnapshot(
-            [
-              asset({
-                quantity:
-                  50,
+          calculateInvestmentSnapshot([
+            asset({
+              quantity:
+                50,
 
-                target_quantity:
-                  200,
-              }),
-            ],
-          );
+              target_quantity:
+                200,
+            }),
+          ]);
 
 
         expect(
@@ -663,6 +1083,7 @@ describe(
         ).toHaveLength(
           1,
         );
+
 
         expect(
           result.positions[0]
@@ -674,28 +1095,23 @@ describe(
     );
 
 
-    /* =====================================================
-     * 10. MISSING REFERENCE PRICE
-     * =================================================== */
-
     it(
-      "does not invent a market value when the reference price is missing",
+      "does not invent market value without reference price",
       () => {
         const result =
-          calculateInvestmentSnapshot(
-            [
-              asset({
-                reference_price:
-                  null,
-              }),
-            ],
-          );
+          calculateInvestmentSnapshot([
+            asset({
+              reference_price:
+                null,
+            }),
+          ]);
 
 
         expect(
           result.positions[0]
             ?.estimated_value,
         ).toBeNull();
+
 
         expect(
           result.positions[0]
@@ -705,57 +1121,51 @@ describe(
     );
 
 
-    /* =====================================================
-     * 11. CROSS-CURRENCY
-     * =================================================== */
-
     it(
-      "does not silently aggregate a foreign-currency position into the base-currency total",
+      "does not silently combine foreign currency as AED",
       () => {
         const result =
-          calculateInvestmentSnapshot(
-            [
-              asset({
-                id:
-                  "33333333-3333-4333-8333-333333333336",
+          calculateInvestmentSnapshot([
+            asset({
+              id:
+                "33333333-3333-4333-8333-333333333336",
 
-                ticker:
-                  "AEDTEST",
+              ticker:
+                "AEDTEST",
 
-                currency:
-                  "AED",
+              currency:
+                "AED",
 
-                quantity:
-                  100,
+              quantity:
+                100,
 
-                average_cost:
-                  10,
+              average_cost:
+                10,
 
-                reference_price:
-                  12,
-              }),
+              reference_price:
+                12,
+            }),
 
-              asset({
-                id:
-                  "33333333-3333-4333-8333-333333333337",
+            asset({
+              id:
+                "33333333-3333-4333-8333-333333333337",
 
-                ticker:
-                  "USDTEST",
+              ticker:
+                "USDTEST",
 
-                currency:
-                  "USD",
+              currency:
+                "USD",
 
-                quantity:
-                  100,
+              quantity:
+                100,
 
-                average_cost:
-                  10,
+              average_cost:
+                10,
 
-                reference_price:
-                  12,
-              }),
-            ],
-          );
+              reference_price:
+                12,
+            }),
+          ]);
 
 
         expect(
@@ -765,26 +1175,19 @@ describe(
         );
 
 
-        /**
-         * AED position:
-         *
-         * cost  = 100 × 10 = 1,000 AED
-         * value = 100 × 12 = 1,200 AED
-         *
-         * USD position must stay individually visible but
-         * must not be added as though USD == AED.
-         */
         expect(
           result.total_cost_basis,
         ).toBe(
           1_000,
         );
 
+
         expect(
           result.total_estimated_value,
         ).toBe(
           1_200,
         );
+
 
         expect(
           result.positions,
@@ -798,41 +1201,21 @@ describe(
 
 
 /* =========================================================
- * 12. DASHBOARD PRIORITY LIMIT
+ * 10. AI TOOL MANIFEST
  * ======================================================= */
 
 describe(
-  "dashboard limits",
+  "LIFE AI tool manifest",
   () => {
     it(
-      "keeps the dashboard priority limit at exactly three",
-      () => {
-        expect(
-          MAX_DASHBOARD_PRIORITIES,
-        ).toBe(
-          3,
-        );
-      },
-    );
-  },
-);
-
-
-/* =========================================================
- * 13. AI TOOL MANIFEST
- * ======================================================= */
-
-describe(
-  "AI tool manifest",
-  () => {
-    it(
-      "contains exactly seven allow-listed LIFE OS tools",
+      "contains exactly seven allow-listed tools",
       () => {
         expect(
           AI_TOOL_NAMES,
         ).toHaveLength(
           7,
         );
+
 
         expect(
           new Set(
@@ -846,7 +1229,7 @@ describe(
 
 
     it(
-      "does not expose obvious execution tools",
+      "does not expose arbitrary execution tools",
       () => {
         const names =
           AI_TOOL_NAMES
@@ -862,11 +1245,13 @@ describe(
           "shell",
         );
 
+
         expect(
           names,
         ).not.toContain(
           "sql",
         );
+
 
         expect(
           names,
@@ -874,11 +1259,13 @@ describe(
           "transfer",
         );
 
+
         expect(
           names,
         ).not.toContain(
           "buy_stock",
         );
+
 
         expect(
           names,
@@ -886,10 +1273,18 @@ describe(
           "sell_stock",
         );
 
+
         expect(
           names,
         ).not.toContain(
           "send_email",
+        );
+
+
+        expect(
+          names,
+        ).not.toContain(
+          "upload_document",
         );
       },
     );
@@ -898,20 +1293,134 @@ describe(
 
 
 /* =========================================================
- * 14. FORMAT DETERMINISM
+ * 11. APPLICATION SAFETY DEFAULTS
+ * ======================================================= */
+
+describe(
+  "LIFE OS V2 safety defaults",
+  () => {
+    it(
+      "keeps public registration disabled",
+      () => {
+        expect(
+          APPLICATION_SAFETY_DEFAULTS
+            .publicRegistrationEnabled,
+        ).toBe(
+          false,
+        );
+      },
+    );
+
+
+    it(
+      "keeps autonomous financial execution disabled",
+      () => {
+        expect(
+          APPLICATION_SAFETY_DEFAULTS
+            .autonomousFinancialExecution,
+        ).toBe(
+          false,
+        );
+      },
+    );
+
+
+    it(
+      "keeps arbitrary SQL disabled",
+      () => {
+        expect(
+          APPLICATION_SAFETY_DEFAULTS
+            .arbitrarySqlEnabled,
+        ).toBe(
+          false,
+        );
+      },
+    );
+
+
+    it(
+      "keeps shell execution disabled",
+      () => {
+        expect(
+          APPLICATION_SAFETY_DEFAULTS
+            .shellExecutionEnabled,
+        ).toBe(
+          false,
+        );
+      },
+    );
+
+
+    it(
+      "keeps broker execution disabled",
+      () => {
+        expect(
+          APPLICATION_SAFETY_DEFAULTS
+            .brokerExecution,
+        ).toBe(
+          false,
+        );
+      },
+    );
+
+
+    it(
+      "keeps direct AI database write authority disabled",
+      () => {
+        expect(
+          APPLICATION_SAFETY_DEFAULTS
+            .aiDatabaseWriteAuthority,
+        ).toBe(
+          false,
+        );
+      },
+    );
+
+
+    it(
+      "keeps public document storage disabled",
+      () => {
+        expect(
+          APPLICATION_SAFETY_DEFAULTS
+            .publicDocumentStorage,
+        ).toBe(
+          false,
+        );
+      },
+    );
+
+
+    it(
+      "keeps autonomous intake execution disabled",
+      () => {
+        expect(
+          APPLICATION_SAFETY_DEFAULTS
+            .autonomousIntakeExecution,
+        ).toBe(
+          false,
+        );
+      },
+    );
+  },
+);
+
+
+/* =========================================================
+ * 12. FORMAT DETERMINISM
  * ======================================================= */
 
 describe(
   "formatting",
   () => {
     it(
-      "formats identical financial input identically",
+      "formats identical currency input identically",
       () => {
         const first =
           formatCurrency(
             12_345.67,
             "AED",
           );
+
 
         const second =
           formatCurrency(
@@ -926,6 +1435,7 @@ describe(
           second,
         );
 
+
         expect(
           first.length,
         ).toBeGreaterThan(
@@ -936,7 +1446,7 @@ describe(
 
 
     it(
-      "formats percentages and progress deterministically",
+      "formats percentage deterministically",
       () => {
         expect(
           formatPercent(
@@ -947,7 +1457,13 @@ describe(
             25,
           ),
         );
+      },
+    );
 
+
+    it(
+      "formats progress deterministically",
+      () => {
         expect(
           formatProgress(
             75,
@@ -962,7 +1478,7 @@ describe(
 
 
     it(
-      "formats prices and quantities deterministically",
+      "formats prices deterministically",
       () => {
         expect(
           formatPrice(
@@ -973,7 +1489,13 @@ describe(
             12.345678,
           ),
         );
+      },
+    );
 
+
+    it(
+      "formats quantities deterministically",
+      () => {
         expect(
           formatQuantity(
             123.456789,
@@ -988,13 +1510,14 @@ describe(
 
 
     it(
-      "distinguishes positive and negative signed currency values",
+      "distinguishes positive and negative signed currency",
       () => {
         const positive =
           formatSignedCurrency(
             500,
             "AED",
           );
+
 
         const negative =
           formatSignedCurrency(
@@ -1015,24 +1538,23 @@ describe(
 
 
 /* =========================================================
- * 15. PURE-DETERMINISTIC RULE
+ * 13. PURE DETERMINISM
  * ======================================================= */
 
 describe(
-  "deterministic core",
+  "deterministic LIFE OS core",
   () => {
     it(
-      "returns the same finance result for the same input",
+      "returns identical finance result for identical input",
       () => {
-        const incomeRows =
-          [
-            income(),
-          ];
+        const incomeRows = [
+          income(),
+        ];
 
-        const budgetRows =
-          [
-            budget(),
-          ];
+
+        const budgetRows = [
+          budget(),
+        ];
 
 
         const first =
@@ -1040,6 +1562,7 @@ describe(
             incomeRows,
             budgetRows,
           );
+
 
         const second =
           calculateFinanceTotals(
@@ -1058,18 +1581,18 @@ describe(
 
 
     it(
-      "returns the same investment result for the same input",
+      "returns identical investment result for identical input",
       () => {
-        const assets =
-          [
-            asset(),
-          ];
+        const assets = [
+          asset(),
+        ];
 
 
         const first =
           calculateInvestmentSnapshot(
             assets,
           );
+
 
         const second =
           calculateInvestmentSnapshot(
@@ -1089,90 +1612,247 @@ describe(
 
 
 /* =========================================================
- * 16. TEST ISOLATION RULE
+ * 14. FINAL V2 PRODUCT CONTRACT
+ * ======================================================= */
+
+describe(
+  "LIFE OS V2 final product contract",
+  () => {
+    it(
+      "treats Travel as a first class life area",
+      () => {
+        const travel =
+          NAVIGATION_ITEMS.find(
+            (
+              item,
+            ) =>
+              item.href ===
+              "/travel",
+          );
+
+
+        expect(
+          travel,
+        ).toBeDefined();
+
+
+        expect(
+          travel?.label,
+        ).toBe(
+          "السفر",
+        );
+      },
+    );
+
+
+    it(
+      "does not expose investments as a seventh primary area",
+      () => {
+        expect(
+          NAVIGATION_ITEMS.some(
+            (
+              item,
+            ) =>
+              item.href ===
+              "/investments",
+          ),
+        ).toBe(
+          false,
+        );
+      },
+    );
+
+
+    it(
+      "does not expose projects as a seventh primary area",
+      () => {
+        expect(
+          NAVIGATION_ITEMS.some(
+            (
+              item,
+            ) =>
+              item.href ===
+              "/projects",
+          ),
+        ).toBe(
+          false,
+        );
+      },
+    );
+
+
+    it(
+      "does not expose career as a seventh primary area",
+      () => {
+        expect(
+          NAVIGATION_ITEMS.some(
+            (
+              item,
+            ) =>
+              item.href ===
+              "/career",
+          ),
+        ).toBe(
+          false,
+        );
+      },
+    );
+  },
+);
+
+
+/* =========================================================
+ * 15. TEST ISOLATION
  * ======================================================= */
 
 /**
  * core.test.ts must never require:
  *
- * - a real Supabase database
- * - a real authenticated user
- * - OPENAI_API_KEY
- * - internet access
- * - production secrets
+ * real Supabase database
+ * authenticated production user
+ * OpenAI API key
+ * internet access
+ * production secrets
+ * private PDF
  *
- * Core business arithmetic must remain independently
- * testable.
+ *
+ * Core product invariants must remain testable offline.
  */
 
 
 /* =========================================================
- * 17. SYNTHETIC DATA RULE
+ * 16. SYNTHETIC DATA
  * ======================================================= */
 
 /**
- * All records above are synthetic.
+ * All financial and investment values in this file are
+ * synthetic.
  *
- * Never replace these values with:
+ *
+ * Never put:
  *
  * real salary
- * real loan balances
- * real portfolio holdings
- * real user identifiers
- * real personal records
+ * real loan
+ * real portfolio
+ * real user ID
+ * real travel documents
  *
- * GitHub contains synthetic test data only.
+ * into GitHub tests.
  */
 
 
 /* =========================================================
- * 18. FINANCIAL TEST RULE
+ * 17. FINANCIAL TRUTH RULE
  * ======================================================= */
 
 /**
- * The tests protect important invariants:
+ * LIFE OS core calculations remain deterministic.
  *
- * recurring arithmetic
- * inactive-record exclusion
- * annual normalization
- * real deficits
- * portfolio cost basis
- * reference valuation
- * target progress
- * currency isolation
  *
- * If one of these changes unexpectedly, CI must fail.
+ * AI may:
+ *
+ * explain
+ * summarize
+ * recommend
+ *
+ *
+ * AI may not redefine:
+ *
+ * income
+ * expenses
+ * available amount
+ * investment cost basis
+ * investment value
+ * investment gain/loss
  */
 
 
 /* =========================================================
- * 19. AI TEST RULE
+ * 18. PRODUCT STRUCTURE RULE
  * ======================================================= */
 
 /**
- * Core tests do not call an AI model.
+ * Exactly six primary areas:
  *
- * They verify the fixed allow-list boundary instead.
+ * الرئيسية
+ * المال
+ * خططي
+ * السفر
+ * التطوير
+ * LIFE AI
  *
- * AI quality may vary.
  *
- * Security boundaries and financial arithmetic must not.
+ * Underneath:
+ *
+ * المال
+ *      → Finance + Investments
+ *
+ * خططي
+ *      → Goals + Projects
+ *
+ * التطوير
+ *      → Learning + Career
  */
 
 
 /* =========================================================
- * 20. FINAL CORE TEST RULE
+ * 19. AUTH RULE
+ * ======================================================= */
+
+/**
+ * Ordinary LIFE OS V2 access:
+ *
+ * verified authenticated session
+ *      ↓
+ * AAL1
+ *      ↓
+ * private application
+ *
+ *
+ * TOTP remains optional hardening.
+ */
+
+
+/* =========================================================
+ * 20. TRAVEL RULE
+ * ======================================================= */
+
+/**
+ * Travel V2 requires:
+ *
+ * /travel
+ * trips
+ * documents
+ * private document bucket
+ * protected authentication route
+ *
+ *
+ * Travel is no longer a placeholder.
+ */
+
+
+/* =========================================================
+ * 21. FINAL CORE RULE
  * ======================================================= */
 
 /**
  * Same structured input
  *      ↓
- * Same deterministic calculation
+ * same deterministic calculation
  *      ↓
- * Same expected result
+ * same expected result
  *
  *
- * AI can explain the numbers.
+ * Product architecture is also fixed:
  *
- * AI cannot redefine the numbers.
+ * six primary areas
+ * AAL1
+ * private Travel
+ * deterministic execution
+ * no autonomous AI writes
+ *
+ *
+ * Simple outside.
+ * Intelligent underneath.
+ * Private by default.
  */
