@@ -478,13 +478,10 @@ Promise<AuthenticationState> {
  * ======================================================= */
 
 /**
- * Allows a verified AAL1 or AAL2 identity.
+ * Canonical private API and data-layer assertion.
  *
- * Use only for authentication-transition flows such as:
- *
- * - MFA enrollment
- * - MFA verification
- * - sign out
+ * A verified session is not sufficient until the current JWT
+ * has been promoted to the required AAL2 level.
  */
 export async function assertAuthenticatedIdentity():
 Promise<VerifiedAuthIdentity> {
@@ -497,6 +494,16 @@ Promise<VerifiedAuthIdentity> {
   ) {
     throw new AuthenticationError(
       "UNAUTHENTICATED",
+    );
+  }
+
+
+  if (
+    identity.aal !==
+      REQUIRED_AUTHENTICATION_LEVEL
+  ) {
+    throw new AuthenticationError(
+      "MFA_REQUIRED",
     );
   }
 
@@ -514,21 +521,7 @@ Promise<VerifiedAuthIdentity> {
  */
 export async function assertAAL2Identity():
 Promise<VerifiedAuthIdentity> {
-  const identity =
-    await assertAuthenticatedIdentity();
-
-
-  if (
-    identity.aal !==
-      REQUIRED_AUTHENTICATION_LEVEL
-  ) {
-    throw new AuthenticationError(
-      "MFA_REQUIRED",
-    );
-  }
-
-
-  return identity;
+  return assertAuthenticatedIdentity();
 }
 
 
@@ -563,36 +556,12 @@ Promise<
  * ======================================================= */
 
 /**
- * Allows AAL1 only for controlled authentication-transition
- * pages such as /mfa.
+ * Canonical private page guard.
+ *
+ * The /mfa browser flow uses the browser client directly and
+ * therefore does not call this private-page guard.
  */
 export async function requireAuthenticatedIdentity():
-Promise<VerifiedAuthIdentity> {
-  const identity =
-    await getVerifiedAuthIdentity();
-
-
-  if (
-    !identity
-  ) {
-    redirect(
-      LOGIN_ROUTE,
-    );
-  }
-
-
-  return identity;
-}
-
-
-/* =========================================================
- * 12. PAGE GUARD — AAL2
- * ======================================================= */
-
-/**
- * Private LIFE OS pages require AAL2.
- */
-export async function requireAAL2Identity():
 Promise<VerifiedAuthIdentity> {
   const state =
     await getAuthenticationState();
@@ -619,6 +588,19 @@ Promise<VerifiedAuthIdentity> {
 
 
   return state.identity;
+}
+
+
+/* =========================================================
+ * 12. PAGE GUARD — AAL2
+ * ======================================================= */
+
+/**
+ * Private LIFE OS pages require AAL2.
+ */
+export async function requireAAL2Identity():
+Promise<VerifiedAuthIdentity> {
+  return requireAuthenticatedIdentity();
 }
 
 
