@@ -4,13 +4,11 @@ import {
 
 import {
   getAuthenticationState,
-  MFA_ROUTE,
 } from "@/lib/auth";
 
 import {
   DEFAULT_AUTHENTICATED_ROUTE,
   LOGIN_ROUTE,
-  REQUIRED_AUTHENTICATION_LEVEL,
 } from "@/lib/constants";
 
 import {
@@ -107,16 +105,6 @@ function redirectToDashboard(
   return safeRedirect(
     request,
     DEFAULT_AUTHENTICATED_ROUTE,
-  );
-}
-
-
-function redirectToMfa(
-  request: Request,
-) {
-  return safeRedirect(
-    request,
-    MFA_ROUTE,
   );
 }
 
@@ -294,15 +282,6 @@ export async function GET(
       );
     }
 
-    if (
-      auth.current_level !==
-        REQUIRED_AUTHENTICATION_LEVEL
-    ) {
-      return redirectToMfa(
-        request,
-      );
-    }
-
     return redirectToDashboard(
       request,
     );
@@ -383,7 +362,6 @@ export async function GET(
  * Allowed destinations are only:
  *
  * /login
- * /mfa
  * authenticated dashboard
  *
  *
@@ -405,8 +383,6 @@ export async function GET(
  * Session
  *      ↓
  * Verified Authentication State
- *      ↓
- * Mandatory AAL2 Verification
  *      ↓
  * Dashboard
  */
@@ -492,8 +468,6 @@ export async function GET(
  *      ↓
  * Verified Authentication State
  *      ↓
- * Mandatory AAL2 Verification
- *      ↓
  * Server Authorization
  *      ↓
  * PostgreSQL RLS
@@ -515,9 +489,9 @@ export async function GET(
  *
  * No private data.
  * No arbitrary redirects.
- * Mandatory MFA routing.
- * AAL2 required before private access.
+ * Email and password authentication.
  * No AI.
  * No execution.
  * No leaked authentication errors.
  */
+
