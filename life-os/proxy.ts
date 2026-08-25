@@ -10,7 +10,6 @@ import {
 import {
   LOGIN_ROUTE,
   PROTECTED_ROUTES,
-  REQUIRED_AUTHENTICATION_LEVEL,
 } from "@/lib/constants";
 
 import {
@@ -19,15 +18,7 @@ import {
 
 
 /* =========================================================
- * 1. ROUTES
- * ======================================================= */
-
-const MFA_ROUTE =
-  "/mfa";
-
-
-/* =========================================================
- * 2. PROTECTED PAGE DETECTION
+ * 1. PROTECTED PAGE DETECTION
  * ======================================================= */
 
 function isProtectedPage(
@@ -48,7 +39,7 @@ function isProtectedPage(
 
 
 /* =========================================================
- * 3. API DETECTION
+ * 2. API DETECTION
  * ======================================================= */
 
 function isApiRoute(
@@ -66,25 +57,7 @@ function isApiRoute(
 
 
 /* =========================================================
- * 4. MFA PAGE DETECTION
- * ======================================================= */
-
-function isMfaRoute(
-  pathname:
-    string,
-): boolean {
-  return (
-    pathname ===
-      MFA_ROUTE ||
-    pathname.startsWith(
-      `${MFA_ROUTE}/`,
-    )
-  );
-}
-
-
-/* =========================================================
- * 5. COPY REFRESHED AUTH COOKIES
+ * 3. COPY REFRESHED AUTH COOKIES
  * ======================================================= */
 
 function copyAuthCookies(
@@ -112,7 +85,7 @@ function copyAuthCookies(
 
 
 /* =========================================================
- * 6. SAFE REDIRECT
+ * 4. SAFE REDIRECT
  * ======================================================= */
 
 function createRedirect(
@@ -158,37 +131,7 @@ function createRedirect(
 
 
 /* =========================================================
- * 7. AUTHENTICATION LEVEL
- * ======================================================= */
-
-function getClaimsAal(
-  claims:
-    Record<
-      string,
-      unknown
-    > |
-    null,
-): string | null {
-  if (
-    !claims
-  ) {
-    return null;
-  }
-
-
-  const aal =
-    claims["aal"];
-
-
-  return typeof aal ===
-    "string"
-    ? aal
-    : null;
-}
-
-
-/* =========================================================
- * 8. PROXY
+ * 5. PROXY
  * ======================================================= */
 
 export async function proxy(
@@ -305,14 +248,8 @@ export async function proxy(
     );
 
 
-  const mfaRoute =
-    isMfaRoute(
-      pathname,
-    );
-
-
   /* =======================================================
-   * 9. SIGNED-OUT PRIVATE PAGE
+   * 6. SIGNED-OUT PRIVATE PAGE
    * ===================================================== */
 
   if (
@@ -329,33 +266,7 @@ export async function proxy(
 
 
   /* =======================================================
-   * 10. AAL1 PRIVATE PAGE
-   * ===================================================== */
-
-  const aal =
-    getClaimsAal(
-      claims,
-    );
-
-
-  if (
-    claims &&
-    protectedPage &&
-    !apiRoute &&
-    !mfaRoute &&
-    aal !==
-      REQUIRED_AUTHENTICATION_LEVEL
-  ) {
-    return createRedirect(
-      request,
-      supabaseResponse,
-      MFA_ROUTE,
-    );
-  }
-
-
-  /* =======================================================
-   * 11. NORMAL RESPONSE
+   * 7. NORMAL RESPONSE
    * ===================================================== */
 
   return supabaseResponse;
@@ -363,7 +274,7 @@ export async function proxy(
 
 
 /* =========================================================
- * 12. MATCHER
+ * 8. MATCHER
  * ======================================================= */
 
 export const config = {
@@ -383,12 +294,7 @@ export const config = {
  * /login
  *
  *
- * AAL1 private request
- *      ↓
- * /mfa
- *
- *
- * AAL2 private request
+ * Verified password-authenticated request
  *      ↓
  * protected page
  *      ↓
@@ -399,6 +305,8 @@ export const config = {
  *
  * API routes are not redirected to HTML.
  *
- * Every private API must independently enforce AAL2 and return
+ * Every private API must independently verify authentication
+ * and return
  * a predictable JSON authentication or authorization error.
  */
+
