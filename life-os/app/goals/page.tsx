@@ -2,6 +2,8 @@ import type {
   Metadata,
 } from "next";
 
+import Link from "next/link";
+
 import {
   AppShell,
 } from "@/components/app-shell";
@@ -24,11 +26,12 @@ import {
 } from "@/components/stat-card";
 
 import {
-  requireAAL2Identity,
+  requireAuthenticatedIdentity,
 } from "@/lib/auth";
 
 import {
   listGoals,
+  listProjects,
 } from "@/lib/data";
 
 import {
@@ -38,16 +41,47 @@ import {
 
 import type {
   Goal,
+  Project,
+  UUID,
 } from "@/lib/types";
+
+
+/* =========================================================
+ * LIFE OS V2
+ * PLANS
+ *
+ * One primary planning surface:
+ *
+ * Goals
+ * +
+ * Projects
+ *
+ *
+ * Goal:
+ *      where am I going?
+ *
+ * Project:
+ *      what am I building / executing?
+ *
+ *
+ * Detailed project management remains available at:
+ *
+ * /projects
+ *
+ *
+ * Simple outside.
+ * Intelligent underneath.
+ * ======================================================= */
 
 
 /* =========================================================
  * 1. METADATA
  * ======================================================= */
 
-export const metadata: Metadata = {
+export const metadata:
+Metadata = {
   title:
-    "الأهداف",
+    "خططي",
 };
 
 
@@ -55,34 +89,267 @@ export const metadata: Metadata = {
  * 2. PRIORITY WEIGHT
  * ======================================================= */
 
-const PRIORITY_WEIGHT = {
-  high: 3,
-  medium: 2,
-  low: 1,
-} as const;
+function getPriorityWeight(
+  priority:
+    string,
+): number {
+  switch (
+    priority
+  ) {
+    case "high":
+      return 3;
+
+    case "medium":
+      return 2;
+
+    case "low":
+      return 1;
+
+    default:
+      return 0;
+  }
+}
 
 
 /* =========================================================
- * 3. STATUS WEIGHT
+ * 3. GOAL STATUS WEIGHT
  * ======================================================= */
 
-const STATUS_WEIGHT = {
-  active: 4,
-  planned: 3,
-  paused: 2,
-  completed: 1,
-  cancelled: 0,
-} as const;
+function getGoalStatusWeight(
+  status:
+    Goal["status"],
+): number {
+  switch (
+    status
+  ) {
+    case "active":
+      return 5;
+
+    case "planned":
+      return 4;
+
+    case "paused":
+      return 3;
+
+    case "completed":
+      return 2;
+
+    case "cancelled":
+      return 1;
+
+    default:
+      return 0;
+  }
+}
 
 
 /* =========================================================
- * 4. LABEL HELPERS
+ * 4. PROJECT STATUS WEIGHT
+ * ======================================================= */
+
+/**
+ * Blocked projects intentionally appear before normal active
+ * projects because they usually require attention.
+ */
+function getProjectStatusWeight(
+  status:
+    Project["status"],
+): number {
+  switch (
+    status
+  ) {
+    case "blocked":
+      return 6;
+
+    case "active":
+      return 5;
+
+    case "planned":
+      return 4;
+
+    case "paused":
+      return 3;
+
+    case "completed":
+      return 2;
+
+    case "cancelled":
+      return 1;
+
+    default:
+      return 0;
+  }
+}
+
+
+/* =========================================================
+ * 5. DATE COMPARISON
+ * ======================================================= */
+
+function compareDates(
+  a:
+    string |
+    null,
+
+  b:
+    string |
+    null,
+): number {
+  if (
+    a === null &&
+    b === null
+  ) {
+    return 0;
+  }
+
+
+  if (
+    a === null
+  ) {
+    return 1;
+  }
+
+
+  if (
+    b === null
+  ) {
+    return -1;
+  }
+
+
+  return a.localeCompare(
+    b,
+  );
+}
+
+
+/* =========================================================
+ * 6. SORT GOALS
+ * ======================================================= */
+
+function sortGoals(
+  goals:
+    Goal[],
+): Goal[] {
+  return [
+    ...goals,
+  ].sort(
+    (
+      a,
+      b,
+    ) => {
+      const statusDifference =
+        getGoalStatusWeight(
+          b.status,
+        ) -
+        getGoalStatusWeight(
+          a.status,
+        );
+
+
+      if (
+        statusDifference !==
+        0
+      ) {
+        return statusDifference;
+      }
+
+
+      const priorityDifference =
+        getPriorityWeight(
+          b.priority,
+        ) -
+        getPriorityWeight(
+          a.priority,
+        );
+
+
+      if (
+        priorityDifference !==
+        0
+      ) {
+        return priorityDifference;
+      }
+
+
+      return compareDates(
+        a.target_date,
+        b.target_date,
+      );
+    },
+  );
+}
+
+
+/* =========================================================
+ * 7. SORT PROJECTS
+ * ======================================================= */
+
+function sortProjects(
+  projects:
+    Project[],
+): Project[] {
+  return [
+    ...projects,
+  ].sort(
+    (
+      a,
+      b,
+    ) => {
+      const statusDifference =
+        getProjectStatusWeight(
+          b.status,
+        ) -
+        getProjectStatusWeight(
+          a.status,
+        );
+
+
+      if (
+        statusDifference !==
+        0
+      ) {
+        return statusDifference;
+      }
+
+
+      const priorityDifference =
+        getPriorityWeight(
+          b.priority,
+        ) -
+        getPriorityWeight(
+          a.priority,
+        );
+
+
+      if (
+        priorityDifference !==
+        0
+      ) {
+        return priorityDifference;
+      }
+
+
+      return compareDates(
+        a.target_date,
+        b.target_date,
+      );
+    },
+  );
+}
+
+
+/* =========================================================
+ * 8. GOAL STATUS LABEL
  * ======================================================= */
 
 function getGoalStatusLabel(
-  status: Goal["status"],
+  status:
+    Goal["status"],
 ): string {
-  switch (status) {
+  switch (
+    status
+  ) {
     case "active":
       return "نشط";
 
@@ -104,10 +371,17 @@ function getGoalStatusLabel(
 }
 
 
+/* =========================================================
+ * 9. GOAL STATUS BADGE
+ * ======================================================= */
+
 function getGoalStatusBadgeClass(
-  status: Goal["status"],
+  status:
+    Goal["status"],
 ): string {
-  switch (status) {
+  switch (
+    status
+  ) {
     case "active":
       return "badge badge--accent";
 
@@ -127,10 +401,85 @@ function getGoalStatusBadgeClass(
 }
 
 
-function getPriorityLabel(
-  priority: Goal["priority"],
+/* =========================================================
+ * 10. PROJECT STATUS LABEL
+ * ======================================================= */
+
+function getProjectStatusLabel(
+  status:
+    Project["status"],
 ): string {
-  switch (priority) {
+  switch (
+    status
+  ) {
+    case "active":
+      return "نشط";
+
+    case "blocked":
+      return "متعطل";
+
+    case "planned":
+      return "مخطط";
+
+    case "paused":
+      return "متوقف مؤقتًا";
+
+    case "completed":
+      return "مكتمل";
+
+    case "cancelled":
+      return "ملغي";
+
+    default:
+      return "غير معروف";
+  }
+}
+
+
+/* =========================================================
+ * 11. PROJECT STATUS BADGE
+ * ======================================================= */
+
+function getProjectStatusBadgeClass(
+  status:
+    Project["status"],
+): string {
+  switch (
+    status
+  ) {
+    case "active":
+      return "badge badge--accent";
+
+    case "blocked":
+      return "badge badge--negative";
+
+    case "completed":
+      return "badge badge--positive";
+
+    case "paused":
+      return "badge badge--warning";
+
+    case "cancelled":
+      return "badge badge--negative";
+
+    case "planned":
+    default:
+      return "badge";
+  }
+}
+
+
+/* =========================================================
+ * 12. PRIORITY LABEL
+ * ======================================================= */
+
+function getPriorityLabel(
+  priority:
+    string,
+): string {
+  switch (
+    priority
+  ) {
     case "high":
       return "عالية";
 
@@ -146,10 +495,17 @@ function getPriorityLabel(
 }
 
 
+/* =========================================================
+ * 13. PRIORITY BADGE
+ * ======================================================= */
+
 function getPriorityBadgeClass(
-  priority: Goal["priority"],
+  priority:
+    string,
 ): string {
-  switch (priority) {
+  switch (
+    priority
+  ) {
     case "high":
       return "badge badge--negative";
 
@@ -164,15 +520,18 @@ function getPriorityBadgeClass(
 
 
 /* =========================================================
- * 5. CATEGORY LABEL
+ * 14. CATEGORY LABEL
  * ======================================================= */
 
 function getCategoryLabel(
-  category: Goal["category"],
+  category:
+    string,
 ): string {
-  switch (category) {
+  switch (
+    category
+  ) {
     case "finance":
-      return "المالية";
+      return "المال";
 
     case "investments":
       return "الاستثمارات";
@@ -186,115 +545,90 @@ function getCategoryLabel(
     case "education":
       return "التعليم";
 
+    case "business":
+      return "البزنس";
+
     case "travel":
       return "السفر";
 
     case "fitness":
       return "اللياقة";
 
-    case "business":
-      return "البزنس";
-
     case "personal":
       return "شخصي";
 
+    case "ai":
+      return "الذكاء الاصطناعي";
+
+    case "technology":
+      return "التقنية";
+
     case "other":
-    default:
       return "أخرى";
+
+    default:
+      return category;
   }
 }
 
 
 /* =========================================================
- * 6. SORTING
+ * 15. GOAL LOOKUP
  * ======================================================= */
 
-function compareDates(
-  a: string | null,
-  b: string | null,
-): number {
-  if (
-    a === null &&
-    b === null
-  ) {
-    return 0;
-  }
-
-  if (
-    a === null
-  ) {
-    return 1;
-  }
-
-  if (
-    b === null
-  ) {
-    return -1;
-  }
-
-  return a.localeCompare(
-    b,
-  );
-}
-
-
-function sortGoals(
-  goals: Goal[],
-): Goal[] {
-  return [
-    ...goals,
-  ].sort(
-    (
-      a,
-      b,
-    ) => {
-      const statusDifference =
-        STATUS_WEIGHT[
-          b.status
-        ] -
-        STATUS_WEIGHT[
-          a.status
-        ];
-
-      if (
-        statusDifference !==
-        0
-      ) {
-        return statusDifference;
-      }
-
-      const priorityDifference =
-        PRIORITY_WEIGHT[
-          b.priority
-        ] -
-        PRIORITY_WEIGHT[
-          a.priority
-        ];
-
-      if (
-        priorityDifference !==
-        0
-      ) {
-        return priorityDifference;
-      }
-
-      return compareDates(
-        a.target_date,
-        b.target_date,
-      );
-    },
+function buildGoalLookup(
+  goals:
+    Goal[],
+): Map<UUID, string> {
+  return new Map(
+    goals.map(
+      (
+        goal,
+      ) => [
+        goal.id,
+        goal.title,
+      ],
+    ),
   );
 }
 
 
 /* =========================================================
- * 7. ACTIVE GOAL CARD
+ * 16. LINKED GOAL
  * ======================================================= */
 
-function ActiveGoalCard({
+function getLinkedGoalTitle(
+  project:
+    Project,
+
+  goalLookup:
+    Map<UUID, string>,
+): string | null {
+  if (
+    !project.goal_id
+  ) {
+    return null;
+  }
+
+
+  return (
+    goalLookup.get(
+      project.goal_id,
+    ) ??
+    null
+  );
+}
+
+
+/* =========================================================
+ * 17. GOAL CARD
+ * ======================================================= */
+
+function GoalCard({
   goal,
 }: {
-  goal: Goal;
+  goal:
+    Goal;
 }) {
   const progress =
     Math.min(
@@ -305,11 +639,27 @@ function ActiveGoalCard({
       ),
     );
 
+
   return (
     <article className="card">
       <div className="space-between">
         <div>
           <div className="inline">
+            <span
+              className={
+                getGoalStatusBadgeClass(
+                  goal.status,
+                )
+              }
+            >
+              {
+                getGoalStatusLabel(
+                  goal.status,
+                )
+              }
+            </span>
+
+
             <span
               className={
                 getPriorityBadgeClass(
@@ -324,6 +674,7 @@ function ActiveGoalCard({
               }
             </span>
 
+
             <span className="badge">
               {
                 getCategoryLabel(
@@ -333,7 +684,8 @@ function ActiveGoalCard({
             </span>
           </div>
 
-          <h2
+
+          <h3
             className="card__title"
             style={{
               marginTop:
@@ -341,7 +693,8 @@ function ActiveGoalCard({
             }}
           >
             {goal.title}
-          </h2>
+          </h3>
+
 
           {goal.description ? (
             <p className="card__description">
@@ -350,10 +703,13 @@ function ActiveGoalCard({
           ) : null}
         </div>
 
+
         <strong className="percentage">
-          {formatProgress(
-            progress,
-          )}
+          {
+            formatProgress(
+              progress,
+            )
+          }
         </strong>
       </div>
 
@@ -406,8 +762,10 @@ function ActiveGoalCard({
           </span>
 
           <strong>
-            {goal.next_action ??
-              "لا توجد خطوة محددة"}
+            {
+              goal.next_action ??
+              "لا توجد خطوة محددة"
+            }
           </strong>
         </div>
       </div>
@@ -417,23 +775,356 @@ function ActiveGoalCard({
 
 
 /* =========================================================
- * 8. TABLE COLUMNS
+ * 18. PROJECT CARD
  * ======================================================= */
 
-const columns:
-  readonly DataTableColumn<Goal>[] = [
+function ProjectCard({
+  project,
+  linkedGoal,
+}: {
+  project:
+    Project;
+
+  linkedGoal:
+    string |
+    null;
+}) {
+  const progress =
+    Math.min(
+      100,
+      Math.max(
+        0,
+        project.progress_percent,
+      ),
+    );
+
+
+  return (
+    <article className="card">
+      <div className="space-between">
+        <div>
+          <div className="inline">
+            <span
+              className={
+                getProjectStatusBadgeClass(
+                  project.status,
+                )
+              }
+            >
+              {
+                getProjectStatusLabel(
+                  project.status,
+                )
+              }
+            </span>
+
+
+            <span
+              className={
+                getPriorityBadgeClass(
+                  project.priority,
+                )
+              }
+            >
+              {
+                getPriorityLabel(
+                  project.priority,
+                )
+              }
+            </span>
+
+
+            <span className="badge">
+              {
+                getCategoryLabel(
+                  project.category,
+                )
+              }
+            </span>
+          </div>
+
+
+          <h3
+            className="card__title"
+            style={{
+              marginTop:
+                "12px",
+            }}
+          >
+            {project.title}
+          </h3>
+
+
+          {project.description ? (
+            <p className="card__description">
+              {
+                project.description
+              }
+            </p>
+          ) : null}
+        </div>
+
+
+        <strong className="percentage">
+          {
+            formatProgress(
+              progress,
+            )
+          }
+        </strong>
+      </div>
+
+
+      <div
+        className="progress"
+        style={{
+          marginTop:
+            "18px",
+        }}
+        aria-label={
+          `التقدم ${formatProgress(progress)}`
+        }
+      >
+        <div
+          className="progress__value"
+          style={{
+            width:
+              `${progress}%`,
+          }}
+        />
+      </div>
+
+
+      <div
+        className="stack stack--small"
+        style={{
+          marginTop:
+            "18px",
+        }}
+      >
+        <div className="space-between">
+          <span className="text-muted text-small">
+            الهدف المرتبط
+          </span>
+
+          <strong>
+            {
+              linkedGoal ??
+              "غير مرتبط بهدف"
+            }
+          </strong>
+        </div>
+
+
+        <div className="space-between">
+          <span className="text-muted text-small">
+            الموعد المستهدف
+          </span>
+
+          <strong>
+            {project.target_date
+              ? formatDate(
+                  project.target_date,
+                )
+              : "غير محدد"}
+          </strong>
+        </div>
+
+
+        <div className="space-between">
+          <span className="text-muted text-small">
+            الخطوة التالية
+          </span>
+
+          <strong>
+            {
+              project.next_action ??
+              "لا توجد خطوة محددة"
+            }
+          </strong>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+
+/* =========================================================
+ * 19. GOAL TABLE
+ * ======================================================= */
+
+const goalColumns:
+readonly DataTableColumn<Goal>[] = [
+  {
+    key:
+      "title",
+
+    header:
+      "الهدف",
+
+    render:
+      (
+        goal,
+      ) => (
+        <div>
+          <strong>
+            {goal.title}
+          </strong>
+
+          <div
+            className="text-subtle text-small"
+            style={{
+              marginTop:
+                "2px",
+            }}
+          >
+            {
+              getCategoryLabel(
+                goal.category,
+              )
+            }
+          </div>
+        </div>
+      ),
+  },
+
+  {
+    key:
+      "status",
+
+    header:
+      "الحالة",
+
+    render:
+      (
+        goal,
+      ) => (
+        <span
+          className={
+            getGoalStatusBadgeClass(
+              goal.status,
+            )
+          }
+        >
+          {
+            getGoalStatusLabel(
+              goal.status,
+            )
+          }
+        </span>
+      ),
+  },
+
+  {
+    key:
+      "priority",
+
+    header:
+      "الأولوية",
+
+    render:
+      (
+        goal,
+      ) => (
+        <span
+          className={
+            getPriorityBadgeClass(
+              goal.priority,
+            )
+          }
+        >
+          {
+            getPriorityLabel(
+              goal.priority,
+            )
+          }
+        </span>
+      ),
+  },
+
+  {
+    key:
+      "progress",
+
+    header:
+      "التقدم",
+
+    align:
+      "center",
+
+    render:
+      (
+        goal,
+      ) => (
+        <span className="percentage">
+          {
+            formatProgress(
+              goal.progress_percent,
+            )
+          }
+        </span>
+      ),
+  },
+
+  {
+    key:
+      "target_date",
+
+    header:
+      "الموعد",
+
+    render:
+      (
+        goal,
+      ) =>
+        goal.target_date
+          ? formatDate(
+              goal.target_date,
+            )
+          : "—",
+  },
+
+  {
+    key:
+      "next_action",
+
+    header:
+      "الخطوة التالية",
+
+    render:
+      (
+        goal,
+      ) =>
+        goal.next_action ??
+        "—",
+  },
+];
+
+
+/* =========================================================
+ * 20. PROJECT TABLE
+ * ======================================================= */
+
+function buildProjectColumns(
+  goalLookup:
+    Map<UUID, string>,
+):
+readonly DataTableColumn<Project>[] {
+  return [
     {
       key:
         "title",
 
       header:
-        "الهدف",
+        "المشروع",
 
       render:
-        (goal) => (
+        (
+          project,
+        ) => (
           <div>
             <strong>
-              {goal.title}
+              {project.title}
             </strong>
 
             <div
@@ -445,7 +1136,7 @@ const columns:
             >
               {
                 getCategoryLabel(
-                  goal.category,
+                  project.category,
                 )
               }
             </div>
@@ -461,21 +1152,41 @@ const columns:
         "الحالة",
 
       render:
-        (goal) => (
+        (
+          project,
+        ) => (
           <span
             className={
-              getGoalStatusBadgeClass(
-                goal.status,
+              getProjectStatusBadgeClass(
+                project.status,
               )
             }
           >
             {
-              getGoalStatusLabel(
-                goal.status,
+              getProjectStatusLabel(
+                project.status,
               )
             }
           </span>
         ),
+    },
+
+    {
+      key:
+        "goal",
+
+      header:
+        "الهدف المرتبط",
+
+      render:
+        (
+          project,
+        ) =>
+          getLinkedGoalTitle(
+            project,
+            goalLookup,
+          ) ??
+          "—",
     },
 
     {
@@ -486,17 +1197,19 @@ const columns:
         "الأولوية",
 
       render:
-        (goal) => (
+        (
+          project,
+        ) => (
           <span
             className={
               getPriorityBadgeClass(
-                goal.priority,
+                project.priority,
               )
             }
           >
             {
               getPriorityLabel(
-                goal.priority,
+                project.priority,
               )
             }
           </span>
@@ -514,11 +1227,14 @@ const columns:
         "center",
 
       render:
-        (goal) => (
+        (
+          project,
+        ) => (
           <span className="percentage">
             {
               formatProgress(
-                goal.progress_percent,
+                project
+                  .progress_percent,
               )
             }
           </span>
@@ -533,10 +1249,12 @@ const columns:
         "الموعد",
 
       render:
-        (goal) =>
-          goal.target_date
+        (
+          project,
+        ) =>
+          project.target_date
             ? formatDate(
-                goal.target_date,
+                project.target_date,
               )
             : "—",
     },
@@ -549,52 +1267,165 @@ const columns:
         "الخطوة التالية",
 
       render:
-        (goal) =>
-          goal.next_action ??
+        (
+          project,
+        ) =>
+          project.next_action ??
           "—",
     },
   ];
+}
 
 
 /* =========================================================
- * 9. GOALS PAGE
+ * 21. PAGE
  * ======================================================= */
 
 export default async function GoalsPage() {
-  await requireAAL2Identity();
+  await requireAuthenticatedIdentity();
+
+
+  const [
+    goalRows,
+    projectRows,
+  ] =
+    await Promise.all([
+      listGoals(),
+
+      listProjects(),
+    ]);
+
 
   const goals =
     sortGoals(
-      await listGoals(),
+      goalRows,
     );
+
+
+  const projects =
+    sortProjects(
+      projectRows,
+    );
+
+
+  const goalLookup =
+    buildGoalLookup(
+      goals,
+    );
+
 
   const activeGoals =
     goals.filter(
-      (goal) =>
+      (
+        goal,
+      ) =>
         goal.status ===
         "active",
     );
 
-  const plannedCount =
+
+  const plannedGoals =
     goals.filter(
-      (goal) =>
+      (
+        goal,
+      ) =>
         goal.status ===
         "planned",
-    ).length;
+    );
 
-  const pausedCount =
-    goals.filter(
-      (goal) =>
-        goal.status ===
-        "paused",
-    ).length;
 
-  const completedCount =
+  const activeProjects =
+    projects.filter(
+      (
+        project,
+      ) =>
+        project.status ===
+        "active",
+    );
+
+
+  const plannedProjects =
+    projects.filter(
+      (
+        project,
+      ) =>
+        project.status ===
+        "planned",
+    );
+
+
+  const blockedProjects =
+    projects.filter(
+      (
+        project,
+      ) =>
+        project.status ===
+        "blocked",
+    );
+
+
+  const completedGoals =
     goals.filter(
-      (goal) =>
+      (
+        goal,
+      ) =>
         goal.status ===
         "completed",
-    ).length;
+    );
+
+
+  const completedProjects =
+    projects.filter(
+      (
+        project,
+      ) =>
+        project.status ===
+        "completed",
+    );
+
+
+  const currentGoals =
+    goals.filter(
+      (
+        goal,
+      ) =>
+        goal.status ===
+          "active" ||
+        goal.status ===
+          "planned",
+    );
+
+
+  const currentProjects =
+    projects.filter(
+      (
+        project,
+      ) =>
+        project.status ===
+          "blocked" ||
+        project.status ===
+          "active" ||
+        project.status ===
+          "planned",
+    );
+
+
+  const projectColumns =
+    buildProjectColumns(
+      goalLookup,
+    );
+
+
+  const activePlanCount =
+    activeGoals.length +
+    plannedGoals.length +
+    activeProjects.length +
+    plannedProjects.length;
+
+
+  const completedPlanCount =
+    completedGoals.length +
+    completedProjects.length;
 
 
   return (
@@ -606,9 +1437,25 @@ export default async function GoalsPage() {
          * =============================================== */}
 
         <PageHeader
-          eyebrow="الاتجاه"
-          title="الأهداف"
-          description="الأهداف التي تحدد أين تريد أن تصل، وما الخطوة التالية لكل هدف."
+          eyebrow="Plans OS"
+          title="خططي"
+          description="أهدافك تحدد الاتجاه، ومشاريعك تحوّلها إلى تنفيذ."
+          meta={
+            <span>
+              {
+                activePlanCount
+              }{" "}
+              هدف أو مشروع حالي
+            </span>
+          }
+          action={
+            <Link
+              href="/projects"
+              className="button button--secondary"
+            >
+              تفاصيل المشاريع
+            </Link>
+          }
         />
 
 
@@ -618,66 +1465,86 @@ export default async function GoalsPage() {
 
         <section
           className="page-section"
-          aria-labelledby="goal-summary-title"
+          aria-labelledby="plans-summary-title"
         >
           <div className="section-header">
             <div className="section-header__content">
               <h2
-                id="goal-summary-title"
+                id="plans-summary-title"
                 className="section-title"
               >
-                الحالة
+                وضع خططك
               </h2>
+
+
+              <p className="section-description">
+                أقل عدد من الأرقام حتى تعرف وين تركّز.
+              </p>
             </div>
           </div>
 
 
           <div className="stats-grid">
             <StatCard
-              label="نشطة"
+              label="الأهداف الحالية"
               value={
                 String(
-                  activeGoals.length,
-                )
-              }
-              tone="positive"
-              icon="◎"
-            />
-
-            <StatCard
-              label="مخططة"
-              value={
-                String(
-                  plannedCount,
+                  activeGoals.length +
+                  plannedGoals.length,
                 )
               }
               tone="neutral"
-              icon="＋"
+              helper={`${activeGoals.length} نشط • ${plannedGoals.length} مخطط`}
+              icon="◎"
             />
 
+
             <StatCard
-              label="متوقفة مؤقتًا"
+              label="المشاريع الحالية"
               value={
                 String(
-                  pausedCount,
+                  activeProjects.length +
+                  plannedProjects.length,
+                )
+              }
+              tone="neutral"
+              helper={`${activeProjects.length} نشط • ${plannedProjects.length} مخطط`}
+              icon="▣"
+            />
+
+
+            <StatCard
+              label="المشاريع المتعطلة"
+              value={
+                String(
+                  blockedProjects.length,
                 )
               }
               tone={
-                pausedCount > 0
-                  ? "warning"
-                  : "neutral"
+                blockedProjects.length >
+                0
+                  ? "negative"
+                  : "positive"
               }
-              icon="Ⅱ"
+              helper={
+                blockedProjects.length >
+                0
+                  ? "تحتاج انتباه قبل فتح أعمال جديدة."
+                  : "ما عندك مشروع متعطل."
+              }
+              icon="!"
             />
 
+
             <StatCard
-              label="مكتملة"
+              label="المكتمل"
               value={
                 String(
-                  completedCount,
+                  completedPlanCount,
                 )
               }
               tone="positive"
+              helper={`${completedGoals.length} هدف • ${completedProjects.length} مشروع`}
               icon="✓"
             />
           </div>
@@ -685,34 +1552,91 @@ export default async function GoalsPage() {
 
 
         {/* =================================================
-         * ACTIVE GOALS
+         * BLOCKED PROJECTS
+         * =============================================== */}
+
+        {blockedProjects.length >
+        0 ? (
+          <section
+            className="page-section"
+            aria-labelledby="blocked-projects-title"
+          >
+            <div className="section-header">
+              <div className="section-header__content">
+                <h2
+                  id="blocked-projects-title"
+                  className="section-title"
+                >
+                  يحتاج انتباهك
+                </h2>
+
+
+                <p className="section-description">
+                  المشاريع المتعطلة تظهر أولًا لأنها قد تمنع تقدم خططك.
+                </p>
+              </div>
+            </div>
+
+
+            <div className="grid grid--2">
+              {blockedProjects.map(
+                (
+                  project,
+                ) => (
+                  <ProjectCard
+                    key={
+                      project.id
+                    }
+                    project={
+                      project
+                    }
+                    linkedGoal={
+                      getLinkedGoalTitle(
+                        project,
+                        goalLookup,
+                      )
+                    }
+                  />
+                ),
+              )}
+            </div>
+          </section>
+        ) : null}
+
+
+        {/* =================================================
+         * CURRENT GOALS
          * =============================================== */}
 
         <section
           className="page-section"
-          aria-labelledby="active-goals-title"
+          aria-labelledby="current-goals-title"
         >
           <div className="section-header">
             <div className="section-header__content">
               <h2
-                id="active-goals-title"
+                id="current-goals-title"
                 className="section-title"
               >
-                الأهداف النشطة
+                أهدافي الحالية
               </h2>
 
+
               <p className="section-description">
-                ركز على ما تعمل عليه الآن قبل فتح أهداف جديدة.
+                الأشياء التي تريد الوصول لها الآن أو تخطط لها.
               </p>
             </div>
           </div>
 
 
-          {activeGoals.length > 0 ? (
+          {currentGoals.length >
+          0 ? (
             <div className="grid grid--2">
-              {activeGoals.map(
-                (goal) => (
-                  <ActiveGoalCard
+              {currentGoals.map(
+                (
+                  goal,
+                ) => (
+                  <GoalCard
                     key={
                       goal.id
                     }
@@ -725,9 +1649,78 @@ export default async function GoalsPage() {
             </div>
           ) : (
             <EmptyState
+              compact
               icon="◎"
-              title="لا توجد أهداف نشطة"
-              description="عندما تحدد هدفًا نشطًا، سيظهر هنا مع نسبة التقدم والخطوة التالية."
+              title="لا توجد أهداف حالية"
+              description="استخدم زر + لإضافة هدف جديد إلى LIFE OS."
+            />
+          )}
+        </section>
+
+
+        {/* =================================================
+         * CURRENT PROJECTS
+         * =============================================== */}
+
+        <section
+          className="page-section"
+          aria-labelledby="current-projects-title"
+        >
+          <div className="section-header">
+            <div className="section-header__content">
+              <h2
+                id="current-projects-title"
+                className="section-title"
+              >
+                مشاريعي الحالية
+              </h2>
+
+
+              <p className="section-description">
+                التنفيذ الفعلي الذي يحرك أهدافك إلى الأمام.
+              </p>
+            </div>
+
+
+            <Link
+              href="/projects"
+              className="button button--secondary button--small"
+            >
+              فتح التفاصيل
+            </Link>
+          </div>
+
+
+          {currentProjects.length >
+          0 ? (
+            <div className="grid grid--2">
+              {currentProjects.map(
+                (
+                  project,
+                ) => (
+                  <ProjectCard
+                    key={
+                      project.id
+                    }
+                    project={
+                      project
+                    }
+                    linkedGoal={
+                      getLinkedGoalTitle(
+                        project,
+                        goalLookup,
+                      )
+                    }
+                  />
+                ),
+              )}
+            </div>
+          ) : (
+            <EmptyState
+              compact
+              icon="▣"
+              title="لا توجد مشاريع حالية"
+              description="استخدم زر + لإضافة أول مشروع."
             />
           )}
         </section>
@@ -750,27 +1743,92 @@ export default async function GoalsPage() {
                 كل الأهداف
               </h2>
 
+
               <p className="section-description">
-                النشطة أولًا، ثم المخططة والمتوقفة والمكتملة.
+                النشطة والمخططة والمتوقفة والمكتملة.
               </p>
             </div>
           </div>
 
 
-          <DataTable
-            rows={
-              goals
-            }
-            columns={
-              columns
-            }
-            getRowKey={
-              (goal) =>
-                goal.id
-            }
-            caption="أهداف LIFE OS"
-            emptyMessage="لا توجد أهداف مسجلة حاليًا."
-          />
+          {goals.length >
+          0 ? (
+            <DataTable
+              rows={
+                goals
+              }
+              columns={
+                goalColumns
+              }
+              getRowKey={
+                (
+                  goal,
+                ) =>
+                  goal.id
+              }
+              caption="جميع أهداف LIFE OS"
+            />
+          ) : (
+            <EmptyState
+              compact
+              title="لا توجد أهداف"
+              description="أهدافك بتظهر هنا بعد إضافتها."
+              icon="◎"
+            />
+          )}
+        </section>
+
+
+        {/* =================================================
+         * ALL PROJECTS
+         * =============================================== */}
+
+        <section
+          className="page-section"
+          aria-labelledby="all-projects-title"
+        >
+          <div className="section-header">
+            <div className="section-header__content">
+              <h2
+                id="all-projects-title"
+                className="section-title"
+              >
+                كل المشاريع
+              </h2>
+
+
+              <p className="section-description">
+                المشاريع المتعطلة أولًا، بعدها النشطة والمخططة.
+              </p>
+            </div>
+          </div>
+
+
+          {projects.length >
+          0 ? (
+            <DataTable
+              rows={
+                projects
+              }
+              columns={
+                projectColumns
+              }
+              getRowKey={
+                (
+                  project,
+                ) =>
+                  project.id
+              }
+              caption="جميع مشاريع LIFE OS"
+            />
+          ) : (
+            <EmptyState
+              compact
+              title="لا توجد مشاريع"
+              description="مشاريعك بتظهر هنا بعد إضافتها."
+              icon="▣"
+            />
+          )}
         </section>
 
       </div>
@@ -780,92 +1838,108 @@ export default async function GoalsPage() {
 
 
 /* =========================================================
- * 10. PAGE RESPONSIBILITY
+ * 22. FINAL PLANS CONTRACT
  * ======================================================= */
 
 /**
- * Goals describe desired outcomes.
+ * /goals is the primary V2 Plans page.
  *
- * They are not:
  *
- * - detailed project plans
- * - task lists
- * - AI recommendations
+ * It combines:
  *
- * Execution details belong in Projects and Tasks.
+ * Goals
+ * +
+ * Projects
+ *
+ *
+ * The user sees:
+ *
+ * direction
+ * +
+ * execution
+ *
+ * in one place.
  */
 
 
 /* =========================================================
- * 11. ACTIVE-FIRST RULE
+ * 23. GOAL VS PROJECT
  * ======================================================= */
 
 /**
- * LIFE OS intentionally places active goals first.
+ * Goal:
  *
- * The user should see:
+ * desired outcome
  *
- * Goal
- *      ↓
- * Progress
- *      ↓
- * Target date
- *      ↓
- * Next action
  *
- * before historical or future goals.
+ * Project:
+ *
+ * organized execution toward an outcome
+ *
+ *
+ * LIFE OS keeps both domain models separate underneath while
+ * presenting them as one life area.
  */
 
 
 /* =========================================================
- * 12. PROGRESS RULE
+ * 24. BLOCKED PROJECT RULE
  * ======================================================= */
 
 /**
- * progress_percent is stored and calculated outside the
- * presentation component.
+ * Blocked projects receive visual priority.
  *
- * The page only:
  *
- * - clamps the visual progress bar to 0–100
- * - formats the displayed percentage
- *
- * It does not invent progress.
+ * They are not hidden under general project lists because a
+ * blocked project normally requires a decision or action.
  */
 
 
 /* =========================================================
- * 13. SECURITY RULE
+ * 25. DETAILED PROJECT PAGE
  * ======================================================= */
 
 /**
- * Server request
- *      ↓
- * requireAAL2Identity()
- *      ↓
- * listGoals()
- *      ↓
- * authenticated user_id
- *      ↓
- * PostgreSQL RLS
+ * /projects remains available as a secondary detailed view.
  *
- * No user identifier comes from browser input.
+ *
+ * It is not a seventh top-level navigation area.
  */
 
 
 /* =========================================================
- * 14. SIMPLICITY RULE
+ * 26. DATA TRUTH
  * ======================================================= */
 
 /**
- * The Goals page should answer:
+ * Progress, status, priority and dates come from stored LIFE
+ * OS facts.
  *
- * What am I trying to achieve?
- * How far have I progressed?
- * When do I want it?
- * What do I do next?
  *
- * Nothing more.
+ * AI does not silently change:
+ *
+ * goal progress
+ * project progress
+ * project status
+ * priority
+ * deadlines
+ */
+
+
+/* =========================================================
+ * 27. FINAL LIFE OS V2 RULE
+ * ======================================================= */
+
+/**
+ * User thinks:
+ *
+ * "خططي"
+ *
+ *
+ * not:
+ *
+ * "أي جدول قاعدة بيانات أفتح؟"
+ *
  *
  * Simple outside.
  * Intelligent underneath.
