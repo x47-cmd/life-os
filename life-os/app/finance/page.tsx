@@ -8,6 +8,8 @@ import {
   AppShell,
 } from "@/components/app-shell";
 
+import { DataEntryButton } from "@/components/data-entry/data-entry-button";
+
 import {
   DataTable,
   type DataTableColumn,
@@ -1747,6 +1749,7 @@ export default async function FinancePage() {
         </section>
 
       </div>
+      <section className="page-section"><div className="section-header"><div className="section-header__content"><h2 className="section-title">إضافة بيانات مالية</h2></div></div><div className="card" style={{ display: "flex", flexWrap: "wrap", gap: ".65rem" }}><DataEntryButton kind="income" /><DataEntryButton kind="budget" /><DataEntryButton kind="investment_asset" /></div></section>
     </AppShell>
   );
 }
