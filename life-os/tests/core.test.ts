@@ -13,7 +13,10 @@ import {
   DEFAULT_TIMEZONE,
   GROWTH_ROUTE,
   HOME_ROUTE,
+  INVESTMENT_INTELLIGENCE_ANALYZE_API_ROUTE,
+  INVESTMENT_INTELLIGENCE_TRACK_RECORD_API_ROUTE,
   LIFE_AI_ROUTE,
+  LIFE_OS_INVESTMENT_INTELLIGENCE_TABLES,
   LIFE_OS_TABLES,
   LIFE_OS_TRAVEL_TABLES,
   MAX_DASHBOARD_PRIORITIES,
@@ -33,6 +36,19 @@ import {
 } from "@/lib/data";
 
 import {
+  calculateInvestmentBrierScore,
+  calculateInvestmentIntelligenceScore,
+  calculateInvestmentTechnicalSnapshot,
+  calculatePortfolioFitScore,
+  evaluateInvestmentForecast,
+  getPrimaryForecastDirection,
+  summarizeInvestmentTrackRecord,
+  validateInvestmentForecast,
+  type InvestmentForecastDraft,
+  type InvestmentMarketPricePoint,
+} from "@/lib/investment-intelligence";
+
+import {
   formatCurrency,
   formatPercent,
   formatPrice,
@@ -50,18 +66,23 @@ import type {
 
 /* =========================================================
  * LIFE OS V2
- * FINAL CORE TESTS
+ * CORE TESTS
  *
  * Protects:
  *
  * - deterministic finance
  * - deterministic investments
+ * - LIFE Invest AI deterministic calculations
+ * - technical analysis calculations
+ * - forecast validation
+ * - forecast grading
+ * - Brier score
+ * - Track Record
  * - exactly six primary life areas
  * - Travel as a first-class V2 area
  * - AAL1 application contract
- * - complete V2 table registry
- * - protected Travel / onboarding routes
- * - AI allow-list boundaries
+ * - complete database table registry
+ * - AI execution boundaries
  * - autonomous execution disabled
  *
  *
@@ -69,6 +90,7 @@ import type {
  *
  * No database.
  * No OpenAI.
+ * No market API.
  * No production secrets.
  * ======================================================= */
 
@@ -218,6 +240,98 @@ function asset(
 
     ...overrides,
   } as InvestmentAsset;
+}
+
+
+function createAscendingPriceSeries(
+  count:
+    number = 60,
+): InvestmentMarketPricePoint[] {
+  return Array.from(
+    {
+      length:
+        count,
+    },
+    (
+      _,
+      index,
+    ) => ({
+      date:
+        `2026-01-${String(
+          index + 1,
+        ).padStart(
+          2,
+          "0",
+        )}`,
+
+      close:
+        index + 1,
+    }),
+  );
+}
+
+
+function validForecast(
+  overrides:
+    Partial<InvestmentForecastDraft> = {},
+): InvestmentForecastDraft {
+  return {
+    horizon_days:
+      30,
+
+    target_date:
+      "2026-09-24",
+
+    reference_price:
+      100,
+
+    currency:
+      "AED",
+
+    up_probability:
+      60,
+
+    flat_probability:
+      25,
+
+    down_probability:
+      15,
+
+    direction:
+      "up",
+
+    flat_threshold_percent:
+      1,
+
+    bull_low:
+      115,
+
+    bull_high:
+      130,
+
+    base_low:
+      105,
+
+    base_high:
+      112,
+
+    bear_low:
+      80,
+
+    bear_high:
+      95,
+
+    invalidation_price:
+      90,
+
+    confidence:
+      80,
+
+    thesis:
+      "Synthetic forecast for deterministic testing only.",
+
+    ...overrides,
+  };
 }
 
 
@@ -373,11 +487,13 @@ describe(
           "/dashboard",
         );
 
+
         expect(
           MONEY_ROUTE,
         ).toBe(
           "/finance",
         );
+
 
         expect(
           PLANS_ROUTE,
@@ -385,17 +501,20 @@ describe(
           "/goals",
         );
 
+
         expect(
           TRAVEL_ROUTE,
         ).toBe(
           "/travel",
         );
 
+
         expect(
           GROWTH_ROUTE,
         ).toBe(
           "/learning",
         );
+
 
         expect(
           LIFE_AI_ROUTE,
@@ -440,6 +559,18 @@ describe(
 
 
     it(
+      "protects Investments",
+      () => {
+        expect(
+          PROTECTED_ROUTES,
+        ).toContain(
+          "/investments",
+        );
+      },
+    );
+
+
+    it(
       "protects onboarding",
       () => {
         expect(
@@ -471,11 +602,11 @@ describe(
 
 
 /* =========================================================
- * 5. V2 TABLE REGISTRY
+ * 5. DATABASE TABLE REGISTRY
  * ======================================================= */
 
 describe(
-  "LIFE OS V2 table registry",
+  "LIFE OS table registry",
   () => {
     it(
       "contains the Universal Intake table",
@@ -514,12 +645,45 @@ describe(
 
 
     it(
-      "contains all V2 application tables without duplicates",
+      "contains all four LIFE Invest AI tables",
+      () => {
+        expect(
+          LIFE_OS_TABLES,
+        ).toContain(
+          "investment_ai_analyses",
+        );
+
+
+        expect(
+          LIFE_OS_TABLES,
+        ).toContain(
+          "investment_ai_evidence",
+        );
+
+
+        expect(
+          LIFE_OS_TABLES,
+        ).toContain(
+          "investment_ai_forecasts",
+        );
+
+
+        expect(
+          LIFE_OS_TABLES,
+        ).toContain(
+          "investment_ai_forecast_outcomes",
+        );
+      },
+    );
+
+
+    it(
+      "contains all application tables without duplicates",
       () => {
         expect(
           LIFE_OS_TABLES,
         ).toHaveLength(
-          17,
+          21,
         );
 
 
@@ -545,12 +709,72 @@ describe(
         ]);
       },
     );
+
+
+    it(
+      "keeps Investment Intelligence tables explicit",
+      () => {
+        expect(
+          LIFE_OS_INVESTMENT_INTELLIGENCE_TABLES,
+        ).toEqual([
+          "investment_ai_analyses",
+          "investment_ai_evidence",
+          "investment_ai_forecasts",
+          "investment_ai_forecast_outcomes",
+        ]);
+      },
+    );
+
+
+    it(
+      "does not treat the Track Record view as a table",
+      () => {
+        expect(
+          LIFE_OS_TABLES,
+        ).not.toContain(
+          "investment_ai_track_record",
+        );
+      },
+    );
   },
 );
 
 
 /* =========================================================
- * 6. PRIVATE DOCUMENT CONFIGURATION
+ * 6. INVESTMENT INTELLIGENCE API ROUTES
+ * ======================================================= */
+
+describe(
+  "LIFE Invest AI API routes",
+  () => {
+    it(
+      "uses the canonical analyze route",
+      () => {
+        expect(
+          INVESTMENT_INTELLIGENCE_ANALYZE_API_ROUTE,
+        ).toBe(
+          "/api/investment-intelligence/analyze",
+        );
+      },
+    );
+
+
+    it(
+      "uses the canonical Track Record route",
+      () => {
+        expect(
+          INVESTMENT_INTELLIGENCE_TRACK_RECORD_API_ROUTE,
+        ).toBe(
+          "/api/investment-intelligence/track-record",
+        );
+      },
+    );
+  },
+);
+
+
+/* =========================================================
+ * 7. PRIVATE DOCUMENT CONFIGURATION
  * ======================================================= */
 
 describe(
@@ -584,7 +808,7 @@ describe(
 
 
 /* =========================================================
- * 7. DASHBOARD LIMITS
+ * 8. DASHBOARD LIMITS
  * ======================================================= */
 
 describe(
@@ -617,7 +841,7 @@ describe(
 
 
 /* =========================================================
- * 8. FINANCE CALCULATIONS
+ * 9. FINANCE CALCULATIONS
  * ======================================================= */
 
 describe(
@@ -955,7 +1179,7 @@ describe(
 
 
 /* =========================================================
- * 9. INVESTMENT CALCULATIONS
+ * 10. INVESTMENT CALCULATIONS
  * ======================================================= */
 
 describe(
@@ -1201,14 +1425,1045 @@ describe(
 
 
 /* =========================================================
- * 10. AI TOOL MANIFEST
+ * 11. LIFE INVEST AI SCORE ENGINE
+ * ======================================================= */
+
+describe(
+  "LIFE Invest AI deterministic score engine",
+  () => {
+    it(
+      "calculates the final score without AI authority",
+      () => {
+        const result =
+          calculateInvestmentIntelligenceScore({
+            fundamental_score:
+              80,
+
+            technical_score:
+              70,
+
+            sentiment_score:
+              60,
+
+            macro_score:
+              65,
+
+            portfolio_fit_score:
+              75,
+
+            risk_score:
+              30,
+
+            has_position:
+              true,
+          });
+
+
+        expect(
+          result.data_status,
+        ).toBe(
+          "sufficient",
+        );
+
+
+        expect(
+          result.data_quality_score,
+        ).toBe(
+          100,
+        );
+
+
+        expect(
+          result.overall_score,
+        ).toBe(
+          72.03,
+        );
+
+
+        expect(
+          result.stance,
+        ).toBe(
+          "bullish",
+        );
+
+
+        expect(
+          result.recommendation,
+        ).toBe(
+          "accumulate",
+        );
+
+
+        expect(
+          result.confidence,
+        ).toBeLessThanOrEqual(
+          95,
+        );
+      },
+    );
+
+
+    it(
+      "refuses to create an overall score from insufficient evidence",
+      () => {
+        const result =
+          calculateInvestmentIntelligenceScore({
+            fundamental_score:
+              null,
+
+            technical_score:
+              70,
+
+            sentiment_score:
+              null,
+
+            macro_score:
+              null,
+
+            portfolio_fit_score:
+              null,
+
+            risk_score:
+              null,
+
+            has_position:
+              true,
+          });
+
+
+        expect(
+          result.data_quality_score,
+        ).toBe(
+          20,
+        );
+
+
+        expect(
+          result.data_status,
+        ).toBe(
+          "insufficient",
+        );
+
+
+        expect(
+          result.overall_score,
+        ).toBeNull();
+
+
+        expect(
+          result.stance,
+        ).toBe(
+          "insufficient",
+        );
+
+
+        expect(
+          result.recommendation,
+        ).toBe(
+          "insufficient",
+        );
+      },
+    );
+
+
+    it(
+      "does not treat missing components as zero",
+      () => {
+        const partial =
+          calculateInvestmentIntelligenceScore({
+            fundamental_score:
+              80,
+
+            technical_score:
+              80,
+
+            sentiment_score:
+              null,
+
+            macro_score:
+              80,
+
+            portfolio_fit_score:
+              null,
+
+            risk_score:
+              20,
+
+            has_position:
+              false,
+          });
+
+
+        expect(
+          partial.overall_score,
+        ).not.toBe(
+          0,
+        );
+
+
+        expect(
+          partial.missing_components,
+        ).toContain(
+          "sentiment",
+        );
+
+
+        expect(
+          partial.missing_components,
+        ).toContain(
+          "portfolio_fit",
+        );
+      },
+    );
+  },
+);
+
+
+/* =========================================================
+ * 12. PORTFOLIO FIT ENGINE
+ * ======================================================= */
+
+describe(
+  "LIFE Invest AI portfolio fit engine",
+  () => {
+    it(
+      "scores an underweight position higher than an overweight position",
+      () => {
+        const underweight =
+          calculatePortfolioFitScore({
+            current_allocation_percent:
+              5,
+
+            preferred_max_allocation_percent:
+              10,
+
+            quantity:
+              50,
+
+            target_quantity:
+              100,
+          });
+
+
+        const overweight =
+          calculatePortfolioFitScore({
+            current_allocation_percent:
+              15,
+
+            preferred_max_allocation_percent:
+              10,
+
+            quantity:
+              120,
+
+            target_quantity:
+              100,
+          });
+
+
+        expect(
+          underweight,
+        ).toBe(
+          82.5,
+        );
+
+
+        expect(
+          overweight,
+        ).toBe(
+          12.5,
+        );
+
+
+        expect(
+          underweight,
+        ).toBeGreaterThan(
+          overweight ?? 0,
+        );
+      },
+    );
+
+
+    it(
+      "returns null when portfolio targets are unavailable",
+      () => {
+        expect(
+          calculatePortfolioFitScore({
+            current_allocation_percent:
+              null,
+
+            preferred_max_allocation_percent:
+              null,
+
+            quantity:
+              100,
+
+            target_quantity:
+              null,
+          }),
+        ).toBeNull();
+      },
+    );
+  },
+);
+
+
+/* =========================================================
+ * 13. TECHNICAL ANALYSIS ENGINE
+ * ======================================================= */
+
+describe(
+  "LIFE Invest AI technical engine",
+  () => {
+    it(
+      "requires enough observations before issuing a technical score",
+      () => {
+        const result =
+          calculateInvestmentTechnicalSnapshot(
+            createAscendingPriceSeries(
+              10,
+            ),
+          );
+
+
+        expect(
+          result.data_points,
+        ).toBe(
+          10,
+        );
+
+
+        expect(
+          result.technical_score,
+        ).toBeNull();
+
+
+        expect(
+          result.signal,
+        ).toBe(
+          "insufficient",
+        );
+      },
+    );
+
+
+    it(
+      "calculates deterministic indicators from price history",
+      () => {
+        const result =
+          calculateInvestmentTechnicalSnapshot(
+            createAscendingPriceSeries(
+              60,
+            ),
+          );
+
+
+        expect(
+          result.data_points,
+        ).toBe(
+          60,
+        );
+
+
+        expect(
+          result.latest_close,
+        ).toBe(
+          60,
+        );
+
+
+        expect(
+          result.sma_20,
+        ).toBe(
+          50.5,
+        );
+
+
+        expect(
+          result.sma_50,
+        ).toBe(
+          35.5,
+        );
+
+
+        expect(
+          result.ema_20,
+        ).toBe(
+          50.5,
+        );
+
+
+        expect(
+          result.rsi_14,
+        ).toBe(
+          100,
+        );
+
+
+        expect(
+          result.momentum_20_percent,
+        ).toBe(
+          50,
+        );
+
+
+        expect(
+          result.max_drawdown_percent,
+        ).toBe(
+          0,
+        );
+
+
+        expect(
+          result.technical_score,
+        ).toBe(
+          79,
+        );
+
+
+        expect(
+          result.signal,
+        ).toBe(
+          "bullish",
+        );
+      },
+    );
+
+
+    it(
+      "returns identical technical output for identical prices",
+      () => {
+        const prices =
+          createAscendingPriceSeries(
+            60,
+          );
+
+
+        const first =
+          calculateInvestmentTechnicalSnapshot(
+            prices,
+          );
+
+
+        const second =
+          calculateInvestmentTechnicalSnapshot(
+            prices,
+          );
+
+
+        expect(
+          second,
+        ).toEqual(
+          first,
+        );
+      },
+    );
+  },
+);
+
+
+/* =========================================================
+ * 14. FORECAST DIRECTION
+ * ======================================================= */
+
+describe(
+  "LIFE Invest AI forecast direction",
+  () => {
+    it(
+      "uses the highest probability as the primary direction",
+      () => {
+        expect(
+          getPrimaryForecastDirection({
+            up_probability:
+              60,
+
+            flat_probability:
+              25,
+
+            down_probability:
+              15,
+          }),
+        ).toBe(
+          "up",
+        );
+
+
+        expect(
+          getPrimaryForecastDirection({
+            up_probability:
+              20,
+
+            flat_probability:
+              25,
+
+            down_probability:
+              55,
+          }),
+        ).toBe(
+          "down",
+        );
+      },
+    );
+
+
+    it(
+      "uses flat as the conservative deterministic tie breaker",
+      () => {
+        expect(
+          getPrimaryForecastDirection({
+            up_probability:
+              40,
+
+            flat_probability:
+              40,
+
+            down_probability:
+              20,
+          }),
+        ).toBe(
+          "flat",
+        );
+      },
+    );
+  },
+);
+
+
+/* =========================================================
+ * 15. FORECAST VALIDATION
+ * ======================================================= */
+
+describe(
+  "LIFE Invest AI forecast validation",
+  () => {
+    it(
+      "accepts a logically consistent probabilistic forecast",
+      () => {
+        const result =
+          validateInvestmentForecast(
+            validForecast(),
+          );
+
+
+        expect(
+          result.valid,
+        ).toBe(
+          true,
+        );
+
+
+        expect(
+          result.errors,
+        ).toHaveLength(
+          0,
+        );
+
+
+        expect(
+          result.primary_direction,
+        ).toBe(
+          "up",
+        );
+
+
+        expect(
+          result.probability_total,
+        ).toBe(
+          100,
+        );
+
+
+        expect(
+          result.base_midpoint,
+        ).toBe(
+          108.5,
+        );
+
+
+        expect(
+          result.expected_return_mid_percent,
+        ).toBe(
+          8.5,
+        );
+      },
+    );
+
+
+    it(
+      "rejects probabilities that do not total 100",
+      () => {
+        const result =
+          validateInvestmentForecast(
+            validForecast({
+              up_probability:
+                60,
+
+              flat_probability:
+                30,
+
+              down_probability:
+                20,
+            }),
+          );
+
+
+        expect(
+          result.valid,
+        ).toBe(
+          false,
+        );
+
+
+        expect(
+          result.probability_total,
+        ).toBe(
+          110,
+        );
+
+
+        expect(
+          result.errors.length,
+        ).toBeGreaterThan(
+          0,
+        );
+      },
+    );
+
+
+    it(
+      "rejects a declared direction that disagrees with probabilities",
+      () => {
+        const result =
+          validateInvestmentForecast(
+            validForecast({
+              direction:
+                "down",
+            }),
+          );
+
+
+        expect(
+          result.valid,
+        ).toBe(
+          false,
+        );
+
+
+        expect(
+          result.primary_direction,
+        ).toBe(
+          "up",
+        );
+      },
+    );
+
+
+    it(
+      "rejects invalid scenario ranges",
+      () => {
+        const result =
+          validateInvestmentForecast(
+            validForecast({
+              bull_low:
+                130,
+
+              bull_high:
+                120,
+            }),
+          );
+
+
+        expect(
+          result.valid,
+        ).toBe(
+          false,
+        );
+      },
+    );
+  },
+);
+
+
+/* =========================================================
+ * 16. BRIER SCORE
+ * ======================================================= */
+
+describe(
+  "LIFE Invest AI Brier score",
+  () => {
+    it(
+      "returns zero for a perfect probability forecast",
+      () => {
+        expect(
+          calculateInvestmentBrierScore({
+            up_probability:
+              100,
+
+            flat_probability:
+              0,
+
+            down_probability:
+              0,
+
+            actual_direction:
+              "up",
+          }),
+        ).toBe(
+          0,
+        );
+      },
+    );
+
+
+    it(
+      "calculates multiclass Brier score deterministically",
+      () => {
+        expect(
+          calculateInvestmentBrierScore({
+            up_probability:
+              60,
+
+            flat_probability:
+              25,
+
+            down_probability:
+              15,
+
+            actual_direction:
+              "up",
+          }),
+        ).toBe(
+          0.245,
+        );
+      },
+    );
+  },
+);
+
+
+/* =========================================================
+ * 17. FORECAST EVALUATION
+ * ======================================================= */
+
+describe(
+  "LIFE Invest AI forecast evaluation",
+  () => {
+    it(
+      "grades an expired forecast from observed market facts",
+      () => {
+        const result =
+          evaluateInvestmentForecast({
+            reference_price:
+              100,
+
+            actual_price:
+              110,
+
+            flat_threshold_percent:
+              1,
+
+            predicted_direction:
+              "up",
+
+            up_probability:
+              60,
+
+            flat_probability:
+              25,
+
+            down_probability:
+              15,
+
+            base_low:
+              105,
+
+            base_high:
+              112,
+          });
+
+
+        expect(
+          result.actual_change_percent,
+        ).toBe(
+          10,
+        );
+
+
+        expect(
+          result.actual_direction,
+        ).toBe(
+          "up",
+        );
+
+
+        expect(
+          result.direction_correct,
+        ).toBe(
+          true,
+        );
+
+
+        expect(
+          result.base_range_hit,
+        ).toBe(
+          true,
+        );
+
+
+        expect(
+          result.absolute_error_percent,
+        ).toBe(
+          1.5,
+        );
+
+
+        expect(
+          result.brier_score,
+        ).toBe(
+          0.245,
+        );
+      },
+    );
+
+
+    it(
+      "preserves an incorrect prediction as incorrect",
+      () => {
+        const result =
+          evaluateInvestmentForecast({
+            reference_price:
+              100,
+
+            actual_price:
+              90,
+
+            flat_threshold_percent:
+              1,
+
+            predicted_direction:
+              "up",
+
+            up_probability:
+              70,
+
+            flat_probability:
+              20,
+
+            down_probability:
+              10,
+
+            base_low:
+              105,
+
+            base_high:
+              115,
+          });
+
+
+        expect(
+          result.actual_direction,
+        ).toBe(
+          "down",
+        );
+
+
+        expect(
+          result.direction_correct,
+        ).toBe(
+          false,
+        );
+
+
+        expect(
+          result.base_range_hit,
+        ).toBe(
+          false,
+        );
+
+
+        expect(
+          result.brier_score,
+        ).toBeGreaterThan(
+          0,
+        );
+      },
+    );
+  },
+);
+
+
+/* =========================================================
+ * 18. TRACK RECORD
+ * ======================================================= */
+
+describe(
+  "LIFE Invest AI Track Record",
+  () => {
+    it(
+      "does not grade a tiny sample as strong",
+      () => {
+        const result =
+          summarizeInvestmentTrackRecord([
+            {
+              direction_correct:
+                true,
+
+              base_range_hit:
+                true,
+
+              absolute_error_percent:
+                1,
+
+              brier_score:
+                0.2,
+            },
+          ]);
+
+
+        expect(
+          result.evaluated_forecasts,
+        ).toBe(
+          1,
+        );
+
+
+        expect(
+          result.grade,
+        ).toBe(
+          "insufficient",
+        );
+      },
+    );
+
+
+    it(
+      "calculates historical performance from stored outcomes",
+      () => {
+        const outcomes =
+          Array.from(
+            {
+              length:
+                10,
+            },
+            (
+              _,
+              index,
+            ) => ({
+              direction_correct:
+                index <
+                7,
+
+              base_range_hit:
+                index <
+                7,
+
+              absolute_error_percent:
+                2,
+
+              brier_score:
+                0.3,
+            }),
+          );
+
+
+        const result =
+          summarizeInvestmentTrackRecord(
+            outcomes,
+          );
+
+
+        expect(
+          result.evaluated_forecasts,
+        ).toBe(
+          10,
+        );
+
+
+        expect(
+          result.directional_accuracy_percent,
+        ).toBe(
+          70,
+        );
+
+
+        expect(
+          result.base_range_accuracy_percent,
+        ).toBe(
+          70,
+        );
+
+
+        expect(
+          result.average_absolute_error_percent,
+        ).toBe(
+          2,
+        );
+
+
+        expect(
+          result.average_brier_score,
+        ).toBe(
+          0.3,
+        );
+
+
+        expect(
+          result.calibration_score,
+        ).toBe(
+          85,
+        );
+
+
+        expect(
+          result.grade,
+        ).toBe(
+          "strong",
+        );
+      },
+    );
+
+
+    it(
+      "returns an empty Track Record when nothing is evaluated",
+      () => {
+        const result =
+          summarizeInvestmentTrackRecord(
+            [],
+          );
+
+
+        expect(
+          result.evaluated_forecasts,
+        ).toBe(
+          0,
+        );
+
+
+        expect(
+          result.directional_accuracy_percent,
+        ).toBeNull();
+
+
+        expect(
+          result.grade,
+        ).toBe(
+          "insufficient",
+        );
+      },
+    );
+  },
+);
+
+
+/* =========================================================
+ * 19. AI TOOL MANIFEST
  * ======================================================= */
 
 describe(
   "LIFE AI tool manifest",
   () => {
     it(
-      "contains exactly seven allow-listed tools",
+      "contains exactly seven allow-listed Chief of Staff tools",
       () => {
         expect(
           AI_TOOL_NAMES,
@@ -1223,6 +2478,33 @@ describe(
           ).size,
         ).toBe(
           7,
+        );
+      },
+    );
+
+
+    it(
+      "does not add LIFE Invest AI as an execution tool",
+      () => {
+        const names =
+          AI_TOOL_NAMES
+            .join(
+              " ",
+            )
+            .toLowerCase();
+
+
+        expect(
+          names,
+        ).not.toContain(
+          "investment_intelligence",
+        );
+
+
+        expect(
+          names,
+        ).not.toContain(
+          "broker",
         );
       },
     );
@@ -1293,7 +2575,7 @@ describe(
 
 
 /* =========================================================
- * 11. APPLICATION SAFETY DEFAULTS
+ * 20. APPLICATION SAFETY DEFAULTS
  * ======================================================= */
 
 describe(
@@ -1401,12 +2683,38 @@ describe(
         );
       },
     );
+
+
+    it(
+      "keeps autonomous investment analysis disabled",
+      () => {
+        expect(
+          APPLICATION_SAFETY_DEFAULTS
+            .autonomousInvestmentAnalysis,
+        ).toBe(
+          false,
+        );
+      },
+    );
+
+
+    it(
+      "keeps autonomous historical outcome mutation disabled",
+      () => {
+        expect(
+          APPLICATION_SAFETY_DEFAULTS
+            .autonomousInvestmentOutcomeMutation,
+        ).toBe(
+          false,
+        );
+      },
+    );
   },
 );
 
 
 /* =========================================================
- * 12. FORMAT DETERMINISM
+ * 21. FORMAT DETERMINISM
  * ======================================================= */
 
 describe(
@@ -1538,7 +2846,7 @@ describe(
 
 
 /* =========================================================
- * 13. PURE DETERMINISM
+ * 22. PURE DETERMINISM
  * ======================================================= */
 
 describe(
@@ -1607,16 +2915,110 @@ describe(
         );
       },
     );
+
+
+    it(
+      "returns identical LIFE Invest AI score for identical input",
+      () => {
+        const input = {
+          fundamental_score:
+            75,
+
+          technical_score:
+            70,
+
+          sentiment_score:
+            60,
+
+          macro_score:
+            65,
+
+          portfolio_fit_score:
+            80,
+
+          risk_score:
+            35,
+
+          has_position:
+            true,
+        };
+
+
+        const first =
+          calculateInvestmentIntelligenceScore(
+            input,
+          );
+
+
+        const second =
+          calculateInvestmentIntelligenceScore(
+            input,
+          );
+
+
+        expect(
+          second,
+        ).toEqual(
+          first,
+        );
+      },
+    );
+
+
+    it(
+      "returns identical forecast evaluation for identical facts",
+      () => {
+        const input = {
+          reference_price:
+            100,
+
+          actual_price:
+            110,
+
+          flat_threshold_percent:
+            1,
+
+          predicted_direction:
+            "up" as const,
+
+          up_probability:
+            60,
+
+          flat_probability:
+            25,
+
+          down_probability:
+            15,
+
+          base_low:
+            105,
+
+          base_high:
+            112,
+        };
+
+
+        expect(
+          evaluateInvestmentForecast(
+            input,
+          ),
+        ).toEqual(
+          evaluateInvestmentForecast(
+            input,
+          ),
+        );
+      },
+    );
   },
 );
 
 
 /* =========================================================
- * 14. FINAL V2 PRODUCT CONTRACT
+ * 23. FINAL PRODUCT CONTRACT
  * ======================================================= */
 
 describe(
-  "LIFE OS V2 final product contract",
+  "LIFE OS final product contract",
   () => {
     it(
       "treats Travel as a first class life area",
@@ -1657,6 +3059,26 @@ describe(
                 item.href,
               ) ===
               "/investments",
+          ),
+        ).toBe(
+          false,
+        );
+      },
+    );
+
+
+    it(
+      "does not expose LIFE Invest AI as a seventh primary area",
+      () => {
+        expect(
+          NAVIGATION_ITEMS.some(
+            (
+              item,
+            ) =>
+              String(
+                item.href,
+              ) ===
+              "/investments/intelligence",
           ),
         ).toBe(
           false,
@@ -1708,31 +3130,39 @@ describe(
 
 
 /* =========================================================
- * 15. TEST ISOLATION
+ * 24. INVESTMENT INTELLIGENCE TEST ISOLATION
  * ======================================================= */
 
 /**
- * core.test.ts must never require:
+ * LIFE Invest AI deterministic tests MUST remain runnable
+ * without:
  *
- * real Supabase database
- * authenticated production user
- * OpenAI API key
+ * Twelve Data
+ * OpenAI
+ * Supabase
+ * browser authentication
  * internet access
- * production secrets
- * private PDF
  *
  *
- * Core product invariants must remain testable offline.
+ * Why?
+ *
+ * Technical calculations
+ * scoring
+ * forecast validation
+ * Brier score
+ * Track Record arithmetic
+ *
+ * are LIFE OS-owned deterministic logic.
  */
 
 
 /* =========================================================
- * 16. SYNTHETIC DATA
+ * 25. SYNTHETIC DATA
  * ======================================================= */
 
 /**
- * All financial and investment values in this file are
- * synthetic.
+ * All financial, investment and market values in this file
+ * are synthetic.
  *
  *
  * Never put:
@@ -1740,15 +3170,92 @@ describe(
  * real salary
  * real loan
  * real portfolio
+ * real ticker holdings
+ * real market predictions
  * real user ID
- * real travel documents
  *
  * into GitHub tests.
  */
 
 
 /* =========================================================
- * 17. FINANCIAL TRUTH RULE
+ * 26. INVESTMENT SCORE AUTHORITY
+ * ======================================================= */
+
+/**
+ * LIFE Invest AI may interpret evidence.
+ *
+ *
+ * It may NOT directly define:
+ *
+ * overall_score
+ * stance
+ * final recommendation
+ * final confidence
+ *
+ *
+ * These tests protect the deterministic engine that owns
+ * those values.
+ */
+
+
+/* =========================================================
+ * 27. FORECAST AUTHORITY
+ * ======================================================= */
+
+/**
+ * Forecast:
+ *
+ * probabilities
+ * +
+ * scenarios
+ * +
+ * reference price
+ * +
+ * horizon
+ *
+ *      ↓
+ *
+ * deterministic validation
+ *
+ *
+ * Future actual result:
+ *
+ *      ↓
+ *
+ * deterministic evaluation
+ *
+ *
+ * AI does not grade itself.
+ */
+
+
+/* =========================================================
+ * 28. TRACK RECORD RULE
+ * ======================================================= */
+
+/**
+ * Track Record measures:
+ *
+ * directional accuracy
+ * base-range accuracy
+ * absolute error
+ * Brier score
+ * probability calibration
+ *
+ *
+ * Small samples remain:
+ *
+ * insufficient
+ *
+ *
+ * Historical performance must never be confused with a
+ * guarantee of future performance.
+ */
+
+
+/* =========================================================
+ * 29. FINANCIAL TRUTH RULE
  * ======================================================= */
 
 /**
@@ -1774,7 +3281,7 @@ describe(
 
 
 /* =========================================================
- * 18. PRODUCT STRUCTURE RULE
+ * 30. PRODUCT STRUCTURE RULE
  * ======================================================= */
 
 /**
@@ -1791,7 +3298,9 @@ describe(
  * Underneath:
  *
  * المال
- *      → Finance + Investments
+ *      → Finance
+ *      → Investments
+ *          → LIFE Invest AI
  *
  * خططي
  *      → Goals + Projects
@@ -1802,7 +3311,7 @@ describe(
 
 
 /* =========================================================
- * 19. AUTH RULE
+ * 31. AUTH RULE
  * ======================================================= */
 
 /**
@@ -1820,25 +3329,32 @@ describe(
 
 
 /* =========================================================
- * 20. TRAVEL RULE
+ * 32. LIFE INVEST AI SAFETY RULE
  * ======================================================= */
 
 /**
- * Travel V2 requires:
+ * LIFE Invest AI can:
  *
- * /travel
- * trips
- * documents
- * private document bucket
- * protected authentication route
+ * analyze ✅
+ * compare ✅
+ * score ✅
+ * forecast probabilistically ✅
+ * record historical accuracy ✅
  *
  *
- * Travel is no longer a placeholder.
+ * LIFE Invest AI cannot:
+ *
+ * buy ❌
+ * sell ❌
+ * place broker orders ❌
+ * transfer money ❌
+ * rewrite losing forecasts ❌
+ * claim unmeasured accuracy ❌
  */
 
 
 /* =========================================================
- * 21. FINAL CORE RULE
+ * 33. FINAL CORE RULE
  * ======================================================= */
 
 /**
@@ -1849,16 +3365,25 @@ describe(
  * same expected result
  *
  *
- * Product architecture is also fixed:
+ * Investment intelligence:
  *
- * six primary areas
- * AAL1
- * private Travel
- * deterministic execution
- * no autonomous AI writes
+ * market evidence
+ *      ↓
+ * deterministic metrics
+ *      ↓
+ * bounded AI interpretation
+ *      ↓
+ * deterministic score
+ *      ↓
+ * probabilistic forecast
+ *      ↓
+ * immutable history
+ *      ↓
+ * objective grading
  *
  *
  * Simple outside.
  * Intelligent underneath.
+ * Measurable by default.
  * Private by default.
  */
