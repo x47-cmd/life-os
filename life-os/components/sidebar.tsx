@@ -1,8 +1,3 @@
-FULL PATH — COPY AND PASTE:
-life-os/components/sidebar.tsx
-
-FULL CODE — REPLACE THE GITHUB FILE COMPLETELY:
-
 "use client";
 
 import Link from "next/link";
