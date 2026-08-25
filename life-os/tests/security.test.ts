@@ -670,12 +670,12 @@ describe(
 
 
     it(
-      "requires AAL2 before private LIFE OS access",
+      "requires AAL1 before private LIFE OS access",
       () => {
         expect(
           REQUIRED_AUTHENTICATION_LEVEL,
         ).toBe(
-          "aal2",
+          "aal1",
         );
       },
     );
@@ -739,25 +739,25 @@ describe(
 
 
     it(
-      "evaluates MFA assurance in central auth",
+      "does not perform MFA operations in central auth",
       () => {
         expect(
           source,
-        ).toMatch(
+        ).not.toMatch(
           /auth\.mfa/,
         );
 
 
         expect(
           source,
-        ).toContain(
+        ).not.toContain(
           "getAuthenticatorAssuranceLevel",
         );
 
 
         expect(
           source,
-        ).toContain(
+        ).not.toContain(
           "listFactors",
         );
       },
@@ -811,7 +811,7 @@ describe(
 
 
     it(
-      "routes password-authenticated users to mandatory MFA",
+      "routes password-authenticated users into LIFE OS",
       () => {
         expect(
           source,
@@ -823,6 +823,13 @@ describe(
         expect(
           source,
         ).toContain(
+          "DEFAULT_AUTHENTICATED_ROUTE",
+        );
+
+
+        expect(
+          source,
+        ).not.toContain(
           '"/mfa"',
         );
       },
@@ -4667,3 +4674,4 @@ describe(
  * Measurable by default.
  * Private by default.
  */
+
