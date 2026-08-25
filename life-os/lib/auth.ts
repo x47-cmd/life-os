@@ -1,9 +1,15 @@
-import type { User } from "@supabase/supabase-js";
-import { redirect } from "next/navigation";
+import type {
+  User,
+} from "@supabase/supabase-js";
+
+import {
+  redirect,
+} from "next/navigation";
 
 import {
   DEFAULT_AUTHENTICATED_ROUTE,
   LOGIN_ROUTE,
+  REQUIRED_AUTHENTICATION_LEVEL,
 } from "@/lib/constants";
 
 import {
@@ -21,7 +27,15 @@ import {
 
 
 /* =========================================================
- * 1. AUTH TYPES
+ * 1. AUTHENTICATION ROUTES
+ * ======================================================= */
+
+export const MFA_ROUTE =
+  "/mfa";
+
+
+/* =========================================================
+ * 2. AUTHENTICATION TYPES
  * ======================================================= */
 
 export type AuthenticatorAssuranceLevel =
@@ -29,19 +43,6 @@ export type AuthenticatorAssuranceLevel =
   | "aal2";
 
 
-export interface VerifiedAuthIdentity {
-  id: UUID;
-  email: string | null;
-  aal: AuthenticatorAssuranceLevel;
-}
-
-
-/**
- * Kept for backward compatibility with the existing
- * application routing interfaces.
- *
- * LIFE OS V1 now uses password-only authentication.
- */
 export type MfaAction =
   | "none"
   | "verify"
@@ -49,105 +50,149 @@ export type MfaAction =
   | "unknown";
 
 
-export interface AuthenticationState {
-  authenticated: boolean;
+export interface VerifiedAuthIdentity {
+  id:
+    UUID;
 
-  identity: VerifiedAuthIdentity | null;
+  email:
+    string |
+    null;
+
+  aal:
+    AuthenticatorAssuranceLevel;
+}
+
+
+export interface AuthenticationState {
+  authenticated:
+    boolean;
+
+  identity:
+    VerifiedAuthIdentity |
+    null;
 
   current_level:
-    | AuthenticatorAssuranceLevel
-    | null;
+    AuthenticatorAssuranceLevel |
+    null;
 
   next_level:
-    | AuthenticatorAssuranceLevel
-    | null;
+    AuthenticatorAssuranceLevel |
+    null;
 
-  mfa_action: MfaAction;
+  mfa_action:
+    MfaAction;
 }
 
 
 /* =========================================================
- * 2. AUTHENTICATION ERROR
+ * 3. AUTHENTICATION ERRORS
  * ======================================================= */
 
 export type AuthenticationErrorCode =
-  | "UNAUTHENTICATED";
+  | "UNAUTHENTICATED"
+  | "MFA_REQUIRED";
 
 
-export class AuthenticationError extends Error {
-  readonly code: AuthenticationErrorCode;
+export class AuthenticationError
+  extends Error {
+  readonly code:
+    AuthenticationErrorCode;
+
 
   constructor(
-    code: AuthenticationErrorCode,
+    code:
+      AuthenticationErrorCode,
   ) {
     super(
-      "Authentication required.",
+      code ===
+        "MFA_REQUIRED"
+        ? "Multi-factor authentication is required."
+        : "Authentication is required.",
     );
+
 
     this.name =
       "AuthenticationError";
 
-    this.code = code;
+
+    this.code =
+      code;
   }
 }
 
 
 /* =========================================================
- * 3. CLAIM HELPERS
+ * 4. CLAIM HELPERS
  * ======================================================= */
 
 function getClaimString(
-  claims: Record<string, unknown>,
-  key: string,
+  claims:
+    Record<
+      string,
+      unknown
+    >,
+
+  key:
+    string,
 ): string | null {
   const value =
     claims[key];
 
-  return typeof value === "string"
+
+  return typeof value ===
+    "string"
     ? value
     : null;
 }
 
 
 function normalizeAal(
-  value: unknown,
+  value:
+    unknown,
 ): AuthenticatorAssuranceLevel | null {
-  if (value === "aal2") {
+  if (
+    value ===
+      "aal2"
+  ) {
     return "aal2";
   }
 
-  if (value === "aal1") {
+
+  if (
+    value ===
+      "aal1"
+  ) {
     return "aal1";
   }
+
 
   return null;
 }
 
 
 /* =========================================================
- * 4. VERIFIED IDENTITY
+ * 5. VERIFIED IDENTITY
  * ======================================================= */
 
 /**
  * Verifies the current access token using Supabase getClaims().
  *
- * IMPORTANT:
- *
- * This intentionally does NOT use getSession() as proof of
- * identity.
- *
- * getSession() may be useful when raw session tokens are
- * required, but its stored user object is not trusted here
- * for authorization.
+ * getSession() is not used as authorization proof.
  */
 async function getVerifiedIdentityFromClient(
-  supabase: ServerSupabaseClient,
-): Promise<VerifiedAuthIdentity | null> {
+  supabase:
+    ServerSupabaseClient,
+): Promise<
+  VerifiedAuthIdentity |
+  null
+> {
   const {
     data,
     error,
   } =
-    await supabase.auth.getClaims();
+    await supabase.auth
+      .getClaims();
+
 
   if (
     error ||
@@ -156,8 +201,13 @@ async function getVerifiedIdentityFromClient(
     return null;
   }
 
+
   const claims =
-    data.claims as Record<string, unknown>;
+    data.claims as Record<
+      string,
+      unknown
+    >;
+
 
   const subject =
     getClaimString(
@@ -165,14 +215,19 @@ async function getVerifiedIdentityFromClient(
       "sub",
     );
 
-  if (!subject) {
+
+  if (
+    !subject
+  ) {
     return null;
   }
+
 
   const parsedUserId =
     uuidSchema.safeParse(
       subject,
     );
+
 
   if (
     !parsedUserId.success
@@ -180,37 +235,37 @@ async function getVerifiedIdentityFromClient(
     return null;
   }
 
+
   const role =
     getClaimString(
       claims,
       "role",
     );
 
+
   if (
-    role !== null &&
-    role !== "authenticated"
+    role !==
+      null &&
+    role !==
+      "authenticated"
   ) {
     return null;
   }
 
-  /**
-   * Supabase password authentication normally produces AAL1.
-   *
-   * A session may still be AAL2 if MFA is ever enabled
-   * manually in the future.
-   *
-   * LIFE OS accepts either authenticated level.
-   */
+
   const aal =
     normalizeAal(
       claims["aal"],
-    ) ?? "aal1";
+    ) ??
+    "aal1";
+
 
   const email =
     getClaimString(
       claims,
       "email",
     );
+
 
   return {
     id:
@@ -224,26 +279,17 @@ async function getVerifiedIdentityFromClient(
 
 
 /* =========================================================
- * 5. OPTIONAL VERIFIED IDENTITY
+ * 6. OPTIONAL VERIFIED IDENTITY
  * ======================================================= */
 
-/**
- * Returns the verified authenticated identity when one
- * exists.
- *
- * Returns null for:
- *
- * - no session
- * - invalid token
- * - expired/unverifiable token
- * - invalid subject
- *
- * No redirect occurs.
- */
 export async function getVerifiedAuthIdentity():
-Promise<VerifiedAuthIdentity | null> {
+Promise<
+  VerifiedAuthIdentity |
+  null
+> {
   const supabase =
     await createClient();
+
 
   return getVerifiedIdentityFromClient(
     supabase,
@@ -252,27 +298,31 @@ Promise<VerifiedAuthIdentity | null> {
 
 
 /* =========================================================
- * 6. AUTHENTICATION STATE
+ * 7. AUTHENTICATION STATE
  * ======================================================= */
 
 /**
- * LIFE OS V1 authentication state.
+ * Determines whether the current user must:
  *
- * Password authentication is sufficient.
- *
- * MFA enrollment and MFA verification are not required.
+ * - enroll a TOTP factor
+ * - verify an existing TOTP factor
+ * - continue with an AAL2 session
  */
 export async function getAuthenticationState():
 Promise<AuthenticationState> {
   const supabase =
     await createClient();
 
+
   const identity =
     await getVerifiedIdentityFromClient(
       supabase,
     );
 
-  if (!identity) {
+
+  if (
+    !identity
+  ) {
     return {
       authenticated:
         false,
@@ -291,190 +341,353 @@ Promise<AuthenticationState> {
     };
   }
 
+
+  const {
+    data:
+      assuranceData,
+    error:
+      assuranceError,
+  } =
+    await supabase.auth.mfa
+      .getAuthenticatorAssuranceLevel();
+
+
+  const currentLevel =
+    assuranceError
+      ? identity.aal
+      : normalizeAal(
+          assuranceData
+            ?.currentLevel,
+        ) ??
+        identity.aal;
+
+
+  const nextLevel =
+    assuranceError
+      ? currentLevel
+      : normalizeAal(
+          assuranceData
+            ?.nextLevel,
+        ) ??
+        currentLevel;
+
+
+  if (
+    currentLevel ===
+      REQUIRED_AUTHENTICATION_LEVEL
+  ) {
+    return {
+      authenticated:
+        true,
+
+      identity: {
+        ...identity,
+
+        aal:
+          currentLevel,
+      },
+
+      current_level:
+        currentLevel,
+
+      next_level:
+        nextLevel,
+
+      mfa_action:
+        "none",
+    };
+  }
+
+
+  const {
+    data:
+      factorsData,
+    error:
+      factorsError,
+  } =
+    await supabase.auth.mfa
+      .listFactors();
+
+
+  if (
+    factorsError
+  ) {
+    return {
+      authenticated:
+        true,
+
+      identity: {
+        ...identity,
+
+        aal:
+          currentLevel,
+      },
+
+      current_level:
+        currentLevel,
+
+      next_level:
+        nextLevel,
+
+      mfa_action:
+        "unknown",
+    };
+  }
+
+
+  const hasVerifiedTotp =
+    factorsData
+      ?.totp
+      ?.some(
+        (
+          factor,
+        ) =>
+          factor.status ===
+            "verified",
+      ) ??
+    false;
+
+
   return {
     authenticated:
       true,
 
-    identity,
+    identity: {
+      ...identity,
+
+      aal:
+        currentLevel,
+    },
 
     current_level:
-      identity.aal,
+      currentLevel,
 
     next_level:
-      identity.aal,
+      nextLevel,
 
     mfa_action:
-      "none",
+      hasVerifiedTotp
+        ? "verify"
+        : "enroll",
   };
 }
 
 
 /* =========================================================
- * 7. ASSERT AUTHENTICATED
+ * 8. ASSERT AUTHENTICATED IDENTITY
  * ======================================================= */
 
 /**
- * Server/API-friendly authentication assertion.
+ * Allows a verified AAL1 or AAL2 identity.
  *
- * Throws when there is no verified authenticated user.
+ * Use only for authentication-transition flows such as:
+ *
+ * - MFA enrollment
+ * - MFA verification
+ * - sign out
  */
 export async function assertAuthenticatedIdentity():
 Promise<VerifiedAuthIdentity> {
   const identity =
     await getVerifiedAuthIdentity();
 
-  if (!identity) {
+
+  if (
+    !identity
+  ) {
     throw new AuthenticationError(
       "UNAUTHENTICATED",
     );
   }
+
 
   return identity;
 }
 
 
 /* =========================================================
- * 8. LEGACY AAL2 ASSERTION ALIAS
+ * 9. ASSERT AAL2 IDENTITY
  * ======================================================= */
 
 /**
- * Backward-compatible alias.
- *
- * Existing LIFE OS modules still call:
- *
- * assertAAL2Identity()
- *
- * The function name is retained temporarily to avoid changing
- * every data module and page at once.
- *
- * Password-authenticated users are now sufficient.
+ * Required by private APIs and private data operations.
  */
 export async function assertAAL2Identity():
 Promise<VerifiedAuthIdentity> {
-  return assertAuthenticatedIdentity();
+  const identity =
+    await assertAuthenticatedIdentity();
+
+
+  if (
+    identity.aal !==
+      REQUIRED_AUTHENTICATION_LEVEL
+  ) {
+    throw new AuthenticationError(
+      "MFA_REQUIRED",
+    );
+  }
+
+
+  return identity;
 }
 
 
 /* =========================================================
- * 9. LEGACY AAL2 OPTIONAL IDENTITY ALIAS
+ * 10. OPTIONAL AAL2 IDENTITY
  * ======================================================= */
 
-/**
- * Backward-compatible alias.
- *
- * Returns any verified authenticated LIFE OS identity.
- */
 export async function getAAL2Identity():
-Promise<VerifiedAuthIdentity | null> {
-  return getVerifiedAuthIdentity();
+Promise<
+  VerifiedAuthIdentity |
+  null
+> {
+  const identity =
+    await getVerifiedAuthIdentity();
+
+
+  if (
+    !identity ||
+    identity.aal !==
+      REQUIRED_AUTHENTICATION_LEVEL
+  ) {
+    return null;
+  }
+
+
+  return identity;
 }
 
 
 /* =========================================================
- * 10. PAGE GUARD — AUTHENTICATED
+ * 11. PAGE GUARD — AUTHENTICATED
  * ======================================================= */
 
 /**
- * Server Component page guard.
- *
- * User without a valid session:
- *
- *   → /login
- *
- * Authenticated user:
- *
- *   → allowed
+ * Allows AAL1 only for controlled authentication-transition
+ * pages such as /mfa.
  */
 export async function requireAuthenticatedIdentity():
 Promise<VerifiedAuthIdentity> {
   const identity =
     await getVerifiedAuthIdentity();
 
-  if (!identity) {
+
+  if (
+    !identity
+  ) {
     redirect(
       LOGIN_ROUTE,
     );
   }
+
 
   return identity;
 }
 
 
 /* =========================================================
- * 11. LEGACY AAL2 PAGE GUARD ALIAS
+ * 12. PAGE GUARD — AAL2
  * ======================================================= */
 
 /**
- * Backward-compatible protected-page guard.
- *
- * Existing private pages still call:
- *
- * requireAAL2Identity()
- *
- * Password authentication is now sufficient.
- *
- * PostgreSQL RLS remains responsible for row ownership
- * enforcement after authentication.
+ * Private LIFE OS pages require AAL2.
  */
 export async function requireAAL2Identity():
 Promise<VerifiedAuthIdentity> {
-  return requireAuthenticatedIdentity();
+  const state =
+    await getAuthenticationState();
+
+
+  if (
+    !state.authenticated ||
+    !state.identity
+  ) {
+    redirect(
+      LOGIN_ROUTE,
+    );
+  }
+
+
+  if (
+    state.current_level !==
+      REQUIRED_AUTHENTICATION_LEVEL
+  ) {
+    redirect(
+      MFA_ROUTE,
+    );
+  }
+
+
+  return state.identity;
 }
 
 
 /* =========================================================
- * 12. LOGIN PAGE REDIRECT
+ * 13. LOGIN PAGE REDIRECT
  * ======================================================= */
 
-/**
- * Prevents an already authenticated user from unnecessarily
- * remaining on the login page.
- */
 export async function redirectIfFullyAuthenticated():
 Promise<void> {
-  const identity =
-    await getVerifiedAuthIdentity();
+  const state =
+    await getAuthenticationState();
 
-  if (identity) {
+
+  if (
+    !state.authenticated
+  ) {
+    return;
+  }
+
+
+  if (
+    state.current_level ===
+      REQUIRED_AUTHENTICATION_LEVEL
+  ) {
     redirect(
       DEFAULT_AUTHENTICATED_ROUTE,
     );
   }
+
+
+  redirect(
+    MFA_ROUTE,
+  );
 }
 
 
 /* =========================================================
- * 13. FRESH USER RECORD
+ * 14. FRESH AUTHENTICATED USER
  * ======================================================= */
 
-/**
- * Use only when current Auth-server user metadata is actually
- * needed.
- *
- * getClaims() remains the normal identity verification path.
- *
- * getUser() performs an Auth server request and gives us the
- * current user record.
- */
 export async function getFreshAuthenticatedUser():
-Promise<User | null> {
+Promise<
+  User |
+  null
+> {
   const supabase =
     await createClient();
+
 
   const identity =
     await getVerifiedIdentityFromClient(
       supabase,
     );
 
-  if (!identity) {
+
+  if (
+    !identity
+  ) {
     return null;
   }
+
 
   const {
     data,
     error,
   } =
-    await supabase.auth.getUser();
+    await supabase.auth
+      .getUser();
+
 
   if (
     error ||
@@ -485,12 +698,13 @@ Promise<User | null> {
     return null;
   }
 
+
   return data.user;
 }
 
 
 /* =========================================================
- * 14. REQUIRE FRESH USER
+ * 15. REQUIRE FRESH USER
  * ======================================================= */
 
 export async function requireFreshAuthenticatedUser():
@@ -498,87 +712,80 @@ Promise<User> {
   const user =
     await getFreshAuthenticatedUser();
 
-  if (!user) {
+
+  if (
+    !user
+  ) {
     redirect(
       LOGIN_ROUTE,
     );
   }
+
 
   return user;
 }
 
 
 /* =========================================================
- * 15. USER ID CONVENIENCE
+ * 16. USER ID
  * ======================================================= */
 
 /**
- * Safe convenience helper for existing server-side data
- * functions.
- *
- * The legacy function name is intentionally retained so the
- * rest of LIFE OS does not need a broad authorization
- * refactor.
- *
- * user_id is always obtained from verified authentication,
- * never from browser input or AI arguments.
+ * Private data operations derive user_id from a verified AAL2
+ * identity.
  */
 export async function requireAAL2UserId():
 Promise<UUID> {
   const identity =
-    await assertAuthenticatedIdentity();
+    await assertAAL2Identity();
+
 
   return identity.id;
 }
 
 
 /* =========================================================
- * 16. FINAL SECURITY RULE
+ * 17. FINAL SECURITY CONTRACT
  * ======================================================= */
 
 /**
- * LIFE OS Authentication Boundary
- *
- * Authentication:
- *
- * Supabase Auth
+ * Signed out
  *      ↓
- * Email + password
- *      ↓
- * getClaims() verifies JWT
- *      ↓
- * user ID derived from verified `sub`
- *      ↓
- * Server authorization
- *      ↓
- * PostgreSQL RLS verifies ownership again
+ * /login
  *
  *
- * NEVER:
+ * Password verified
+ *      ↓
+ * AAL1
+ *      ↓
+ * /mfa
+ *
+ *
+ * TOTP enrolled and verified
+ *      ↓
+ * AAL2
+ *      ↓
+ * private LIFE OS access
+ *
+ *
+ * Authorization proof:
+ *
+ * verified JWT claims
+ * +
+ * AAL2
+ * +
+ * server-derived user identity
+ * +
+ * PostgreSQL RLS
+ * +
+ * row ownership
+ *
+ *
+ * Never:
  *
  * - trust user_id from request input
  * - trust user_id generated by AI
  * - use getSession() user data as authorization proof
- * - expose service_role
- * - weaken RLS because application auth exists
- *
- *
- * Defense in depth:
- *
- * Verified JWT
- * +
- * Server authorization
- * +
- * PostgreSQL RLS
- * +
- * Ownership constraints
- *
- *
- * LIFE OS V1 authentication:
- *
- * Email
- * +
- * Password
- * =
- * Private workspace access
+ * - expose privileged credentials
+ * - weaken RLS because application guards exist
  */
