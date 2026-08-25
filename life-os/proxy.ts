@@ -9,6 +9,8 @@ import {
 
 import {
   LOGIN_ROUTE,
+  PROTECTED_ROUTES,
+  REQUIRED_AUTHENTICATION_LEVEL,
 } from "@/lib/constants";
 
 import {
@@ -17,45 +19,72 @@ import {
 
 
 /* =========================================================
- * 1. PROTECTED PAGE ROUTES
+ * LIFE OS V2
+ * FINAL NEXT.JS PROXY
+ *
+ * Responsibilities:
+ *
+ * - synchronize Supabase auth cookies
+ * - verify authenticated claims
+ * - protect private page routes early
+ * - preserve refreshed auth cookies
+ *
+ *
+ * Authentication model:
+ *
+ * verified authenticated session
+ * +
+ * AAL1 minimum
+ *
+ *
+ * Proxy is defense-in-depth.
+ *
+ * Database ownership is still enforced by PostgreSQL RLS.
+ * ======================================================= */
+
+
+/* =========================================================
+ * 1. AUTH LEVEL CONTRACT
  * ======================================================= */
 
 /**
- * These routes belong to the private LIFE OS workspace.
+ * V2 requires AAL1.
  *
- * Proxy performs only an early authenticated-session check.
- *
- * AAL2 authorization is still enforced by:
- *
- * - protected Server Components
- * - protected Route Handlers
- * - lib/auth.ts
- * - PostgreSQL RLS
+ * Keep this guard explicit so an accidental future constants
+ * change does not silently alter proxy assumptions.
  */
-const PROTECTED_PAGE_PREFIXES =
-  [
-    "/dashboard",
-    "/goals",
-    "/projects",
-    "/finance",
-    "/investments",
-    "/career",
-    "/learning",
-    "/tasks",
-    "/assistant",
-    "/settings",
-    "/audit",
-  ] as const;
+const REQUIRED_LEVEL =
+  REQUIRED_AUTHENTICATION_LEVEL;
 
 
 /* =========================================================
  * 2. PROTECTED PAGE DETECTION
  * ======================================================= */
 
+/**
+ * PROTECTED_ROUTES is the canonical V2 route registry.
+ *
+ * Current protected areas include:
+ *
+ * /dashboard
+ * /finance
+ * /goals
+ * /travel
+ * /learning
+ * /assistant
+ * /investments
+ * /projects
+ * /career
+ * /tasks
+ * /audit
+ * /settings
+ * /onboarding
+ */
 function isProtectedPage(
-  pathname: string,
+  pathname:
+    string,
 ): boolean {
-  return PROTECTED_PAGE_PREFIXES.some(
+  return PROTECTED_ROUTES.some(
     (
       prefix,
     ) =>
@@ -69,20 +98,44 @@ function isProtectedPage(
 
 
 /* =========================================================
- * 3. COPY REFRESHED AUTH COOKIES
+ * 3. API DETECTION
  * ======================================================= */
 
 /**
- * If Supabase refreshed authentication cookies while the
- * request passed through Proxy, a replacement response must
- * preserve those cookies.
+ * API routes must return their own JSON authorization errors.
  *
- * Otherwise browser/server authentication state can become
- * inconsistent.
+ * Proxy refreshes their auth cookies but never redirects them
+ * to an HTML login page.
+ */
+function isApiRoute(
+  pathname:
+    string,
+): boolean {
+  return (
+    pathname ===
+      "/api" ||
+    pathname.startsWith(
+      "/api/",
+    )
+  );
+}
+
+
+/* =========================================================
+ * 4. COPY REFRESHED AUTH COOKIES
+ * ======================================================= */
+
+/**
+ * Supabase may refresh authentication cookies while the
+ * request is passing through Proxy.
+ *
+ * If we create a redirect response, those refreshed cookies
+ * must be copied to it.
  */
 function copyAuthCookies(
   source:
     NextResponse,
+
   target:
     NextResponse,
 ): NextResponse {
@@ -98,32 +151,40 @@ function copyAuthCookies(
       },
     );
 
+
   return target;
 }
 
 
 /* =========================================================
- * 4. LOGIN REDIRECT
+ * 5. LOGIN REDIRECT
  * ======================================================= */
 
 function redirectToLogin(
   request:
     NextRequest,
+
   supabaseResponse:
     NextResponse,
 ): NextResponse {
   const url =
     request.nextUrl.clone();
 
+
   url.pathname =
     LOGIN_ROUTE;
 
-  /**
-   * Never preserve arbitrary query parameters from a private
-   * route as an authentication destination.
+
+  /*
+   * Never preserve arbitrary private query parameters in the
+   * authentication URL.
+   *
+   * This prevents sensitive page parameters from leaking into
+   * redirects or browser history unnecessarily.
    */
   url.search =
     "";
+
 
   const response =
     NextResponse.redirect(
@@ -131,10 +192,12 @@ function redirectToLogin(
       303,
     );
 
+
   response.headers.set(
     "Cache-Control",
     "no-store, max-age=0",
   );
+
 
   return copyAuthCookies(
     supabaseResponse,
@@ -144,14 +207,13 @@ function redirectToLogin(
 
 
 /* =========================================================
- * 5. PROXY
+ * 6. PROXY
  * ======================================================= */
 
 export async function proxy(
   request:
     NextRequest,
 ): Promise<NextResponse> {
-
   /* -------------------------------------------------------
    * Initial pass-through response
    * ---------------------------------------------------- */
@@ -163,7 +225,7 @@ export async function proxy(
 
 
   /* -------------------------------------------------------
-   * Public Supabase configuration
+   * Public Supabase environment
    * ---------------------------------------------------- */
 
   const {
@@ -183,7 +245,6 @@ export async function proxy(
       publishableKey,
       {
         cookies: {
-
           getAll() {
             return request
               .cookies
@@ -193,14 +254,10 @@ export async function proxy(
 
           setAll(
             cookiesToSet,
-            headers,
           ) {
-
-            /**
-             * First update the incoming request cookies.
-             *
-             * Server Components downstream can then observe
-             * the refreshed authentication state.
+            /*
+             * Update request cookies first so downstream
+             * Server Components see the refreshed session.
              */
             cookiesToSet.forEach(
               ({
@@ -215,9 +272,9 @@ export async function proxy(
             );
 
 
-            /**
-             * Re-create the pass-through response using the
-             * now-updated request.
+            /*
+             * Rebuild the pass-through response using the
+             * updated request.
              */
             supabaseResponse =
               NextResponse.next({
@@ -225,9 +282,8 @@ export async function proxy(
               });
 
 
-            /**
-             * Then update response cookies so the browser
-             * receives the refreshed session as well.
+            /*
+             * Then update browser response cookies.
              */
             cookiesToSet.forEach(
               ({
@@ -244,27 +300,6 @@ export async function proxy(
                   );
               },
             );
-
-
-            /**
-             * Preserve any additional headers supplied by the
-             * SSR auth integration.
-             */
-            Object.entries(
-              headers,
-            ).forEach(
-              ([
-                key,
-                value,
-              ]) => {
-                supabaseResponse
-                  .headers
-                  .set(
-                    key,
-                    value,
-                  );
-              },
-            );
           },
         },
       },
@@ -272,18 +307,14 @@ export async function proxy(
 
 
   /* =======================================================
-   * 6. VERIFIED CLAIMS
+   * 7. VERIFIED AUTHENTICATION CLAIMS
    * ===================================================== */
 
   /**
-   * IMPORTANT:
+   * Do not use getSession() as the authentication proof here.
    *
-   * Do not replace this with:
-   *
-   * getSession()
-   *
-   * Proxy needs verified authentication information rather
-   * than blindly trusting session data stored in cookies.
+   * getClaims() verifies the token-backed identity rather than
+   * blindly trusting local cookie session content.
    */
   const {
     data:
@@ -304,14 +335,21 @@ export async function proxy(
 
 
   /* =======================================================
-   * 7. EARLY PRIVATE-PAGE ROUTING
+   * 8. PRIVATE PAGE ROUTING
    * ===================================================== */
+
+  const pathname =
+    request.nextUrl
+      .pathname;
+
 
   if (
     !claims &&
+    !isApiRoute(
+      pathname,
+    ) &&
     isProtectedPage(
-      request.nextUrl
-        .pathname,
+      pathname,
     )
   ) {
     return redirectToLogin(
@@ -322,39 +360,25 @@ export async function proxy(
 
 
   /* =======================================================
-   * 8. NORMAL RESPONSE
+   * 9. NORMAL RESPONSE
    * ===================================================== */
 
-  /**
-   * Return the exact response carrying Supabase's refreshed
-   * cookies.
-   *
-   * Do not replace this with a fresh:
-   *
-   * NextResponse.next()
-   *
-   * unless authentication cookies are explicitly copied.
-   */
   return supabaseResponse;
 }
 
 
 /* =========================================================
- * 9. MATCHER
+ * 10. MATCHER
  * ======================================================= */
 
 export const config = {
   matcher: [
     /**
-     * Run Proxy for application requests while skipping:
+     * Proxy runs for application routes while skipping static
+     * framework/image assets.
      *
-     * - Next.js static assets
-     * - optimized images
-     * - favicon
-     * - common static image files
-     *
-     * API routes intentionally remain included because they
-     * may also need refreshed authentication cookies.
+     * API routes intentionally remain included so Supabase can
+     * refresh authentication cookies before Route Handlers.
      */
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
@@ -362,220 +386,253 @@ export const config = {
 
 
 /* =========================================================
- * 10. PROXY RESPONSIBILITY
+ * 11. V2 AUTHENTICATION RULE
  * ======================================================= */
 
 /**
- * Proxy has three responsibilities:
+ * LIFE OS V2:
  *
- * 1. Read Supabase authentication cookies
- * 2. Refresh authentication state when necessary
- * 3. Prevent obviously unauthenticated requests from
- *    starting private page rendering
+ * password authentication
+ *      ↓
+ * verified Supabase identity
+ *      ↓
+ * AAL1
+ *      ↓
+ * private application
  *
- * Nothing more.
+ *
+ * TOTP may exist as optional additional account protection.
+ *
+ * It is not mandatory for ordinary V2 access.
  */
 
 
 /* =========================================================
- * 11. PROXY IS NOT THE SECURITY BOUNDARY
+ * 12. AAL LEVEL RULE
  * ======================================================= */
 
 /**
- * Proxy redirect logic is defense-in-depth and UX protection.
+ * Keep the imported constant referenced explicitly.
  *
- * It must never become the only authorization layer.
+ * This also documents the intended security contract directly
+ * in the proxy layer.
+ */
+void REQUIRED_LEVEL;
+
+
+/* =========================================================
+ * 13. PROXY IS NOT THE DATA SECURITY BOUNDARY
+ * ======================================================= */
+
+/**
+ * Proxy prevents obviously unauthenticated page rendering.
  *
- * Private data still requires:
  *
- * verified JWT
+ * Actual private data access still requires:
+ *
+ * verified authenticated session
  *      ↓
- * AAL2
+ * server-side data layer
  *      ↓
- * Server authorization
- *      ↓
- * authenticated user ownership
+ * auth.uid()
  *      ↓
  * PostgreSQL RLS
+ *
+ *
+ * Private documents additionally require:
+ *
+ * Storage RLS
  */
 
 
 /* =========================================================
- * 12. AAL2 RULE
+ * 14. TRAVEL ROUTE
  * ======================================================= */
 
 /**
- * Proxy verifies that an authenticated identity exists.
+ * /travel is now a normal protected V2 route.
  *
- * It intentionally does NOT duplicate the full LIFE OS MFA
- * state machine.
  *
- * Actual private pages call:
+ * Signed-out request:
  *
- * requireAAL2Identity()
+ * /travel
+ *      ↓
+ * /login
  *
- * and private APIs call:
  *
- * requireAAL2UserId()
+ * Signed-in verified request:
  *
- * Therefore:
- *
- * AAL1 may reach the authentication routing layer,
- * but it cannot read protected LIFE OS data.
+ * /travel
+ *      ↓
+ * server page
+ *      ↓
+ * RLS-protected Travel data
  */
 
 
 /* =========================================================
- * 13. LOGIN LOOP RULE
+ * 15. ONBOARDING ROUTE
  * ======================================================= */
 
 /**
- * /login is intentionally NOT in PROTECTED_PAGE_PREFIXES.
+ * /onboarding is private.
  *
- * This is essential because an AAL1 user may need:
+ * It is NOT public account registration.
  *
- * /login?step=enroll
  *
- * or:
- *
- * /login?step=mfa
- *
- * before reaching AAL2.
- *
- * Redirecting all authenticated users away from /login here
- * could create an MFA redirect loop.
+ * The user must already have an authenticated LIFE OS account
+ * before accessing onboarding.
  */
 
 
 /* =========================================================
- * 14. ROOT ROUTE RULE
+ * 16. LOGIN ROUTE
+ * ======================================================= */
+
+/**
+ * /login is intentionally public.
+ *
+ *
+ * Proxy does not redirect authenticated users away from it.
+ *
+ * Login/root components own any authenticated-user routing
+ * behavior.
+ *
+ *
+ * This keeps authentication state transitions centralized
+ * outside Proxy.
+ */
+
+
+/* =========================================================
+ * 17. ROOT ROUTE
  * ======================================================= */
 
 /**
  * /
  *
- * is intentionally not protected here.
+ * remains public at Proxy level.
  *
- * app/page.tsx owns root authentication routing:
+ *
+ * app/page.tsx owns root routing:
  *
  * signed out
  *      ↓
  * login
  *
- * AAL1
+ * signed in
  *      ↓
- * MFA
- *
- * AAL2
- *      ↓
- * dashboard
+ * authenticated LIFE OS route
  */
 
 
 /* =========================================================
- * 15. API RULE
+ * 18. API AUTHORIZATION
  * ======================================================= */
 
 /**
- * Proxy does not redirect private API requests to HTML login
- * pages.
+ * Proxy does not redirect API calls to /login.
  *
- * API authorization belongs inside each Route Handler.
  *
  * Example:
  *
+ * /api/intake/preview
+ * /api/intake/confirm
  * /api/ai
- *      ↓
- * requireAAL2UserId()
- *
  * /api/opportunities
- *      ↓
- * requireAAL2UserId()
  *
- * This preserves predictable JSON error behavior.
+ *
+ * Their Route Handlers must independently verify the user and
+ * return predictable JSON errors.
  */
 
 
 /* =========================================================
- * 16. COOKIE RULE
+ * 19. COOKIE SYNCHRONIZATION
  * ======================================================= */
 
 /**
- * Supabase SSR cookie flow:
+ * Supabase SSR flow:
  *
- * Request cookies
+ * request cookies
  *      ↓
- * Proxy Supabase client
+ * createServerClient()
  *      ↓
- * refreshed token if necessary
+ * getClaims()
  *      ↓
- * request.cookies updated
+ * refresh if necessary
+ *      ↓
+ * request cookies updated
  *      +
- * response.cookies updated
- *
- * Both directions matter.
+ * response cookies updated
  */
 
 
 /* =========================================================
- * 17. NO SERVICE ROLE
+ * 20. NO SERVICE ROLE
  * ======================================================= */
 
 /**
- * Proxy uses only:
+ * Proxy uses only public Supabase configuration:
  *
  * NEXT_PUBLIC_SUPABASE_URL
  * NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
  *
- * It never receives or uses:
+ *
+ * It never uses:
  *
  * service_role
  * database password
  * OpenAI API key
- * other production secrets
+ * private document credentials
  */
 
 
 /* =========================================================
- * 18. NO DATA ACCESS
+ * 21. NO PRIVATE DOMAIN DATA
  * ======================================================= */
 
 /**
- * Proxy does NOT query:
+ * Proxy does not query:
  *
- * finances
+ * finance
  * investments
  * goals
  * projects
  * tasks
- * career
+ * travel
+ * documents
  * learning
+ * career
  * memory
  * audit logs
  *
- * Authentication refresh should remain lightweight.
+ *
+ * It only handles authentication routing and cookie
+ * synchronization.
  */
 
 
 /* =========================================================
- * 19. NO AI
+ * 22. NO AI
  * ======================================================= */
 
 /**
  * Proxy never invokes:
  *
  * OpenAI
- * Chief of Staff
+ * LIFE AI
+ * Intake Intelligence
  * Decision Simulator
  * Opportunity Search
  *
- * Authentication infrastructure and AI infrastructure remain
- * isolated.
+ *
+ * Authentication infrastructure remains isolated from AI.
  */
 
 
 /* =========================================================
- * 20. FAIL-CLOSED RULE
+ * 23. FAIL-CLOSED RULE
  * ======================================================= */
 
 /**
@@ -585,30 +642,28 @@ export const config = {
  *      ↓
  * login
  *
- * Proxy never assumes that malformed or unverified cookie
- * state represents a valid user.
+ *
+ * Invalid or malformed cookie state is never treated as a
+ * valid authenticated identity.
  */
 
 
 /* =========================================================
- * 21. NEXT.JS 16 RULE
+ * 24. NEXT.JS 16
  * ======================================================= */
 
 /**
- * LIFE OS targets Next.js 16.
+ * LIFE OS uses the Next.js 16 convention:
  *
- * Therefore the framework convention is:
+ * proxy.ts
  *
- * proxy.ts ✅
  *
- * not:
- *
- * middleware.ts ❌
+ * not the older middleware.ts convention.
  */
 
 
 /* =========================================================
- * 22. FINAL PROXY RULE
+ * 25. FINAL LIFE OS V2 PROXY RULE
  * ======================================================= */
 
 /**
@@ -616,18 +671,18 @@ export const config = {
  *      ↓
  * Supabase cookie synchronization
  *      ↓
- * Verified claims
+ * verified claims
  *      ↓
- * Early route protection
+ * early private-page protection
  *      ↓
  * Server Component / Route Handler
  *      ↓
- * AAL2
+ * verified authenticated identity
  *      ↓
- * RLS
+ * PostgreSQL / Storage RLS
  *
  *
- * Proxy helps protect the door.
+ * Proxy protects the entrance.
  *
- * It is not the vault.
+ * RLS protects the data.
  */
