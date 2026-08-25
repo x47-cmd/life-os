@@ -2,6 +2,8 @@ import type {
   Metadata,
 } from "next";
 
+import Link from "next/link";
+
 import {
   AppShell,
 } from "@/components/app-shell";
@@ -1020,6 +1022,123 @@ export default async function InvestmentsPage() {
 
 
         {/* =================================================
+         * LIFE INVEST AI
+         * =============================================== */}
+
+        <section
+          className="page-section"
+          aria-labelledby="life-invest-ai-title"
+        >
+          <article
+            className="card"
+            style={{
+              display:
+                "grid",
+
+              gridTemplateColumns:
+                "minmax(0, 1fr) auto",
+
+              gap:
+                "18px",
+
+              alignItems:
+                "center",
+            }}
+          >
+            <div>
+              <div
+                className="badge badge--accent"
+                style={{
+                  marginBottom:
+                    "10px",
+                }}
+              >
+                ✦ إضافة ذكية
+              </div>
+
+              <h2
+                id="life-invest-ai-title"
+                className="section-title"
+                style={{
+                  margin:
+                    0,
+                }}
+              >
+                LIFE Invest AI
+              </h2>
+
+              <p
+                className="text-subtle"
+                style={{
+                  margin:
+                    "8px 0 0",
+
+                  maxWidth:
+                    "720px",
+
+                  lineHeight:
+                    1.7,
+                }}
+              >
+                تحليل إضافي للسوق ومحفظتك يجمع البيانات، الشارت، النتائج والأخبار ويعطيك رأيًا احتماليًا مع سجل حقيقي لدقة توقعاته.
+              </p>
+
+              <p
+                className="text-subtle text-small"
+                style={{
+                  margin:
+                    "8px 0 0",
+                }}
+              >
+                أداة مساعدة فقط — القرار والتنفيذ يظلان بيدك.
+              </p>
+            </div>
+
+            <Link
+              href="/investments/intelligence"
+              aria-label="فتح LIFE Invest AI"
+              style={{
+                display:
+                  "inline-flex",
+
+                alignItems:
+                  "center",
+
+                justifyContent:
+                  "center",
+
+                minHeight:
+                  "44px",
+
+                padding:
+                  "10px 16px",
+
+                borderRadius:
+                  "12px",
+
+                textDecoration:
+                  "none",
+
+                fontWeight:
+                  700,
+
+                whiteSpace:
+                  "nowrap",
+
+                background:
+                  "#111827",
+
+                color:
+                  "#ffffff",
+              }}
+            >
+              فتح التحليل
+            </Link>
+          </article>
+        </section>
+
+
+        {/* =================================================
          * INVESTMENT PRINCIPLE
          * =============================================== */}
 
@@ -1454,9 +1573,13 @@ export default async function InvestmentsPage() {
  * Opening Investments does not send portfolio data to
  * OpenAI.
  *
- * AI sees investment context only through the explicitly
- * controlled AI context/tool boundaries when the user asks
- * for analysis.
+ * LIFE Invest AI remains an optional subpage.
+ *
+ * Opening the normal Investments page does NOT automatically
+ * run market analysis or send the portfolio to OpenAI.
+ *
+ * Analysis starts only after the user explicitly opens the
+ * intelligence layer and requests analysis.
  */
 
 
@@ -1503,7 +1626,36 @@ export default async function InvestmentsPage() {
 
 
 /* =========================================================
- * 20. FINAL INVESTMENT RULE
+ * 20. LIFE INVEST AI BOUNDARY
+ * ======================================================= */
+
+/**
+ * LIFE Invest AI is an optional intelligence layer.
+ *
+ * It does NOT replace the normal portfolio experience.
+ *
+ *
+ * Main page:
+ *
+ * holdings
+ * cost basis
+ * value
+ * targets
+ * transactions
+ *
+ *
+ * Optional intelligence page:
+ *
+ * market evidence
+ * technical analysis
+ * AI interpretation
+ * probabilistic forecasts
+ * Track Record
+ */
+
+
+/* =========================================================
+ * 21. FINAL INVESTMENT RULE
  * ======================================================= */
 
 /**
@@ -1517,7 +1669,9 @@ export default async function InvestmentsPage() {
  * How close am I to each quantity target?
  * What was recently recorded?
  *
- * Nothing more.
+ *
+ * LIFE Invest AI stays one optional click deeper.
+ *
  *
  * Simple outside.
  * Intelligent underneath.
