@@ -4,11 +4,13 @@ import {
 
 import {
   getAuthenticationState,
+  MFA_ROUTE,
 } from "@/lib/auth";
 
 import {
   DEFAULT_AUTHENTICATED_ROUTE,
   LOGIN_ROUTE,
+  REQUIRED_AUTHENTICATION_LEVEL,
 } from "@/lib/constants";
 
 import {
@@ -105,6 +107,16 @@ function redirectToDashboard(
   return safeRedirect(
     request,
     DEFAULT_AUTHENTICATED_ROUTE,
+  );
+}
+
+
+function redirectToMfa(
+  request: Request,
+) {
+  return safeRedirect(
+    request,
+    MFA_ROUTE,
   );
 }
 
@@ -282,14 +294,15 @@ export async function GET(
       );
     }
 
-    /**
-     * LIFE OS V1 uses password-only authentication.
-     *
-     * A verified Supabase authenticated session is sufficient
-     * to enter the private workspace.
-     *
-     * PostgreSQL RLS continues to enforce row ownership.
-     */
+    if (
+      auth.current_level !==
+        REQUIRED_AUTHENTICATION_LEVEL
+    ) {
+      return redirectToMfa(
+        request,
+      );
+    }
+
     return redirectToDashboard(
       request,
     );
@@ -370,6 +383,7 @@ export async function GET(
  * Allowed destinations are only:
  *
  * /login
+ * /mfa
  * authenticated dashboard
  *
  *
@@ -392,17 +406,9 @@ export async function GET(
  *      ↓
  * Verified Authentication State
  *      ↓
- * Authenticated User
+ * Mandatory AAL2 Verification
  *      ↓
  * Dashboard
- *
- *
- * LIFE OS V1 does not require:
- *
- * - MFA enrollment
- * - TOTP verification
- * - QR setup
- * - AAL2
  */
 
 
@@ -486,6 +492,8 @@ export async function GET(
  *      ↓
  * Verified Authentication State
  *      ↓
+ * Mandatory AAL2 Verification
+ *      ↓
  * Server Authorization
  *      ↓
  * PostgreSQL RLS
@@ -507,8 +515,8 @@ export async function GET(
  *
  * No private data.
  * No arbitrary redirects.
- * No MFA requirement.
- * No QR enrollment.
+ * Mandatory MFA routing.
+ * AAL2 required before private access.
  * No AI.
  * No execution.
  * No leaked authentication errors.
