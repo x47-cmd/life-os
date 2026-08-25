@@ -12,6 +12,8 @@ import {
   AppShell,
 } from "@/components/app-shell";
 
+import { DataEntryButton } from "@/components/data-entry/data-entry-button";
+
 import {
   PageHeader,
 } from "@/components/page-header";
@@ -1784,6 +1786,7 @@ export default function AssistantPage() {
         </section>
 
       </div>
+      <section className="page-section"><div className="card" style={{ display: "flex", flexWrap: "wrap", gap: ".65rem" }}><DataEntryButton kind="memory" /><DataEntryButton kind="goal" /><DataEntryButton kind="task" /></div></section>
     </AppShell>
   );
 }
