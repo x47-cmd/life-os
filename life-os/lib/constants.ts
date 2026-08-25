@@ -43,7 +43,8 @@ import type {
  * Authentication:
  *
  * password-authenticated verified session
- * AAL1 minimum
+ * mandatory TOTP verification
+ * AAL2 required for private access
  *
  *
  * Permanent safety rule:
@@ -1714,18 +1715,24 @@ export const FORBIDDEN_AUDIT_METADATA_KEYS = [
  * ======================================================= */
 
 /**
- * LIFE OS V2 requires a verified authenticated Supabase
- * session.
+ * LIFE OS requires:
+ *
+ * verified authenticated Supabase session
+ * +
+ * enrolled TOTP factor
+ * +
+ * completed MFA challenge
+ * +
+ * AAL2
  *
  *
- * Password login satisfies AAL1.
+ * A password-authenticated AAL1 session may access only the
+ * MFA enrollment and verification flow.
  *
- *
- * TOTP may still exist as optional account hardening, but the
- * application does not require AAL2 for ordinary V2 use.
+ * Private LIFE OS pages, APIs and data require AAL2.
  */
 export const REQUIRED_AUTHENTICATION_LEVEL =
-  "aal1";
+  "aal2";
 
 
 export const LOGIN_ROUTE =
@@ -2024,17 +2031,22 @@ export const APPLICATION_SAFETY_DEFAULTS = {
  * ======================================================= */
 
 /**
- * Required:
+ * Required for private LIFE OS access:
  *
  * verified authenticated session
  * +
- * AAL1 minimum
+ * enrolled TOTP factor
+ * +
+ * completed MFA challenge
+ * +
+ * AAL2
  *
  *
- * Not required for ordinary application use:
+ * AAL1 is permitted only while completing the controlled
+ * MFA enrollment or verification flow.
  *
- * mandatory TOTP
- * mandatory AAL2
+ * No private financial, investment, career, learning, travel,
+ * document, memory or audit data may be accessed at AAL1.
  */
 
 
