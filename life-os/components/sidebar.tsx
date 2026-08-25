@@ -1,3 +1,8 @@
+FULL PATH — COPY AND PASTE:
+life-os/components/sidebar.tsx
+
+FULL CODE — REPLACE THE GITHUB FILE COMPLETELY:
+
 "use client";
 
 import Link from "next/link";
@@ -18,25 +23,14 @@ import {
 
 /* =========================================================
  * LIFE OS V2
- * FINAL SIDEBAR
+ * RESPONSIVE NAVIGATION
  *
- * Exactly six primary destinations:
+ * Desktop:
+ * - permanent sidebar
  *
- * الرئيسية
- * المال
- * خططي
- * السفر
- * التطوير
- * LIFE AI
- *
- *
- * Detailed / secondary pages remain available under:
- *
- * المزيد
- *
- *
- * Simple outside.
- * Intelligent underneath.
+ * Mobile:
+ * - fixed bottom navigation
+ * - secondary pages inside a bottom sheet
  * ======================================================= */
 
 
@@ -44,7 +38,7 @@ import {
  * 1. TYPES
  * ======================================================= */
 
-interface SidebarItem {
+interface NavigationItemDefinition {
   label:
     string;
 
@@ -57,93 +51,56 @@ interface SidebarItem {
 
 
 /* =========================================================
- * 2. PRIMARY V2 NAVIGATION
+ * 2. PRIMARY NAVIGATION
  * ======================================================= */
 
-/**
- * These are the six permanent top-level LIFE OS V2 areas.
- *
- *
- * المال
- *      → Finance + Investments
- *
- * خططي
- *      → Goals + Projects
- *
- * السفر
- *      → Travel OS
- *
- * التطوير
- *      → Learning + Career
- *
- *
- * The technical database structure stays hidden from the
- * primary navigation.
- */
 const MAIN_NAVIGATION_ITEMS:
-readonly SidebarItem[] = [
+readonly NavigationItemDefinition[] = [
   {
     label:
       "الرئيسية",
-
     href:
       "/dashboard",
-
     icon:
       "⌂",
   },
-
   {
     label:
       "المال",
-
     href:
       "/finance",
-
     icon:
       "◈",
   },
-
   {
     label:
       "خططي",
-
     href:
       "/goals",
-
     icon:
       "◎",
   },
-
   {
     label:
       "السفر",
-
     href:
       "/travel",
-
     icon:
       "✈",
   },
-
   {
     label:
       "التطوير",
-
     href:
       "/learning",
-
     icon:
       "◉",
   },
-
   {
     label:
       "LIFE AI",
-
     href:
       "/assistant",
-
     icon:
       "✦",
   },
@@ -154,95 +111,53 @@ readonly SidebarItem[] = [
  * 3. SECONDARY NAVIGATION
  * ======================================================= */
 
-/**
- * These routes remain useful as detailed views.
- *
- * They are intentionally kept outside the six primary
- * navigation items.
- *
- *
- * /investments
- *      → detailed investment view under المال
- *
- * /projects
- *      → detailed project view under خططي
- *
- * /career
- *      → detailed career view under التطوير
- *
- * /tasks
- *      → detailed task view
- *
- * /audit
- *      → audit history
- *
- * /settings
- *      → account/application settings
- */
 const SECONDARY_NAVIGATION_ITEMS:
-readonly SidebarItem[] = [
+readonly NavigationItemDefinition[] = [
   {
     label:
       "الاستثمارات",
-
     href:
       "/investments",
-
     icon:
       "↗",
   },
-
   {
     label:
       "المشاريع",
-
     href:
       "/projects",
-
     icon:
       "▣",
   },
-
   {
     label:
       "المسار المهني",
-
     href:
       "/career",
-
     icon:
       "◇",
   },
-
   {
     label:
       "المهام",
-
     href:
       "/tasks",
-
     icon:
       "✓",
   },
-
   {
     label:
       "السجل",
-
     href:
       "/audit",
-
     icon:
       "≡",
   },
-
   {
     label:
       "الإعدادات",
-
     href:
       "/settings",
-
     icon:
       "⚙",
   },
@@ -250,13 +165,44 @@ readonly SidebarItem[] = [
 
 
 /* =========================================================
- * 4. ROUTE MATCHING
+ * 4. MOBILE NAVIGATION
+ * ======================================================= */
+
+/**
+ * Five everyday destinations stay visible at all times.
+ * Travel and the detailed pages live inside "المزيد".
+ */
+const MOBILE_NAVIGATION_ITEMS:
+readonly NavigationItemDefinition[] =
+  MAIN_NAVIGATION_ITEMS.filter(
+    (
+      item,
+    ) =>
+      item.href !==
+      "/travel",
+  );
+
+
+const MOBILE_MORE_ITEMS:
+readonly NavigationItemDefinition[] = [
+  ...MAIN_NAVIGATION_ITEMS.filter(
+    (
+      item,
+    ) =>
+      item.href ===
+      "/travel",
+  ),
+  ...SECONDARY_NAVIGATION_ITEMS,
+];
+
+
+/* =========================================================
+ * 5. ROUTE MATCHING
  * ======================================================= */
 
 function isRouteActive(
   pathname:
     string,
-
   href:
     string,
 ): boolean {
@@ -274,23 +220,36 @@ function isRouteActive(
 }
 
 
+function hasActiveRoute(
+  pathname:
+    string,
+  items:
+    readonly NavigationItemDefinition[],
+): boolean {
+  return items.some(
+    (
+      item,
+    ) =>
+      isRouteActive(
+        pathname,
+        item.href,
+      ),
+  );
+}
+
+
 /* =========================================================
- * 5. NAVIGATION ITEM
+ * 6. DESKTOP NAVIGATION ITEM
  * ======================================================= */
 
-function NavigationItem({
+function DesktopNavigationItem({
   item,
   pathname,
-  onNavigate,
 }: {
   item:
-    SidebarItem;
-
+    NavigationItemDefinition;
   pathname:
     string;
-
-  onNavigate:
-    () => void;
 }) {
   const active =
     isRouteActive(
@@ -307,7 +266,6 @@ function NavigationItem({
         }
         className={[
           "sidebar__link",
-
           active
             ? "sidebar__link--active"
             : "",
@@ -322,9 +280,6 @@ function NavigationItem({
           active
             ? "page"
             : undefined
-        }
-        onClick={
-          onNavigate
         }
       >
         <span
@@ -345,7 +300,74 @@ function NavigationItem({
 
 
 /* =========================================================
- * 6. SIDEBAR
+ * 7. MOBILE NAVIGATION ITEM
+ * ======================================================= */
+
+function MobileNavigationItem({
+  item,
+  pathname,
+  onNavigate,
+}: {
+  item:
+    NavigationItemDefinition;
+  pathname:
+    string;
+  onNavigate:
+    () => void;
+}) {
+  const active =
+    isRouteActive(
+      pathname,
+      item.href,
+    );
+
+
+  return (
+    <li className="mobile-bottom-navigation__item">
+      <Link
+        href={
+          item.href
+        }
+        className={[
+          "mobile-bottom-navigation__link",
+          active
+            ? "mobile-bottom-navigation__link--active"
+            : "",
+        ]
+          .filter(
+            Boolean,
+          )
+          .join(
+            " ",
+          )}
+        aria-current={
+          active
+            ? "page"
+            : undefined
+        }
+        onClick={
+          onNavigate
+        }
+      >
+        <span
+          className="mobile-bottom-navigation__icon"
+          aria-hidden="true"
+        >
+          {item.icon}
+        </span>
+
+
+        <span className="mobile-bottom-navigation__label">
+          {item.label}
+        </span>
+      </Link>
+    </li>
+  );
+}
+
+
+/* =========================================================
+ * 8. RESPONSIVE NAVIGATION
  * ======================================================= */
 
 export function Sidebar() {
@@ -353,15 +375,22 @@ export function Sidebar() {
     usePathname();
 
 
-  /*
-   * Path on which the mobile menu was opened.
-   *
-   * When navigation changes pathname, the drawer naturally
-   * stops matching and closes.
+  const [
+    desktopMoreOpen,
+    setDesktopMoreOpen,
+  ] =
+    useState(
+      false,
+    );
+
+
+  /**
+   * Storing the opening pathname makes the sheet close
+   * automatically whenever navigation changes.
    */
   const [
-    mobileMenuPath,
-    setMobileMenuPath,
+    mobileMorePath,
+    setMobileMorePath,
   ] =
     useState<
       string |
@@ -371,54 +400,38 @@ export function Sidebar() {
     );
 
 
-  /*
-   * Secondary navigation is collapsed by default.
-   */
-  const [
-    moreOpen,
-    setMoreOpen,
-  ] =
-    useState(
-      false,
-    );
-
-
-  const isMobileOpen =
-    mobileMenuPath ===
+  const mobileMoreOpen =
+    mobileMorePath ===
     pathname;
 
 
-  /*
-   * When the user is currently inside a secondary page,
-   * automatically keep "المزيد" expanded so location remains
-   * obvious.
-   */
   const secondaryRouteActive =
-    SECONDARY_NAVIGATION_ITEMS
-      .some(
-        (
-          item,
-        ) =>
-          isRouteActive(
-            pathname,
-            item.href,
-          ),
-      );
+    hasActiveRoute(
+      pathname,
+      SECONDARY_NAVIGATION_ITEMS,
+    );
 
 
-  const showMore =
-    moreOpen ||
+  const mobileMoreRouteActive =
+    hasActiveRoute(
+      pathname,
+      MOBILE_MORE_ITEMS,
+    );
+
+
+  const showDesktopMore =
+    desktopMoreOpen ||
     secondaryRouteActive;
 
 
   /* =======================================================
-   * 7. MOBILE BODY SCROLL LOCK
+   * 9. MOBILE SHEET SCROLL LOCK
    * ===================================================== */
 
   useEffect(
     () => {
       if (
-        !isMobileOpen
+        !mobileMoreOpen
       ) {
         return;
       }
@@ -440,21 +453,20 @@ export function Sidebar() {
           previousOverflow;
       };
     },
-
     [
-      isMobileOpen,
+      mobileMoreOpen,
     ],
   );
 
 
   /* =======================================================
-   * 8. ESCAPE KEY
+   * 10. ESCAPE KEY
    * ===================================================== */
 
   useEffect(
     () => {
       if (
-        !isMobileOpen
+        !mobileMoreOpen
       ) {
         return;
       }
@@ -468,7 +480,7 @@ export function Sidebar() {
           event.key ===
           "Escape"
         ) {
-          setMobileMenuPath(
+          setMobileMorePath(
             null,
           );
         }
@@ -488,45 +500,30 @@ export function Sidebar() {
         );
       };
     },
-
     [
-      isMobileOpen,
+      mobileMoreOpen,
     ],
   );
 
 
-  /* =======================================================
-   * 9. CLOSE AFTER NAVIGATION
-   * ===================================================== */
-
-  function handleNavigate():
+  function closeMobileMore():
   void {
-    setMobileMenuPath(
+    setMobileMorePath(
       null,
     );
   }
 
 
-  /* =======================================================
-   * 10. OPEN MOBILE MENU
-   * ===================================================== */
-
-  function handleOpenMobileMenu():
+  function toggleMobileMore():
   void {
-    setMobileMenuPath(
-      pathname,
-    );
-  }
-
-
-  /* =======================================================
-   * 11. CLOSE MOBILE MENU
-   * ===================================================== */
-
-  function handleCloseMobileMenu():
-  void {
-    setMobileMenuPath(
-      null,
+    setMobileMorePath(
+      (
+        current,
+      ) =>
+        current ===
+          pathname
+          ? null
+          : pathname,
     );
   }
 
@@ -534,73 +531,15 @@ export function Sidebar() {
   return (
     <>
       {/* ===================================================
-       * MOBILE MENU BUTTON
-       * ================================================= */}
-
-      <button
-        type="button"
-        className="sidebar-mobile-trigger"
-        aria-label="فتح القائمة الرئيسية"
-        aria-expanded={
-          isMobileOpen
-        }
-        aria-controls="life-os-sidebar"
-        onClick={
-          handleOpenMobileMenu
-        }
-      >
-        <span
-          aria-hidden="true"
-          className="sidebar-mobile-trigger__icon"
-        >
-          ☰
-        </span>
-      </button>
-
-
-      {/* ===================================================
-       * MOBILE BACKDROP
-       * ================================================= */}
-
-      {isMobileOpen ? (
-        <button
-          type="button"
-          className="sidebar-backdrop"
-          aria-label="إغلاق القائمة الرئيسية"
-          onClick={
-            handleCloseMobileMenu
-          }
-        />
-      ) : null}
-
-
-      {/* ===================================================
-       * SIDEBAR
+       * DESKTOP SIDEBAR
        * ================================================= */}
 
       <aside
         id="life-os-sidebar"
-        className={[
-          "sidebar",
-
-          isMobileOpen
-            ? "sidebar--open"
-            : "",
-        ]
-          .filter(
-            Boolean,
-          )
-          .join(
-            " ",
-          )}
+        className="sidebar"
         aria-label="التنقل الرئيسي"
       >
         <div className="sidebar__inner">
-
-          {/* ===============================================
-           * BRAND
-           * ============================================= */}
-
           <div className="sidebar__brand">
             <div
               className="sidebar__brand-mark"
@@ -619,24 +558,8 @@ export function Sidebar() {
                 Personal AI OS
               </span>
             </div>
-
-
-            <button
-              type="button"
-              className="sidebar__mobile-close"
-              aria-label="إغلاق القائمة الرئيسية"
-              onClick={
-                handleCloseMobileMenu
-              }
-            >
-              ×
-            </button>
           </div>
 
-
-          {/* ===============================================
-           * SIX PRIMARY V2 DESTINATIONS
-           * ============================================= */}
 
           <nav
             className="sidebar__navigation"
@@ -647,7 +570,7 @@ export function Sidebar() {
                 (
                   item,
                 ) => (
-                  <NavigationItem
+                  <DesktopNavigationItem
                     key={
                       item.href
                     }
@@ -657,61 +580,27 @@ export function Sidebar() {
                     pathname={
                       pathname
                     }
-                    onNavigate={
-                      handleNavigate
-                    }
                   />
                 ),
               )}
             </ul>
 
 
-            {/* =============================================
-             * MORE
-             * =========================================== */}
-
-            <div
-              style={{
-                marginTop:
-                  "18px",
-
-                paddingTop:
-                  "14px",
-
-                borderTop:
-                  "1px solid var(--border)",
-              }}
-            >
+            <div className="sidebar__more">
               <button
                 type="button"
-                className="sidebar__link"
+                className="sidebar__link sidebar__more-button"
                 aria-expanded={
-                  showMore
+                  showDesktopMore
                 }
                 aria-controls="life-os-secondary-navigation"
                 onClick={() => {
-                  setMoreOpen(
+                  setDesktopMoreOpen(
                     (
                       current,
                     ) =>
                       !current,
                   );
-                }}
-                style={{
-                  width:
-                    "100%",
-
-                  border:
-                    0,
-
-                  cursor:
-                    "pointer",
-
-                  background:
-                    "transparent",
-
-                  textAlign:
-                    "inherit",
                 }}
               >
                 <span
@@ -728,45 +617,35 @@ export function Sidebar() {
 
 
                 <span
+                  className={[
+                    "sidebar__more-arrow",
+                    showDesktopMore
+                      ? "sidebar__more-arrow--open"
+                      : "",
+                  ]
+                    .filter(
+                      Boolean,
+                    )
+                    .join(
+                      " ",
+                    )}
                   aria-hidden="true"
-                  style={{
-                    marginInlineStart:
-                      "auto",
-
-                    color:
-                      "var(--text-tertiary)",
-
-                    fontSize:
-                      "12px",
-
-                    transform:
-                      showMore
-                        ? "rotate(180deg)"
-                        : "none",
-
-                    transition:
-                      "transform 160ms ease",
-                  }}
                 >
                   ▾
                 </span>
               </button>
 
 
-              {showMore ? (
+              {showDesktopMore ? (
                 <ul
                   id="life-os-secondary-navigation"
-                  className="sidebar__list"
-                  style={{
-                    marginTop:
-                      "4px",
-                  }}
+                  className="sidebar__list sidebar__secondary-list"
                 >
                   {SECONDARY_NAVIGATION_ITEMS.map(
                     (
                       item,
                     ) => (
-                      <NavigationItem
+                      <DesktopNavigationItem
                         key={
                           item.href
                         }
@@ -775,9 +654,6 @@ export function Sidebar() {
                         }
                         pathname={
                           pathname
-                        }
-                        onNavigate={
-                          handleNavigate
                         }
                       />
                     ),
@@ -788,129 +664,224 @@ export function Sidebar() {
           </nav>
 
 
-          {/* ===============================================
-           * FOOTER
-           * ============================================= */}
-
           <div className="sidebar__footer">
             <p className="sidebar__footer-text">
               بسيط في العرض، عميق في الذكاء.
             </p>
           </div>
-
         </div>
       </aside>
+
+
+      {/* ===================================================
+       * MOBILE MORE BACKDROP
+       * ================================================= */}
+
+      {mobileMoreOpen ? (
+        <button
+          type="button"
+          className="mobile-more-backdrop"
+          aria-label="إغلاق قائمة المزيد"
+          onClick={
+            closeMobileMore
+          }
+        />
+      ) : null}
+
+
+      {/* ===================================================
+       * MOBILE MORE SHEET
+       * ================================================= */}
+
+      {mobileMoreOpen ? (
+        <section
+          id="life-os-mobile-more"
+          className="mobile-more-sheet"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="life-os-mobile-more-title"
+        >
+          <div className="mobile-more-sheet__handle" />
+
+
+          <div className="mobile-more-sheet__header">
+            <div>
+              <p className="mobile-more-sheet__eyebrow">
+                LIFE OS
+              </p>
+
+              <h2
+                id="life-os-mobile-more-title"
+                className="mobile-more-sheet__title"
+              >
+                المزيد
+              </h2>
+            </div>
+
+
+            <button
+              type="button"
+              className="mobile-more-sheet__close"
+              aria-label="إغلاق قائمة المزيد"
+              onClick={
+                closeMobileMore
+              }
+            >
+              ×
+            </button>
+          </div>
+
+
+          <ul className="mobile-more-sheet__list">
+            {MOBILE_MORE_ITEMS.map(
+              (
+                item,
+              ) => {
+                const active =
+                  isRouteActive(
+                    pathname,
+                    item.href,
+                  );
+
+
+                return (
+                  <li
+                    key={
+                      item.href
+                    }
+                  >
+                    <Link
+                      href={
+                        item.href
+                      }
+                      className={[
+                        "mobile-more-sheet__link",
+                        active
+                          ? "mobile-more-sheet__link--active"
+                          : "",
+                      ]
+                        .filter(
+                          Boolean,
+                        )
+                        .join(
+                          " ",
+                        )}
+                      aria-current={
+                        active
+                          ? "page"
+                          : undefined
+                      }
+                      onClick={
+                        closeMobileMore
+                      }
+                    >
+                      <span
+                        className="mobile-more-sheet__icon"
+                        aria-hidden="true"
+                      >
+                        {item.icon}
+                      </span>
+
+
+                      <span>
+                        {item.label}
+                      </span>
+                    </Link>
+                  </li>
+                );
+              },
+            )}
+          </ul>
+        </section>
+      ) : null}
+
+
+      {/* ===================================================
+       * MOBILE FIXED BOTTOM NAVIGATION
+       * ================================================= */}
+
+      <nav
+        className="mobile-bottom-navigation"
+        aria-label="التنقل السريع"
+      >
+        <ul className="mobile-bottom-navigation__list">
+          {MOBILE_NAVIGATION_ITEMS.map(
+            (
+              item,
+            ) => (
+              <MobileNavigationItem
+                key={
+                  item.href
+                }
+                item={
+                  item
+                }
+                pathname={
+                  pathname
+                }
+                onNavigate={
+                  closeMobileMore
+                }
+              />
+            ),
+          )}
+
+
+          <li className="mobile-bottom-navigation__item">
+            <button
+              type="button"
+              className={[
+                "mobile-bottom-navigation__link",
+                "mobile-bottom-navigation__button",
+                mobileMoreRouteActive ||
+                mobileMoreOpen
+                  ? "mobile-bottom-navigation__link--active"
+                  : "",
+              ]
+                .filter(
+                  Boolean,
+                )
+                .join(
+                  " ",
+                )}
+              aria-expanded={
+                mobileMoreOpen
+              }
+              aria-controls="life-os-mobile-more"
+              onClick={
+                toggleMobileMore
+              }
+            >
+              <span
+                className="mobile-bottom-navigation__icon"
+                aria-hidden="true"
+              >
+                ⋯
+              </span>
+
+
+              <span className="mobile-bottom-navigation__label">
+                المزيد
+              </span>
+            </button>
+          </li>
+        </ul>
+      </nav>
     </>
   );
 }
 
 
 /* =========================================================
- * 12. FINAL PRIMARY NAVIGATION CONTRACT
+ * 11. NAVIGATION CONTRACT
  * ======================================================= */
 
 /**
- * Exactly six top-level destinations:
+ * Desktop keeps the complete six-area sidebar.
  *
- * 1. الرئيسية
- * 2. المال
- * 3. خططي
- * 4. السفر
- * 5. التطوير
- * 6. LIFE AI
+ * Mobile keeps the five most-used areas visible and places
+ * Travel plus detailed pages inside a single bottom sheet.
  *
- *
- * No:
- *
- * قريبًا
- * disabled Travel item
- * duplicate Finance/Investment top-level links
- * duplicate Goal/Project top-level links
- * duplicate Learning/Career top-level links
- */
-
-
-/* =========================================================
- * 13. INFORMATION ARCHITECTURE
- * ======================================================= */
-
-/**
- * User-facing structure:
- *
- * المال
- *      ↓
- * money + investments
- *
- *
- * خططي
- *      ↓
- * goals + projects
- *
- *
- * التطوير
- *      ↓
- * learning + career
- *
- *
- * Technical detail pages remain available through:
- *
- * المزيد
- */
-
-
-/* =========================================================
- * 14. TRAVEL RULE
- * ======================================================= */
-
-/**
- * السفر is now a normal first-class V2 route:
- *
- * /travel
- *
- *
- * It is no longer:
- *
- * href:null
- * disabled
- * قريبًا
- */
-
-
-/* =========================================================
- * 15. SECURITY BOUNDARY
- * ======================================================= */
-
-/**
- * Sidebar controls navigation only.
- *
- * It does not:
- *
- * authenticate
- * authorize
- * read private data
- * write private data
- * upload documents
- * call AI
- *
- *
- * Security remains enforced server-side through:
- *
- * authenticated identity
- * protected routes
- * PostgreSQL RLS
- * Storage RLS
- */
-
-
-/* =========================================================
- * 16. FINAL LIFE OS V2 RULE
- * ======================================================= */
-
-/**
- * The user navigates by life area,
- * not by database table.
- *
- *
- * Simple outside.
- * Intelligent underneath.
+ * Navigation has no authority to read or mutate private data.
+ * Authentication and ownership remain enforced server-side.
  */
