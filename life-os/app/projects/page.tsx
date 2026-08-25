@@ -6,6 +6,8 @@ import {
   AppShell,
 } from "@/components/app-shell";
 
+import { DataEntryButton } from "@/components/data-entry/data-entry-button";
+
 import {
   DataTable,
   type DataTableColumn,
@@ -1042,6 +1044,7 @@ export default async function ProjectsPage() {
         </section>
 
       </div>
+      <section className="page-section"><div className="card"><DataEntryButton kind="project" /></div></section>
     </AppShell>
   );
 }
