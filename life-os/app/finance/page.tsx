@@ -2,6 +2,8 @@ import type {
   Metadata,
 } from "next";
 
+import Link from "next/link";
+
 import {
   AppShell,
 } from "@/components/app-shell";
@@ -24,33 +26,68 @@ import {
 } from "@/components/stat-card";
 
 import {
-  requireAAL2Identity,
+  requireAuthenticatedIdentity,
 } from "@/lib/auth";
 
 import {
   getFinanceSnapshot,
+  getInvestmentSnapshot,
 } from "@/lib/data";
 
 import {
   formatCurrency,
   formatDate,
   formatPercent,
+  formatQuantity,
+  formatSignedCurrency,
 } from "@/lib/format";
 
 import type {
   BudgetItem,
   FinanceSnapshot,
   IncomeSource,
+  InvestmentPosition,
 } from "@/lib/types";
+
+
+/* =========================================================
+ * LIFE OS V2
+ * MONEY
+ *
+ * One primary money surface:
+ *
+ * Finance
+ * +
+ * Investments
+ *
+ *
+ * This page answers:
+ *
+ * - كم يدخل؟
+ * - وين يروح؟
+ * - كم يتبقى؟
+ * - كم قيمة المحفظة؟
+ * - كم الربح / الخسارة؟
+ * - كم هدف الاستثمار الشهري؟
+ *
+ *
+ * Detailed investment management remains available at:
+ *
+ * /investments
+ *
+ * Simple outside.
+ * Intelligent underneath.
+ * ======================================================= */
 
 
 /* =========================================================
  * 1. METADATA
  * ======================================================= */
 
-export const metadata: Metadata = {
+export const metadata:
+Metadata = {
   title:
-    "المالية",
+    "المال",
 };
 
 
@@ -59,9 +96,12 @@ export const metadata: Metadata = {
  * ======================================================= */
 
 function getFrequencyLabel(
-  frequency: string,
+  frequency:
+    string,
 ): string {
-  switch (frequency) {
+  switch (
+    frequency
+  ) {
     case "monthly":
       return "شهري";
 
@@ -85,9 +125,12 @@ function getFrequencyLabel(
  * ======================================================= */
 
 function getBudgetTypeLabel(
-  type: string,
+  type:
+    string,
 ): string {
-  switch (type) {
+  switch (
+    type
+  ) {
     case "expense":
       return "مصروف";
 
@@ -111,9 +154,12 @@ function getBudgetTypeLabel(
  * ======================================================= */
 
 function getBudgetTypeBadgeClass(
-  type: string,
+  type:
+    string,
 ): string {
-  switch (type) {
+  switch (
+    type
+  ) {
     case "saving":
       return "badge badge--positive";
 
@@ -131,83 +177,144 @@ function getBudgetTypeBadgeClass(
 
 
 /* =========================================================
- * 5. AVAILABILITY TONE
+ * 5. AVAILABLE MONEY TONE
  * ======================================================= */
 
 function getAvailableTone(
-  amount: number,
+  amount:
+    number,
 ):
   | "positive"
   | "warning"
   | "negative"
   | "neutral" {
   if (
-    amount < 0
+    amount <
+    0
   ) {
     return "negative";
   }
 
+
   if (
-    amount === 0
+    amount ===
+    0
   ) {
     return "warning";
   }
+
 
   return "positive";
 }
 
 
 /* =========================================================
- * 6. MONTHLY ALLOCATION PERCENTAGE
+ * 6. GAIN / LOSS TONE
+ * ======================================================= */
+
+function getGainLossTone(
+  amount:
+    number,
+):
+  | "positive"
+  | "negative"
+  | "neutral" {
+  if (
+    amount >
+    0
+  ) {
+    return "positive";
+  }
+
+
+  if (
+    amount <
+    0
+  ) {
+    return "negative";
+  }
+
+
+  return "neutral";
+}
+
+
+/* =========================================================
+ * 7. GAIN / LOSS CLASS
+ * ======================================================= */
+
+function getGainLossClass(
+  amount:
+    number |
+    null,
+): string {
+  if (
+    amount ===
+      null ||
+    amount ===
+      0
+  ) {
+    return "";
+  }
+
+
+  return amount >
+    0
+    ? "text-positive"
+    : "text-negative";
+}
+
+
+/* =========================================================
+ * 8. MONTHLY ALLOCATION PERCENT
  * ======================================================= */
 
 function calculateAllocationPercent(
-  amount: number,
-  income: number,
+  amount:
+    number,
+
+  income:
+    number,
 ): number {
   if (
-    income <= 0
+    income <=
+    0
   ) {
     return 0;
   }
+
 
   return Math.max(
     0,
     (
       amount /
       income
-    ) * 100,
+    ) *
+      100,
   );
 }
 
 
 /* =========================================================
- * 7. MONTHLY EQUIVALENT FOR DISPLAY
+ * 9. MONTHLY EQUIVALENT
  * ======================================================= */
 
-/**
- * This mirrors the locked deterministic monthly planning
- * convention in lib/data.ts.
- *
- * monthly
- *   → full amount
- *
- * annual
- *   → amount / 12
- *
- * one_time / other
- *   → excluded from recurring monthly baseline
- */
 function getMonthlyEquivalent(
-  amount: number,
-  frequency: string,
+  amount:
+    number,
+
+  frequency:
+    string,
 ): number {
-  switch (frequency) {
+  switch (
+    frequency
+  ) {
     case "monthly":
       return amount;
 
     case "annual":
-      return amount / 12;
+      return amount /
+        12;
 
     case "one_time":
     case "other":
@@ -218,11 +325,12 @@ function getMonthlyEquivalent(
 
 
 /* =========================================================
- * 8. INCOME TABLE
+ * 10. INCOME TABLE
  * ======================================================= */
 
 function buildIncomeColumns(
-  finance: FinanceSnapshot,
+  finance:
+    FinanceSnapshot,
 ): readonly DataTableColumn<IncomeSource>[] {
   return [
     {
@@ -233,7 +341,9 @@ function buildIncomeColumns(
         "مصدر الدخل",
 
       render:
-        (item) => (
+        (
+          item,
+        ) => (
           <div>
             <strong>
               {item.name}
@@ -265,12 +375,16 @@ function buildIncomeColumns(
         "end",
 
       render:
-        (item) => (
+        (
+          item,
+        ) => (
           <span className="currency">
-            {formatCurrency(
-              item.amount,
-              finance.currency,
-            )}
+            {
+              formatCurrency(
+                item.amount,
+                finance.currency,
+              )
+            }
           </span>
         ),
     },
@@ -283,7 +397,9 @@ function buildIncomeColumns(
         "التكرار",
 
       render:
-        (item) => (
+        (
+          item,
+        ) => (
           <span className="badge">
             {
               getFrequencyLabel(
@@ -305,15 +421,19 @@ function buildIncomeColumns(
         "end",
 
       render:
-        (item) => (
+        (
+          item,
+        ) => (
           <span className="currency">
-            {formatCurrency(
-              getMonthlyEquivalent(
-                item.amount,
-                item.frequency,
-              ),
-              finance.currency,
-            )}
+            {
+              formatCurrency(
+                getMonthlyEquivalent(
+                  item.amount,
+                  item.frequency,
+                ),
+                finance.currency,
+              )
+            }
           </span>
         ),
     },
@@ -323,10 +443,12 @@ function buildIncomeColumns(
         "next",
 
       header:
-        "الاستحقاق القادم",
+        "القادم",
 
       render:
-        (item) =>
+        (
+          item,
+        ) =>
           item.next_expected_date
             ? formatDate(
                 item.next_expected_date,
@@ -338,11 +460,12 @@ function buildIncomeColumns(
 
 
 /* =========================================================
- * 9. BUDGET TABLE
+ * 11. BUDGET TABLE
  * ======================================================= */
 
 function buildBudgetColumns(
-  finance: FinanceSnapshot,
+  finance:
+    FinanceSnapshot,
 ): readonly DataTableColumn<BudgetItem>[] {
   return [
     {
@@ -353,23 +476,23 @@ function buildBudgetColumns(
         "البند",
 
       render:
-        (item) => (
+        (
+          item,
+        ) => (
           <div>
             <strong>
               {item.name}
             </strong>
 
-            {item.category ? (
-              <div
-                className="text-subtle text-small"
-                style={{
-                  marginTop:
-                    "2px",
-                }}
-              >
-                {item.category}
-              </div>
-            ) : null}
+            <div
+              className="text-subtle text-small"
+              style={{
+                marginTop:
+                  "2px",
+              }}
+            >
+              {item.category}
+            </div>
           </div>
         ),
     },
@@ -382,7 +505,9 @@ function buildBudgetColumns(
         "النوع",
 
       render:
-        (item) => (
+        (
+          item,
+        ) => (
           <span
             className={
               getBudgetTypeBadgeClass(
@@ -410,12 +535,16 @@ function buildBudgetColumns(
         "end",
 
       render:
-        (item) => (
+        (
+          item,
+        ) => (
           <span className="currency">
-            {formatCurrency(
-              item.amount,
-              finance.currency,
-            )}
+            {
+              formatCurrency(
+                item.amount,
+                finance.currency,
+              )
+            }
           </span>
         ),
     },
@@ -428,7 +557,9 @@ function buildBudgetColumns(
         "التكرار",
 
       render:
-        (item) => (
+        (
+          item,
+        ) => (
           <span className="badge">
             {
               getFrequencyLabel(
@@ -450,15 +581,19 @@ function buildBudgetColumns(
         "end",
 
       render:
-        (item) => (
+        (
+          item,
+        ) => (
           <span className="currency">
-            {formatCurrency(
-              getMonthlyEquivalent(
-                item.amount,
-                item.frequency,
-              ),
-              finance.currency,
-            )}
+            {
+              formatCurrency(
+                getMonthlyEquivalent(
+                  item.amount,
+                  item.frequency,
+                ),
+                finance.currency,
+              )
+            }
           </span>
         ),
     },
@@ -468,14 +603,17 @@ function buildBudgetColumns(
         "due",
 
       header:
-        "يوم الاستحقاق",
+        "الاستحقاق",
 
       align:
         "center",
 
       render:
-        (item) =>
-          item.due_day !== null
+        (
+          item,
+        ) =>
+          item.due_day !==
+          null
             ? String(
                 item.due_day,
               )
@@ -486,36 +624,358 @@ function buildBudgetColumns(
 
 
 /* =========================================================
- * 10. FINANCE PAGE
+ * 12. INVESTMENT POSITION SORTING
+ * ======================================================= */
+
+function sortInvestmentPositions(
+  positions:
+    InvestmentPosition[],
+): InvestmentPosition[] {
+  return [
+    ...positions,
+  ].sort(
+    (
+      a,
+      b,
+    ) => {
+      const aValue =
+        a.estimated_value;
+
+      const bValue =
+        b.estimated_value;
+
+
+      if (
+        aValue ===
+          null &&
+        bValue ===
+          null
+      ) {
+        return a.asset.ticker.localeCompare(
+          b.asset.ticker,
+        );
+      }
+
+
+      if (
+        aValue ===
+        null
+      ) {
+        return 1;
+      }
+
+
+      if (
+        bValue ===
+        null
+      ) {
+        return -1;
+      }
+
+
+      return (
+        bValue -
+        aValue
+      );
+    },
+  );
+}
+
+
+/* =========================================================
+ * 13. INVESTMENT TABLE
+ * ======================================================= */
+
+function buildInvestmentColumns():
+readonly DataTableColumn<InvestmentPosition>[] {
+  return [
+    {
+      key:
+        "asset",
+
+      header:
+        "الأصل",
+
+      render:
+        (
+          position,
+        ) => (
+          <div>
+            <strong className="ticker">
+              {
+                position
+                  .asset
+                  .ticker
+              }
+            </strong>
+
+            <div
+              className="text-subtle text-small"
+              style={{
+                marginTop:
+                  "2px",
+              }}
+            >
+              {
+                position
+                  .asset
+                  .name
+              }
+            </div>
+          </div>
+        ),
+    },
+
+    {
+      key:
+        "quantity",
+
+      header:
+        "الكمية",
+
+      align:
+        "end",
+
+      render:
+        (
+          position,
+        ) => (
+          <span className="number">
+            {
+              formatQuantity(
+                position
+                  .asset
+                  .quantity,
+              )
+            }
+          </span>
+        ),
+    },
+
+    {
+      key:
+        "value",
+
+      header:
+        "القيمة",
+
+      align:
+        "end",
+
+      render:
+        (
+          position,
+        ) =>
+          position
+            .estimated_value !==
+          null ? (
+            <span className="currency">
+              {
+                formatCurrency(
+                  position
+                    .estimated_value,
+                  position
+                    .asset
+                    .currency,
+                )
+              }
+            </span>
+          ) : (
+            "—"
+          ),
+    },
+
+    {
+      key:
+        "gain_loss",
+
+      header:
+        "الربح / الخسارة",
+
+      align:
+        "end",
+
+      render:
+        (
+          position,
+        ) => {
+          if (
+            position
+              .estimated_gain_loss ===
+            null
+          ) {
+            return "—";
+          }
+
+
+          return (
+            <div
+              className={
+                getGainLossClass(
+                  position
+                    .estimated_gain_loss,
+                )
+              }
+            >
+              <strong className="currency">
+                {
+                  formatSignedCurrency(
+                    position
+                      .estimated_gain_loss,
+                    position
+                      .asset
+                      .currency,
+                  )
+                }
+              </strong>
+
+
+              {position
+                .estimated_gain_loss_percent !==
+              null ? (
+                <div
+                  className="text-small"
+                  style={{
+                    marginTop:
+                      "2px",
+                  }}
+                >
+                  {
+                    formatPercent(
+                      position
+                        .estimated_gain_loss_percent,
+                    )
+                  }
+                </div>
+              ) : null}
+            </div>
+          );
+        },
+    },
+
+    {
+      key:
+        "allocation",
+
+      header:
+        "من المحفظة",
+
+      align:
+        "center",
+
+      render:
+        (
+          position,
+        ) =>
+          position
+            .allocation_percent !==
+          null ? (
+            <span className="percentage">
+              {
+                formatPercent(
+                  position
+                    .allocation_percent,
+                )
+              }
+            </span>
+          ) : (
+            "—"
+          ),
+    },
+
+    {
+      key:
+        "monthly_target",
+
+      header:
+        "الضخ الشهري",
+
+      align:
+        "end",
+
+      render:
+        (
+          position,
+        ) =>
+          position
+            .asset
+            .monthly_contribution_target !==
+          null ? (
+            <span className="currency">
+              {
+                formatCurrency(
+                  position
+                    .asset
+                    .monthly_contribution_target,
+                  position
+                    .asset
+                    .currency,
+                )
+              }
+            </span>
+          ) : (
+            "—"
+          ),
+    },
+  ];
+}
+
+
+/* =========================================================
+ * 14. PAGE
  * ======================================================= */
 
 export default async function FinancePage() {
-  await requireAAL2Identity();
-
-  const finance =
-    await getFinanceSnapshot();
+  await requireAuthenticatedIdentity();
 
 
-  /* -------------------------------------------------------
-   * Active records only for primary presentation
-   * ---------------------------------------------------- */
+  const [
+    finance,
+    investments,
+  ] =
+    await Promise.all([
+      getFinanceSnapshot(),
+
+      getInvestmentSnapshot(),
+    ]);
+
 
   const activeIncomeSources =
-    finance.income_sources.filter(
-      (item) =>
-        item.is_active,
-    );
+    finance
+      .income_sources
+      .filter(
+        (
+          item,
+        ) =>
+          item.is_active,
+      );
+
 
   const activeBudgetItems =
-    finance.budget_items.filter(
-      (item) =>
-        item.is_active,
+    finance
+      .budget_items
+      .filter(
+        (
+          item,
+        ) =>
+          item.is_active,
+      );
+
+
+  const activeInvestmentPositions =
+    sortInvestmentPositions(
+      investments
+        .positions
+        .filter(
+          (
+            position,
+          ) =>
+            position
+              .asset
+              .is_active,
+        ),
     );
 
-
-  /* -------------------------------------------------------
-   * Allocation percentages
-   * ---------------------------------------------------- */
 
   const expensePercent =
     calculateAllocationPercent(
@@ -523,17 +983,20 @@ export default async function FinancePage() {
       finance.monthly_income,
     );
 
+
   const savingPercent =
     calculateAllocationPercent(
       finance.monthly_savings,
       finance.monthly_income,
     );
 
+
   const investmentPercent =
     calculateAllocationPercent(
       finance.monthly_investments,
       finance.monthly_income,
     );
+
 
   const debtPercent =
     calculateAllocationPercent(
@@ -554,10 +1017,15 @@ export default async function FinancePage() {
       finance,
     );
 
+
   const budgetColumns =
     buildBudgetColumns(
       finance,
     );
+
+
+  const investmentColumns =
+    buildInvestmentColumns();
 
 
   return (
@@ -570,8 +1038,8 @@ export default async function FinancePage() {
 
         <PageHeader
           eyebrow="Personal CFO"
-          title="المالية"
-          description="دخلك، توزيعك الشهري، وما يتبقى لك بعد كل الالتزامات."
+          title="المال"
+          description="دخلك، التزاماتك، ادخارك واستثماراتك في مكان واحد."
           meta={
             finance
               .latest_monthly_snapshot ? (
@@ -587,39 +1055,50 @@ export default async function FinancePage() {
               </span>
             ) : (
               <span>
-                لا توجد لقطة شهرية محفوظة بعد
+                العملة الأساسية:{" "}
+                <strong className="ltr">
+                  {finance.currency}
+                </strong>
               </span>
             )
+          }
+          action={
+            <Link
+              href="/investments"
+              className="button button--secondary"
+            >
+              تفاصيل الاستثمارات
+            </Link>
           }
         />
 
 
         {/* =================================================
-         * CURRENT FINANCIAL STATE
+         * MONEY AT A GLANCE
          * =============================================== */}
 
         <section
           className="page-section"
-          aria-labelledby="finance-state-title"
+          aria-labelledby="money-overview-title"
         >
           <div className="section-header">
             <div className="section-header__content">
               <h2
-                id="finance-state-title"
+                id="money-overview-title"
                 className="section-title"
               >
-                وضعك الشهري
+                وضعك المالي
               </h2>
 
+
               <p className="section-description">
-                الصورة الأساسية بعد تحويل البنود المتكررة إلى مكافئ شهري.
+                أهم أربع أرقام فقط.
               </p>
             </div>
           </div>
 
 
           <div className="stats-grid">
-
             <StatCard
               label="الدخل الشهري"
               value={
@@ -629,34 +1108,8 @@ export default async function FinancePage() {
                 )
               }
               tone="neutral"
+              helper="الدخل المتكرر المحسوب شهريًا."
               icon="↓"
-            />
-
-
-            <StatCard
-              label="إجمالي التوزيعات"
-              value={
-                formatCurrency(
-                  finance.monthly_allocations,
-                  finance.currency,
-                )
-              }
-              tone={
-                totalAllocationPercent >
-                100
-                  ? "negative"
-                  : totalAllocationPercent >=
-                      90
-                    ? "warning"
-                    : "neutral"
-              }
-              helper={
-                finance.monthly_income >
-                0
-                  ? `${formatPercent(totalAllocationPercent)} من الدخل`
-                  : "لا يوجد دخل شهري محسوب."
-              }
-              icon="↔"
             />
 
 
@@ -676,7 +1129,7 @@ export default async function FinancePage() {
               helper={
                 finance.available_amount <
                 0
-                  ? "التوزيع الشهري يحتاج مراجعة."
+                  ? "التوزيع الشهري أعلى من الدخل."
                   : "المتبقي بعد كل التوزيعات."
               }
               icon="="
@@ -684,25 +1137,38 @@ export default async function FinancePage() {
 
 
             <StatCard
-              label="صندوق الطوارئ"
+              label="قيمة المحفظة"
               value={
                 formatCurrency(
-                  finance
-                    .emergency_fund_balance,
-                  finance.currency,
+                  investments
+                    .total_estimated_value,
+                  investments.currency,
+                )
+              }
+              tone="neutral"
+              helper={`${activeInvestmentPositions.length} أصل استثماري نشط`}
+              icon="↗"
+            />
+
+
+            <StatCard
+              label="ربح / خسارة المحفظة"
+              value={
+                formatSignedCurrency(
+                  investments
+                    .total_estimated_gain_loss,
+                  investments.currency,
                 )
               }
               tone={
-                finance
-                  .emergency_fund_balance >
-                0
-                  ? "positive"
-                  : "warning"
+                getGainLossTone(
+                  investments
+                    .total_estimated_gain_loss,
+                )
               }
-              helper="الرصيد المسجل في آخر لقطة مالية."
+              helper="تقديري حسب الأسعار المرجعية المسجلة."
               icon="◈"
             />
-
           </div>
         </section>
 
@@ -713,20 +1179,43 @@ export default async function FinancePage() {
 
         <section
           className="page-section"
-          aria-labelledby="finance-allocation-title"
+          aria-labelledby="money-allocation-title"
         >
           <div className="section-header">
             <div className="section-header__content">
               <h2
-                id="finance-allocation-title"
+                id="money-allocation-title"
                 className="section-title"
               >
                 وين يروح الدخل؟
               </h2>
 
+
               <p className="section-description">
-                أربع فئات فقط حتى تكون الخطة واضحة من أول نظرة.
+                توزيعك الشهري الأساسي.
               </p>
+            </div>
+
+
+            <div>
+              <span
+                className={
+                  totalAllocationPercent >
+                  100
+                    ? "badge badge--negative"
+                    : totalAllocationPercent >=
+                        90
+                      ? "badge badge--warning"
+                      : "badge badge--positive"
+                }
+              >
+                {
+                  formatPercent(
+                    totalAllocationPercent,
+                  )
+                }{" "}
+                من الدخل
+              </span>
             </div>
           </div>
 
@@ -738,6 +1227,7 @@ export default async function FinancePage() {
                 المصاريف
               </span>
 
+
               <div
                 className="currency font-bold"
                 style={{
@@ -748,11 +1238,14 @@ export default async function FinancePage() {
                     "21px",
                 }}
               >
-                {formatCurrency(
-                  finance.monthly_expenses,
-                  finance.currency,
-                )}
+                {
+                  formatCurrency(
+                    finance.monthly_expenses,
+                    finance.currency,
+                  )
+                }
               </div>
+
 
               <div
                 className="text-muted text-small"
@@ -768,25 +1261,6 @@ export default async function FinancePage() {
                 }{" "}
                 من الدخل
               </div>
-
-              <div
-                className="progress"
-                style={{
-                  marginTop:
-                    "14px",
-                }}
-              >
-                <div
-                  className="progress__value"
-                  style={{
-                    width:
-                      `${Math.min(
-                        100,
-                        expensePercent,
-                      )}%`,
-                  }}
-                />
-              </div>
             </article>
 
 
@@ -795,8 +1269,9 @@ export default async function FinancePage() {
                 الادخار
               </span>
 
+
               <div
-                className="currency font-bold text-positive"
+                className="currency font-bold"
                 style={{
                   marginTop:
                     "8px",
@@ -805,11 +1280,14 @@ export default async function FinancePage() {
                     "21px",
                 }}
               >
-                {formatCurrency(
-                  finance.monthly_savings,
-                  finance.currency,
-                )}
+                {
+                  formatCurrency(
+                    finance.monthly_savings,
+                    finance.currency,
+                  )
+                }
               </div>
+
 
               <div
                 className="text-muted text-small"
@@ -825,25 +1303,6 @@ export default async function FinancePage() {
                 }{" "}
                 من الدخل
               </div>
-
-              <div
-                className="progress"
-                style={{
-                  marginTop:
-                    "14px",
-                }}
-              >
-                <div
-                  className="progress__value"
-                  style={{
-                    width:
-                      `${Math.min(
-                        100,
-                        savingPercent,
-                      )}%`,
-                  }}
-                />
-              </div>
             </article>
 
 
@@ -852,8 +1311,9 @@ export default async function FinancePage() {
                 الاستثمار
               </span>
 
+
               <div
-                className="currency font-bold text-accent"
+                className="currency font-bold"
                 style={{
                   marginTop:
                     "8px",
@@ -862,12 +1322,14 @@ export default async function FinancePage() {
                     "21px",
                 }}
               >
-                {formatCurrency(
-                  finance
-                    .monthly_investments,
-                  finance.currency,
-                )}
+                {
+                  formatCurrency(
+                    finance.monthly_investments,
+                    finance.currency,
+                  )
+                }
               </div>
+
 
               <div
                 className="text-muted text-small"
@@ -883,32 +1345,14 @@ export default async function FinancePage() {
                 }{" "}
                 من الدخل
               </div>
-
-              <div
-                className="progress"
-                style={{
-                  marginTop:
-                    "14px",
-                }}
-              >
-                <div
-                  className="progress__value"
-                  style={{
-                    width:
-                      `${Math.min(
-                        100,
-                        investmentPercent,
-                      )}%`,
-                  }}
-                />
-              </div>
             </article>
 
 
             <article className="card">
               <span className="text-subtle text-small">
-                الدين والالتزامات
+                الديون والالتزامات
               </span>
+
 
               <div
                 className="currency font-bold"
@@ -920,12 +1364,14 @@ export default async function FinancePage() {
                     "21px",
                 }}
               >
-                {formatCurrency(
-                  finance
-                    .monthly_debt_payments,
-                  finance.currency,
-                )}
+                {
+                  formatCurrency(
+                    finance.monthly_debt_payments,
+                    finance.currency,
+                  )
+                }
               </div>
+
 
               <div
                 className="text-muted text-small"
@@ -941,25 +1387,6 @@ export default async function FinancePage() {
                 }{" "}
                 من الدخل
               </div>
-
-              <div
-                className="progress"
-                style={{
-                  marginTop:
-                    "14px",
-                }}
-              >
-                <div
-                  className="progress__value"
-                  style={{
-                    width:
-                      `${Math.min(
-                        100,
-                        debtPercent,
-                      )}%`,
-                  }}
-                />
-              </div>
             </article>
 
           </div>
@@ -972,30 +1399,31 @@ export default async function FinancePage() {
 
         <section
           className="page-section"
-          aria-labelledby="finance-balances-title"
+          aria-labelledby="money-savings-title"
         >
           <div className="section-header">
             <div className="section-header__content">
               <h2
-                id="finance-balances-title"
+                id="money-savings-title"
                 className="section-title"
               >
-                أرصدة مهمة
+                الأرصدة المحفوظة
               </h2>
 
+
               <p className="section-description">
-                الأرصدة التي تحتاج متابعة مستقلة عن المصروف الشهري.
+                آخر أرصدة مسجلة في الخطة المالية.
               </p>
             </div>
           </div>
 
 
           <div className="grid grid--2">
-
             <article className="card">
               <span className="text-subtle text-small">
                 صندوق الطوارئ
               </span>
+
 
               <div
                 className="currency font-bold"
@@ -1004,19 +1432,17 @@ export default async function FinancePage() {
                     "8px",
 
                   fontSize:
-                    "24px",
+                    "22px",
                 }}
               >
-                {formatCurrency(
-                  finance
-                    .emergency_fund_balance,
-                  finance.currency,
-                )}
+                {
+                  formatCurrency(
+                    finance
+                      .emergency_fund_balance,
+                    finance.currency,
+                  )
+                }
               </div>
-
-              <p className="card__description">
-                سيولة مخصصة للحالات غير المتوقعة، وليست للاستثمار أو المصروف العادي.
-              </p>
             </article>
 
 
@@ -1025,6 +1451,7 @@ export default async function FinancePage() {
                 توفير السفر
               </span>
 
+
               <div
                 className="currency font-bold"
                 style={{
@@ -1032,22 +1459,171 @@ export default async function FinancePage() {
                     "8px",
 
                   fontSize:
-                    "24px",
+                    "22px",
                 }}
               >
-                {formatCurrency(
-                  finance
-                    .travel_savings_balance,
-                  finance.currency,
-                )}
+                {
+                  formatCurrency(
+                    finance
+                      .travel_savings_balance,
+                    finance.currency,
+                  )
+                }
               </div>
+            </article>
+          </div>
+        </section>
 
-              <p className="card__description">
-                رصيد السفر المسجل في أحدث لقطة مالية.
+
+        {/* =================================================
+         * INVESTMENTS
+         * =============================================== */}
+
+        <section
+          className="page-section"
+          aria-labelledby="money-investments-title"
+        >
+          <div className="section-header">
+            <div className="section-header__content">
+              <h2
+                id="money-investments-title"
+                className="section-title"
+              >
+                الاستثمارات
+              </h2>
+
+
+              <p className="section-description">
+                المحفظة جزء من مالك، مب نظام منفصل.
               </p>
+            </div>
+
+
+            <Link
+              href="/investments"
+              className="button button--secondary button--small"
+            >
+              فتح التفاصيل
+            </Link>
+          </div>
+
+
+          <div
+            className="grid grid--3"
+            style={{
+              marginBottom:
+                "18px",
+            }}
+          >
+            <article className="card">
+              <span className="text-subtle text-small">
+                أساس التكلفة
+              </span>
+
+
+              <div
+                className="currency font-bold"
+                style={{
+                  marginTop:
+                    "8px",
+
+                  fontSize:
+                    "21px",
+                }}
+              >
+                {
+                  formatCurrency(
+                    investments
+                      .total_cost_basis,
+                    investments.currency,
+                  )
+                }
+              </div>
             </article>
 
+
+            <article className="card">
+              <span className="text-subtle text-small">
+                القيمة التقديرية
+              </span>
+
+
+              <div
+                className="currency font-bold"
+                style={{
+                  marginTop:
+                    "8px",
+
+                  fontSize:
+                    "21px",
+                }}
+              >
+                {
+                  formatCurrency(
+                    investments
+                      .total_estimated_value,
+                    investments.currency,
+                  )
+                }
+              </div>
+            </article>
+
+
+            <article className="card">
+              <span className="text-subtle text-small">
+                هدف الضخ الشهري
+              </span>
+
+
+              <div
+                className="currency font-bold"
+                style={{
+                  marginTop:
+                    "8px",
+
+                  fontSize:
+                    "21px",
+                }}
+              >
+                {
+                  formatCurrency(
+                    investments
+                      .total_monthly_contribution_target,
+                    investments.currency,
+                  )
+                }
+              </div>
+            </article>
           </div>
+
+
+          {activeInvestmentPositions.length >
+          0 ? (
+            <DataTable
+              rows={
+                activeInvestmentPositions
+              }
+              columns={
+                investmentColumns
+              }
+              getRowKey={
+                (
+                  position,
+                ) =>
+                  position
+                    .asset
+                    .id
+              }
+              caption="الأصول الاستثمارية النشطة"
+            />
+          ) : (
+            <EmptyState
+              compact
+              icon="↗"
+              title="لا توجد استثمارات مسجلة"
+              description="عندما تضيف أول أصل استثماري، تظهر المحفظة هنا تلقائيًا."
+            />
+          )}
         </section>
 
 
@@ -1057,25 +1633,27 @@ export default async function FinancePage() {
 
         <section
           className="page-section"
-          aria-labelledby="income-sources-title"
+          aria-labelledby="money-income-title"
         >
           <div className="section-header">
             <div className="section-header__content">
               <h2
-                id="income-sources-title"
+                id="money-income-title"
                 className="section-title"
               >
                 مصادر الدخل
               </h2>
 
+
               <p className="section-description">
-                المصادر النشطة التي يبني عليها LIFE OS خطتك الشهرية.
+                مصادر الدخل النشطة التي يعتمد عليها حسابك الشهري.
               </p>
             </div>
           </div>
 
 
-          {activeIncomeSources.length > 0 ? (
+          {activeIncomeSources.length >
+          0 ? (
             <DataTable
               rows={
                 activeIncomeSources
@@ -1084,7 +1662,9 @@ export default async function FinancePage() {
                 incomeColumns
               }
               getRowKey={
-                (item) =>
+                (
+                  item,
+                ) =>
                   item.id
               }
               caption="مصادر الدخل النشطة"
@@ -1093,38 +1673,40 @@ export default async function FinancePage() {
             <EmptyState
               compact
               icon="↓"
-              title="لا يوجد مصدر دخل نشط"
-              description="لن يتمكن LIFE OS من بناء توزيع شهري مفيد قبل تسجيل مصدر دخل."
+              title="لا توجد مصادر دخل"
+              description="أضف دخلك من زر + حتى يبدأ LIFE OS بحساب وضعك المالي."
             />
           )}
         </section>
 
 
         {/* =================================================
-         * MONTHLY PLAN
+         * MONTHLY ITEMS
          * =============================================== */}
 
         <section
           className="page-section"
-          aria-labelledby="monthly-plan-title"
+          aria-labelledby="money-budget-title"
         >
           <div className="section-header">
             <div className="section-header__content">
               <h2
-                id="monthly-plan-title"
+                id="money-budget-title"
                 className="section-title"
               >
-                خطة التوزيع
+                التوزيع الشهري
               </h2>
 
+
               <p className="section-description">
-                المصاريف والادخار والاستثمار والالتزامات النشطة.
+                المصاريف، الادخار، الاستثمار والديون المسجلة.
               </p>
             </div>
           </div>
 
 
-          {activeBudgetItems.length > 0 ? (
+          {activeBudgetItems.length >
+          0 ? (
             <DataTable
               rows={
                 activeBudgetItems
@@ -1133,84 +1715,35 @@ export default async function FinancePage() {
                 budgetColumns
               }
               getRowKey={
-                (item) =>
+                (
+                  item,
+                ) =>
                   item.id
               }
-              caption="التوزيع المالي الشهري"
+              caption="بنود التوزيع المالي النشطة"
             />
           ) : (
             <EmptyState
               compact
-              icon="↔"
-              title="لا توجد خطة توزيع بعد"
-              description="أضف البنود الأساسية ليحسب LIFE OS المبلغ المتاح شهريًا."
+              icon="◈"
+              title="لا توجد توزيعات شهرية"
+              description="أضف مصروفًا، ادخارًا، استثمارًا أو التزامًا من زر +."
             />
           )}
         </section>
 
 
         {/* =================================================
-         * FINANCIAL SIGNAL
+         * INVESTMENT SAFETY
          * =============================================== */}
 
-        <section
-          className="page-section"
-          aria-labelledby="financial-signal-title"
-        >
-          <div className="section-header">
-            <div className="section-header__content">
-              <h2
-                id="financial-signal-title"
-                className="section-title"
-              >
-                الإشارة الحالية
-              </h2>
-            </div>
+        <section className="page-section">
+          <div
+            className="alert"
+            role="note"
+          >
+            LIFE OS يتابع ويحسب ويقترح فقط. ما ينفذ شراء أو بيع ولا يرسل أوامر للوسيط المالي.
           </div>
-
-
-          {finance.monthly_income <= 0 ? (
-            <div className="alert alert--warning">
-              لا يوجد دخل شهري محسوب حاليًا، لذلك لا يمكن تقييم التوزيع المالي بشكل كامل.
-            </div>
-          ) : finance.available_amount < 0 ? (
-            <div
-              className="alert alert--negative"
-              role="status"
-            >
-              التوزيعات الشهرية تتجاوز دخلك بمقدار{" "}
-              <strong className="currency">
-                {formatCurrency(
-                  Math.abs(
-                    finance.available_amount,
-                  ),
-                  finance.currency,
-                )}
-              </strong>
-              . الأولوية الآن هي إعادة ترتيب الخطة قبل إضافة التزام جديد.
-            </div>
-          ) : totalAllocationPercent >= 90 ? (
-            <div
-              className="alert alert--warning"
-              role="status"
-            >
-              معظم دخلك موزع حاليًا. لديك هامش شهري محدود، لذلك أي التزام جديد يحتاج مراجعة قبل اعتماده.
-            </div>
-          ) : (
-            <div
-              className="alert alert--positive"
-              role="status"
-            >
-              الخطة الحالية تترك مبلغًا متاحًا قدره{" "}
-              <strong className="currency">
-                {formatCurrency(
-                  finance.available_amount,
-                  finance.currency,
-                )}
-              </strong>
-              {" "}شهريًا بعد التوزيعات المسجلة.
-            </div>
-          )}
         </section>
 
       </div>
@@ -1220,146 +1753,98 @@ export default async function FinancePage() {
 
 
 /* =========================================================
- * 11. FINANCIAL SOURCE OF TRUTH
+ * 15. FINAL MONEY CONTRACT
  * ======================================================= */
 
 /**
- * FinancePage does NOT create the authoritative financial
- * snapshot.
+ * /finance is the primary V2 Money page.
  *
- * The source of truth is:
  *
- * lib/data.ts
- *      ↓
- * calculateFinanceTotals()
- *      ↓
- * calculateFinanceSnapshot()
+ * It combines:
  *
- * This page only presents those deterministic results.
+ * Finance
+ * +
+ * Investments
+ *
+ *
+ * User no longer needs two top-level destinations to answer:
+ *
+ * "شو وضعي المالي؟"
  */
 
 
 /* =========================================================
- * 12. AI RULE
+ * 16. DETAILED INVESTMENTS
  * ======================================================= */
 
 /**
- * No AI call occurs when opening the Finance page.
+ * /investments remains available as a detailed secondary
+ * view.
  *
- * Finance must remain fully functional even when OpenAI is
- * unavailable.
  *
- * AI may later analyze this information through the
- * controlled Assistant / Decision Simulator boundaries.
+ * It can continue to show:
+ *
+ * reference prices
+ * average cost
+ * target quantities
+ * transactions
+ * allocation detail
+ *
+ *
+ * without cluttering the primary Money page.
  */
 
 
 /* =========================================================
- * 13. MONTHLY PLANNING RULE
+ * 17. FINANCIAL TRUTH
  * ======================================================= */
 
 /**
- * Recurring baseline:
+ * All values on this page come from deterministic database
+ * snapshots.
  *
- * monthly
- *   → full amount
  *
- * annual
- *   → monthly equivalent
+ * AI does NOT calculate:
  *
- * one_time
- *   → not treated as recurring monthly spending
- *
- * other
- *   → not guessed
- *
- * LIFE OS avoids inventing recurrence where none is known.
- */
-
-
-/* =========================================================
- * 14. PERCENTAGE RULE
- * ======================================================= */
-
-/**
- * Allocation percentages are simple deterministic display
- * calculations:
- *
- * monthly category amount
- * -----------------------
  * monthly income
- *
- * AI does not calculate these percentages.
+ * monthly allocations
+ * available amount
+ * portfolio value
+ * portfolio gain/loss
  */
 
 
 /* =========================================================
- * 15. SNAPSHOT RULE
+ * 18. INVESTMENT SAFETY
  * ======================================================= */
 
 /**
- * Emergency-fund and travel balances come from the latest
- * stored monthly snapshot when available.
+ * LIFE OS may:
  *
- * They are not inferred from:
+ * read
+ * calculate
+ * analyze
+ * recommend
  *
- * income
- * budget
- * AI
  *
- * because a monthly allocation is not the same thing as an
- * actual accumulated balance.
+ * LIFE OS does NOT:
+ *
+ * buy
+ * sell
+ * submit broker orders
+ * silently rebalance
  */
 
 
 /* =========================================================
- * 16. SECURITY RULE
+ * 19. FINAL LIFE OS V2 RULE
  * ======================================================= */
 
 /**
- * Server request
- *      ↓
- * requireAAL2Identity()
- *      ↓
- * getFinanceSnapshot()
- *      ↓
- * authenticated user identity
- *      ↓
- * PostgreSQL RLS
+ * Money is one life area.
  *
- * No financial user_id is supplied by the browser.
- */
-
-
-/* =========================================================
- * 17. PRIVACY RULE
- * ======================================================= */
-
-/**
- * This page renders private financial information only after
- * the AAL2 server boundary succeeds.
+ * Database tables may remain separate underneath.
  *
- * It does not send the financial snapshot to an external AI
- * provider merely because the page was opened.
- */
-
-
-/* =========================================================
- * 18. FINAL FINANCE RULE
- * ======================================================= */
-
-/**
- * Finance page should answer:
- *
- * How much comes in?
- * Where does it go?
- * What remains?
- * What am I saving?
- * What am I investing?
- * What am I paying toward debt?
- * What important cash balances do I have?
- *
- * Nothing more.
  *
  * Simple outside.
  * Intelligent underneath.
