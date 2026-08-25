@@ -1719,20 +1719,16 @@ export const FORBIDDEN_AUDIT_METADATA_KEYS = [
  *
  * verified authenticated Supabase session
  * +
- * enrolled TOTP factor
+ * email and password authentication
  * +
- * completed MFA challenge
- * +
- * AAL2
+ * AAL1 or higher
  *
  *
- * A password-authenticated AAL1 session may access only the
- * MFA enrollment and verification flow.
- *
- * Private LIFE OS pages, APIs and data require AAL2.
+ * PostgreSQL RLS and auth.uid() ownership remain mandatory
+ * for every private table.
  */
 export const REQUIRED_AUTHENTICATION_LEVEL =
-  "aal2";
+  "aal1";
 
 
 export const LOGIN_ROUTE =
@@ -2035,18 +2031,13 @@ export const APPLICATION_SAFETY_DEFAULTS = {
  *
  * verified authenticated session
  * +
- * enrolled TOTP factor
+ * email and password
  * +
- * completed MFA challenge
- * +
- * AAL2
+ * AAL1 or higher
  *
  *
- * AAL1 is permitted only while completing the controlled
- * MFA enrollment or verification flow.
- *
- * No private financial, investment, career, learning, travel,
- * document, memory or audit data may be accessed at AAL1.
+ * RLS, authenticated-role restrictions and auth.uid() row
+ * ownership continue to protect all private data.
  */
 
 
@@ -2211,3 +2202,4 @@ export const APPLICATION_SAFETY_DEFAULTS = {
  * Intelligent underneath.
  * Private by default.
  */
+
