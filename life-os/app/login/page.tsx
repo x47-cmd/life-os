@@ -16,6 +16,7 @@ import {
 
 import {
   APP_NAME,
+  DEFAULT_AUTHENTICATED_ROUTE,
   LOGIN_ROUTE,
 } from "@/lib/constants";
 
@@ -33,7 +34,7 @@ import {
  * ======================================================= */
 
 const AFTER_PASSWORD_ROUTE =
-  "/mfa";
+  DEFAULT_AUTHENTICATED_ROUTE;
 
 
 /* =========================================================
@@ -479,21 +480,21 @@ export default function LoginPage() {
         <div className="stack stack--small">
           <div className="space-between">
             <span className="text-muted text-small">
-              كلمة المرور
+              البريد وكلمة المرور
             </span>
 
             <span className="badge badge--positive">
-              الخطوة الأولى
+              تسجيل دخول مباشر
             </span>
           </div>
 
           <div className="space-between">
             <span className="text-muted text-small">
-              TOTP / MFA
+              المصادقة الإضافية
             </span>
 
             <span className="badge badge--positive">
-              إلزامي
+              غير مطلوبة
             </span>
           </div>
 
@@ -503,14 +504,14 @@ export default function LoginPage() {
             </span>
 
             <strong className="ltr">
-              AAL2
+              AAL1
             </strong>
           </div>
         </div>
 
 
         <p className="text-muted text-small">
-          بعد التحقق من كلمة المرور ستنتقل إلى رمز المصادقة. لن تُفتح البيانات الخاصة قبل اكتمال الخطوتين.
+          بعد التحقق من البريد الإلكتروني وكلمة المرور ستنتقل مباشرة إلى LIFE OS.
         </p>
 
 
@@ -527,3 +528,4 @@ export default function LoginPage() {
     </main>
   );
 }
+
