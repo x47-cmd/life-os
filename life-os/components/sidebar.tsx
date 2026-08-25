@@ -18,9 +18,9 @@ import {
 
 /* =========================================================
  * LIFE OS V2
- * SIDEBAR
+ * FINAL SIDEBAR
  *
- * Main navigation:
+ * Exactly six primary destinations:
  *
  * الرئيسية
  * المال
@@ -29,11 +29,14 @@ import {
  * التطوير
  * LIFE AI
  *
- * Legacy pages remain available temporarily under:
+ *
+ * Detailed / secondary pages remain available under:
  *
  * المزيد
  *
- * Nothing is deleted in this phase.
+ *
+ * Simple outside.
+ * Intelligent underneath.
  * ======================================================= */
 
 
@@ -42,135 +45,206 @@ import {
  * ======================================================= */
 
 interface SidebarItem {
-  label: string;
-  href: string | null;
-  icon: string;
-  badge?: string;
+  label:
+    string;
+
+  href:
+    string;
+
+  icon:
+    string;
 }
 
 
 /* =========================================================
- * 2. V2 MAIN NAVIGATION
+ * 2. PRIMARY V2 NAVIGATION
  * ======================================================= */
 
 /**
- * Important:
+ * These are the six permanent top-level LIFE OS V2 areas.
  *
- * During the V2 migration we reuse the existing routes:
  *
  * المال
- *   → /finance
+ *      → Finance + Investments
  *
  * خططي
- *   → /goals
+ *      → Goals + Projects
+ *
+ * السفر
+ *      → Travel OS
  *
  * التطوير
- *   → /learning
+ *      → Learning + Career
  *
- * These pages will later absorb:
  *
- * investments
- * projects
- * career
- *
- * respectively.
- *
- * Travel is intentionally disabled until /travel exists.
+ * The technical database structure stays hidden from the
+ * primary navigation.
  */
+const MAIN_NAVIGATION_ITEMS:
+readonly SidebarItem[] = [
+  {
+    label:
+      "الرئيسية",
 
-const MAIN_NAVIGATION_ITEMS: readonly SidebarItem[] = [
-  {
-    label: "الرئيسية",
-    href: "/dashboard",
-    icon: "⌂",
+    href:
+      "/dashboard",
+
+    icon:
+      "⌂",
   },
+
   {
-    label: "المال",
-    href: "/finance",
-    icon: "◈",
+    label:
+      "المال",
+
+    href:
+      "/finance",
+
+    icon:
+      "◈",
   },
+
   {
-    label: "خططي",
-    href: "/goals",
-    icon: "◎",
+    label:
+      "خططي",
+
+    href:
+      "/goals",
+
+    icon:
+      "◎",
   },
+
   {
-    label: "السفر",
-    href: null,
-    icon: "✈",
-    badge: "قريبًا",
+    label:
+      "السفر",
+
+    href:
+      "/travel",
+
+    icon:
+      "✈",
   },
+
   {
-    label: "التطوير",
-    href: "/learning",
-    icon: "◉",
+    label:
+      "التطوير",
+
+    href:
+      "/learning",
+
+    icon:
+      "◉",
   },
+
   {
-    label: "LIFE AI",
-    href: "/assistant",
-    icon: "✦",
+    label:
+      "LIFE AI",
+
+    href:
+      "/assistant",
+
+    icon:
+      "✦",
   },
 ];
 
 
 /* =========================================================
- * 3. TEMPORARY LEGACY NAVIGATION
+ * 3. SECONDARY NAVIGATION
  * ======================================================= */
 
 /**
- * These pages are NOT deleted.
+ * These routes remain useful as detailed views.
  *
- * They stay here temporarily while their functionality is
- * merged into the new V2 sections.
+ * They are intentionally kept outside the six primary
+ * navigation items.
  *
- * Later:
  *
  * /investments
- *   → المال
+ *      → detailed investment view under المال
  *
  * /projects
- *   → خططي
+ *      → detailed project view under خططي
  *
  * /career
- *   → التطوير
+ *      → detailed career view under التطوير
  *
  * /tasks
- *   → contextual tasks inside plans / travel / learning
+ *      → detailed task view
  *
- * /audit + /settings
- *   → remain under المزيد
+ * /audit
+ *      → audit history
+ *
+ * /settings
+ *      → account/application settings
  */
+const SECONDARY_NAVIGATION_ITEMS:
+readonly SidebarItem[] = [
+  {
+    label:
+      "الاستثمارات",
 
-const LEGACY_NAVIGATION_ITEMS: readonly SidebarItem[] = [
-  {
-    label: "الاستثمارات",
-    href: "/investments",
-    icon: "↗",
+    href:
+      "/investments",
+
+    icon:
+      "↗",
   },
+
   {
-    label: "المشاريع",
-    href: "/projects",
-    icon: "▣",
+    label:
+      "المشاريع",
+
+    href:
+      "/projects",
+
+    icon:
+      "▣",
   },
+
   {
-    label: "المسار المهني",
-    href: "/career",
-    icon: "◇",
+    label:
+      "المسار المهني",
+
+    href:
+      "/career",
+
+    icon:
+      "◇",
   },
+
   {
-    label: "المهام",
-    href: "/tasks",
-    icon: "✓",
+    label:
+      "المهام",
+
+    href:
+      "/tasks",
+
+    icon:
+      "✓",
   },
+
   {
-    label: "السجل",
-    href: "/audit",
-    icon: "≡",
+    label:
+      "السجل",
+
+    href:
+      "/audit",
+
+    icon:
+      "≡",
   },
+
   {
-    label: "الإعدادات",
-    href: "/settings",
-    icon: "⚙",
+    label:
+      "الإعدادات",
+
+    href:
+      "/settings",
+
+    icon:
+      "⚙",
   },
 ];
 
@@ -180,14 +254,19 @@ const LEGACY_NAVIGATION_ITEMS: readonly SidebarItem[] = [
  * ======================================================= */
 
 function isRouteActive(
-  pathname: string,
-  href: string,
+  pathname:
+    string,
+
+  href:
+    string,
 ): boolean {
   if (
-    pathname === href
+    pathname ===
+    href
   ) {
     return true;
   }
+
 
   return pathname.startsWith(
     `${href}/`,
@@ -196,7 +275,7 @@ function isRouteActive(
 
 
 /* =========================================================
- * 5. SIDEBAR NAVIGATION ITEM
+ * 5. NAVIGATION ITEM
  * ======================================================= */
 
 function NavigationItem({
@@ -204,60 +283,15 @@ function NavigationItem({
   pathname,
   onNavigate,
 }: {
-  item: SidebarItem;
-  pathname: string;
-  onNavigate: () => void;
+  item:
+    SidebarItem;
+
+  pathname:
+    string;
+
+  onNavigate:
+    () => void;
 }) {
-  /*
-   * Disabled items are used only while a V2 feature is being
-   * built.
-   *
-   * We never send the user to a route that does not exist.
-   */
-  if (
-    !item.href
-  ) {
-    return (
-      <li className="sidebar__item">
-        <div
-          className="sidebar__link"
-          aria-disabled="true"
-          style={{
-            opacity: 0.48,
-            cursor: "default",
-            userSelect: "none",
-          }}
-        >
-          <span
-            className="sidebar__icon"
-            aria-hidden="true"
-          >
-            {item.icon}
-          </span>
-
-          <span className="sidebar__label">
-            {item.label}
-          </span>
-
-          {item.badge ? (
-            <span
-              style={{
-                marginInlineStart: "auto",
-                fontSize: "10px",
-                fontWeight: 700,
-                color: "var(--text-tertiary)",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {item.badge}
-            </span>
-          ) : null}
-        </div>
-      </li>
-    );
-  }
-
-
   const active =
     isRouteActive(
       pathname,
@@ -268,21 +302,30 @@ function NavigationItem({
   return (
     <li className="sidebar__item">
       <Link
-        href={item.href}
+        href={
+          item.href
+        }
         className={[
           "sidebar__link",
+
           active
             ? "sidebar__link--active"
             : "",
         ]
-          .filter(Boolean)
-          .join(" ")}
+          .filter(
+            Boolean,
+          )
+          .join(
+            " ",
+          )}
         aria-current={
           active
             ? "page"
             : undefined
         }
-        onClick={onNavigate}
+        onClick={
+          onNavigate
+        }
       >
         <span
           className="sidebar__icon"
@@ -290,6 +333,7 @@ function NavigationItem({
         >
           {item.icon}
         </span>
+
 
         <span className="sidebar__label">
           {item.label}
@@ -310,31 +354,33 @@ export function Sidebar() {
 
 
   /*
-   * The path on which the mobile menu was opened.
+   * Path on which the mobile menu was opened.
    *
-   * After navigation the pathname changes, therefore the
-   * mobile sidebar automatically closes.
+   * When navigation changes pathname, the drawer naturally
+   * stops matching and closes.
    */
   const [
     mobileMenuPath,
     setMobileMenuPath,
   ] =
-    useState<string | null>(
+    useState<
+      string |
+      null
+    >(
       null,
     );
 
 
   /*
-   * Temporary V2 legacy section.
-   *
-   * It keeps the old pages accessible without allowing them
-   * to dominate the primary navigation.
+   * Secondary navigation is collapsed by default.
    */
   const [
     moreOpen,
     setMoreOpen,
   ] =
-    useState(false);
+    useState(
+      false,
+    );
 
 
   const isMobileOpen =
@@ -343,24 +389,26 @@ export function Sidebar() {
 
 
   /*
-   * If the user is already inside an old section, keep
-   * "المزيد" visible automatically.
+   * When the user is currently inside a secondary page,
+   * automatically keep "المزيد" expanded so location remains
+   * obvious.
    */
-  const legacyRouteActive =
-    LEGACY_NAVIGATION_ITEMS.some(
-      (item) =>
-        item.href
-          ? isRouteActive(
-              pathname,
-              item.href,
-            )
-          : false,
-    );
+  const secondaryRouteActive =
+    SECONDARY_NAVIGATION_ITEMS
+      .some(
+        (
+          item,
+        ) =>
+          isRouteActive(
+            pathname,
+            item.href,
+          ),
+      );
 
 
   const showMore =
     moreOpen ||
-    legacyRouteActive;
+    secondaryRouteActive;
 
 
   /* =======================================================
@@ -375,8 +423,13 @@ export function Sidebar() {
         return;
       }
 
+
       const previousOverflow =
-        document.body.style.overflow;
+        document
+          .body
+          .style
+          .overflow;
+
 
       document.body.style.overflow =
         "hidden";
@@ -387,6 +440,7 @@ export function Sidebar() {
           previousOverflow;
       };
     },
+
     [
       isMobileOpen,
     ],
@@ -407,7 +461,8 @@ export function Sidebar() {
 
 
       function handleKeyDown(
-        event: KeyboardEvent,
+        event:
+          KeyboardEvent,
       ) {
         if (
           event.key ===
@@ -433,6 +488,7 @@ export function Sidebar() {
         );
       };
     },
+
     [
       isMobileOpen,
     ],
@@ -440,10 +496,35 @@ export function Sidebar() {
 
 
   /* =======================================================
-   * 9. NAVIGATION CLOSE
+   * 9. CLOSE AFTER NAVIGATION
    * ===================================================== */
 
-  function handleNavigate() {
+  function handleNavigate():
+  void {
+    setMobileMenuPath(
+      null,
+    );
+  }
+
+
+  /* =======================================================
+   * 10. OPEN MOBILE MENU
+   * ===================================================== */
+
+  function handleOpenMobileMenu():
+  void {
+    setMobileMenuPath(
+      pathname,
+    );
+  }
+
+
+  /* =======================================================
+   * 11. CLOSE MOBILE MENU
+   * ===================================================== */
+
+  function handleCloseMobileMenu():
+  void {
     setMobileMenuPath(
       null,
     );
@@ -464,11 +545,9 @@ export function Sidebar() {
           isMobileOpen
         }
         aria-controls="life-os-sidebar"
-        onClick={() => {
-          setMobileMenuPath(
-            pathname,
-          );
-        }}
+        onClick={
+          handleOpenMobileMenu
+        }
       >
         <span
           aria-hidden="true"
@@ -488,11 +567,9 @@ export function Sidebar() {
           type="button"
           className="sidebar-backdrop"
           aria-label="إغلاق القائمة الرئيسية"
-          onClick={() => {
-            setMobileMenuPath(
-              null,
-            );
-          }}
+          onClick={
+            handleCloseMobileMenu
+          }
         />
       ) : null}
 
@@ -505,12 +582,17 @@ export function Sidebar() {
         id="life-os-sidebar"
         className={[
           "sidebar",
+
           isMobileOpen
             ? "sidebar--open"
             : "",
         ]
-          .filter(Boolean)
-          .join(" ")}
+          .filter(
+            Boolean,
+          )
+          .join(
+            " ",
+          )}
         aria-label="التنقل الرئيسي"
       >
         <div className="sidebar__inner">
@@ -527,6 +609,7 @@ export function Sidebar() {
               L
             </div>
 
+
             <div className="sidebar__brand-text">
               <span className="sidebar__brand-name">
                 {APP_NAME}
@@ -542,11 +625,9 @@ export function Sidebar() {
               type="button"
               className="sidebar__mobile-close"
               aria-label="إغلاق القائمة الرئيسية"
-              onClick={() => {
-                setMobileMenuPath(
-                  null,
-                );
-              }}
+              onClick={
+                handleCloseMobileMenu
+              }
             >
               ×
             </button>
@@ -554,7 +635,7 @@ export function Sidebar() {
 
 
           {/* ===============================================
-           * V2 MAIN NAVIGATION
+           * SIX PRIMARY V2 DESTINATIONS
            * ============================================= */}
 
           <nav
@@ -563,13 +644,16 @@ export function Sidebar() {
           >
             <ul className="sidebar__list">
               {MAIN_NAVIGATION_ITEMS.map(
-                (item) => (
+                (
+                  item,
+                ) => (
                   <NavigationItem
                     key={
-                      item.href ??
-                      item.label
+                      item.href
                     }
-                    item={item}
+                    item={
+                      item
+                    }
                     pathname={
                       pathname
                     }
@@ -583,13 +667,17 @@ export function Sidebar() {
 
 
             {/* =============================================
-             * MORE / LEGACY TRANSITION SECTION
+             * MORE
              * =========================================== */}
 
             <div
               style={{
-                marginTop: "18px",
-                paddingTop: "14px",
+                marginTop:
+                  "18px",
+
+                paddingTop:
+                  "14px",
+
                 borderTop:
                   "1px solid var(--border)",
               }}
@@ -600,18 +688,28 @@ export function Sidebar() {
                 aria-expanded={
                   showMore
                 }
+                aria-controls="life-os-secondary-navigation"
                 onClick={() => {
                   setMoreOpen(
-                    (current) =>
+                    (
+                      current,
+                    ) =>
                       !current,
                   );
                 }}
                 style={{
-                  width: "100%",
-                  border: 0,
-                  cursor: "pointer",
+                  width:
+                    "100%",
+
+                  border:
+                    0,
+
+                  cursor:
+                    "pointer",
+
                   background:
                     "transparent",
+
                   textAlign:
                     "inherit",
                 }}
@@ -623,22 +721,29 @@ export function Sidebar() {
                   ⋯
                 </span>
 
+
                 <span className="sidebar__label">
                   المزيد
                 </span>
+
 
                 <span
                   aria-hidden="true"
                   style={{
                     marginInlineStart:
                       "auto",
+
                     color:
                       "var(--text-tertiary)",
-                    fontSize: "12px",
+
+                    fontSize:
+                      "12px",
+
                     transform:
                       showMore
                         ? "rotate(180deg)"
                         : "none",
+
                     transition:
                       "transform 160ms ease",
                   }}
@@ -650,25 +755,30 @@ export function Sidebar() {
 
               {showMore ? (
                 <ul
+                  id="life-os-secondary-navigation"
                   className="sidebar__list"
                   style={{
-                    marginTop: "4px",
+                    marginTop:
+                      "4px",
                   }}
                 >
-                  {LEGACY_NAVIGATION_ITEMS.map(
-                    (item) => (
+                  {SECONDARY_NAVIGATION_ITEMS.map(
+                    (
+                      item,
+                    ) => (
                       <NavigationItem
                         key={
-                          item.href ??
-                          item.label
+                          item.href
                         }
-                        item={item}
+                        item={
+                          item
+                        }
                         pathname={
                           pathname
                         }
-                        onNavigate={() => {
-                          handleNavigate();
-                        }}
+                        onNavigate={
+                          handleNavigate
+                        }
                       />
                     ),
                   )}
@@ -696,30 +806,78 @@ export function Sidebar() {
 
 
 /* =========================================================
- * 10. V2 TRANSITION RULE
+ * 12. FINAL PRIMARY NAVIGATION CONTRACT
  * ======================================================= */
 
 /**
- * This sidebar is intentionally transitional.
+ * Exactly six top-level destinations:
  *
- * Primary V2 navigation:
+ * 1. الرئيسية
+ * 2. المال
+ * 3. خططي
+ * 4. السفر
+ * 5. التطوير
+ * 6. LIFE AI
  *
- * الرئيسية
- * المال
- * خططي
- * السفر
- * التطوير
- * LIFE AI
  *
- * Existing pages are NOT deleted.
+ * No:
  *
- * They remain under "المزيد" until their data and actions
- * are merged into the new V2 information architecture.
+ * قريبًا
+ * disabled Travel item
+ * duplicate Finance/Investment top-level links
+ * duplicate Goal/Project top-level links
+ * duplicate Learning/Career top-level links
  */
 
 
 /* =========================================================
- * 11. SECURITY BOUNDARY
+ * 13. INFORMATION ARCHITECTURE
+ * ======================================================= */
+
+/**
+ * User-facing structure:
+ *
+ * المال
+ *      ↓
+ * money + investments
+ *
+ *
+ * خططي
+ *      ↓
+ * goals + projects
+ *
+ *
+ * التطوير
+ *      ↓
+ * learning + career
+ *
+ *
+ * Technical detail pages remain available through:
+ *
+ * المزيد
+ */
+
+
+/* =========================================================
+ * 14. TRAVEL RULE
+ * ======================================================= */
+
+/**
+ * السفر is now a normal first-class V2 route:
+ *
+ * /travel
+ *
+ *
+ * It is no longer:
+ *
+ * href:null
+ * disabled
+ * قريبًا
+ */
+
+
+/* =========================================================
+ * 15. SECURITY BOUNDARY
  * ======================================================= */
 
 /**
@@ -727,33 +885,32 @@ export function Sidebar() {
  *
  * It does not:
  *
- * - authenticate users
- * - authorize access
- * - read private data
- * - modify data
- * - upload files
- * - call AI
+ * authenticate
+ * authorize
+ * read private data
+ * write private data
+ * upload documents
+ * call AI
  *
- * Security remains enforced by:
  *
- * authenticated server session
+ * Security remains enforced server-side through:
+ *
+ * authenticated identity
+ * protected routes
  * PostgreSQL RLS
- * server-side authorization
+ * Storage RLS
  */
 
 
 /* =========================================================
- * 12. FINAL RULE
+ * 16. FINAL LIFE OS V2 RULE
  * ======================================================= */
 
 /**
- * LIFE OS V2 navigation should answer one question:
+ * The user navigates by life area,
+ * not by database table.
  *
- * "وين أبغي أروح؟"
  *
- * without making the user understand the database structure.
- *
- * The user should never need to know whether something is
- * technically a Goal, Project, Learning Item, Budget Item,
- * or another internal record type.
+ * Simple outside.
+ * Intelligent underneath.
  */
