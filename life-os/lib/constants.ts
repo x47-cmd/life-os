@@ -57,6 +57,14 @@ import type {
  * Deterministic System Executes
  *
  *
+ * LIFE Invest AI:
+ *
+ * optional intelligence layer
+ * inside Investments
+ *
+ * no autonomous brokerage execution
+ *
+ *
  * Simple outside.
  * Intelligent underneath.
  * Private by default.
@@ -977,6 +985,13 @@ export const AI_RECOMMENDATION_ENTITY_TYPES = [
  * Travel data is currently supplied through the controlled
  * context builder rather than granting AI an arbitrary Travel
  * write tool.
+ *
+ *
+ * LIFE Invest AI is intentionally NOT added as a Chief of
+ * Staff tool here.
+ *
+ * It runs through its own constrained investment-analysis
+ * pipeline and cannot receive broker execution authority.
  */
 export const AI_TOOL_NAMES = [
   "get_dashboard_snapshot",
@@ -1174,6 +1189,15 @@ Record<
  * السفر
  * التطوير
  * LIFE AI
+ *
+ *
+ * LIFE Invest AI remains one level deeper:
+ *
+ * المال
+ *      ↓
+ * الاستثمارات
+ *      ↓
+ * LIFE Invest AI
  */
 export const NAVIGATION_ITEMS = [
   {
@@ -1373,6 +1397,17 @@ export const PUBLIC_ROUTES = [
  * /onboarding is authenticated.
  *
  * It is not a public account-registration route.
+ *
+ *
+ * Proxy performs prefix matching.
+ *
+ * Therefore:
+ *
+ * /investments
+ *
+ * automatically protects:
+ *
+ * /investments/intelligence
  */
 export const PROTECTED_ROUTES = [
   "/dashboard",
@@ -1413,6 +1448,14 @@ export const INTAKE_CONFIRM_API_ROUTE =
   "/api/intake/confirm";
 
 
+export const INVESTMENT_INTELLIGENCE_ANALYZE_API_ROUTE =
+  "/api/investment-intelligence/analyze";
+
+
+export const INVESTMENT_INTELLIGENCE_TRACK_RECORD_API_ROUTE =
+  "/api/investment-intelligence/track-record";
+
+
 /* =========================================================
  * 39. USER ERRORS
  * ======================================================= */
@@ -1441,6 +1484,9 @@ export const USER_ERRORS = {
 
   intakeUnavailable:
     "تعذر تجهيز الإضافة الآن. لم يتم حفظ أي تغيير.",
+
+  investmentIntelligenceUnavailable:
+    "تعذر تشغيل LIFE Invest AI الآن. محفظتك وسجل استثماراتك لم يتأثرا.",
 } as const;
 
 
@@ -1659,6 +1705,7 @@ export const FORBIDDEN_AUDIT_METADATA_KEYS = [
   "secret",
   "service_role",
   "openai_api_key",
+  "twelve_data_api_key",
 ] as const;
 
 
@@ -1705,6 +1752,7 @@ export const SENSITIVE_QUERY_PARAMETER_NAMES = [
   "refresh_token",
   "api_key",
   "secret",
+  "twelve_data_api_key",
   "salary",
   "investment_balance",
 ] as const;
@@ -1715,7 +1763,7 @@ export const SENSITIVE_QUERY_PARAMETER_NAMES = [
  * ======================================================= */
 
 /**
- * Complete V2 public application table registry.
+ * Complete LIFE OS public application table registry.
  *
  *
  * V1 foundation:
@@ -1741,6 +1789,18 @@ export const SENSITIVE_QUERY_PARAMETER_NAMES = [
  * intake_items
  * trips
  * documents
+ *
+ *
+ * Investment Intelligence extension:
+ *
+ * investment_ai_analyses
+ * investment_ai_evidence
+ * investment_ai_forecasts
+ * investment_ai_forecast_outcomes
+ *
+ *
+ * investment_ai_track_record is a VIEW,
+ * therefore it does not belong in LIFE_OS_TABLES.
  */
 export const LIFE_OS_TABLES = [
   "profiles",
@@ -1751,6 +1811,11 @@ export const LIFE_OS_TABLES = [
 
   "investment_assets",
   "investment_transactions",
+
+  "investment_ai_analyses",
+  "investment_ai_evidence",
+  "investment_ai_forecasts",
+  "investment_ai_forecast_outcomes",
 
   "goals",
   "projects",
@@ -1772,7 +1837,7 @@ export const LIFE_OS_TABLES = [
 
 
 /* =========================================================
- * 50. V2 DOMAIN TABLE GROUPS
+ * 50. DOMAIN TABLE GROUPS
  * ======================================================= */
 
 export const LIFE_OS_MONEY_TABLES = [
@@ -1781,6 +1846,19 @@ export const LIFE_OS_MONEY_TABLES = [
   "monthly_snapshots",
   "investment_assets",
   "investment_transactions",
+
+  "investment_ai_analyses",
+  "investment_ai_evidence",
+  "investment_ai_forecasts",
+  "investment_ai_forecast_outcomes",
+] as const;
+
+
+export const LIFE_OS_INVESTMENT_INTELLIGENCE_TABLES = [
+  "investment_ai_analyses",
+  "investment_ai_evidence",
+  "investment_ai_forecasts",
+  "investment_ai_forecast_outcomes",
 ] as const;
 
 
@@ -1905,6 +1983,12 @@ export const APPLICATION_SAFETY_DEFAULTS = {
 
   autonomousIntakeExecution:
     false,
+
+  autonomousInvestmentAnalysis:
+    false,
+
+  autonomousInvestmentOutcomeMutation:
+    false,
 } as const;
 
 
@@ -1924,6 +2008,14 @@ export const APPLICATION_SAFETY_DEFAULTS = {
  *
  *
  * Detailed routes remain available underneath those areas.
+ *
+ *
+ * LIFE Invest AI:
+ *
+ * /investments/intelligence
+ *
+ * remains a secondary intelligence layer and does not become
+ * a seventh navigation destination.
  */
 
 
@@ -1992,7 +2084,69 @@ export const APPLICATION_SAFETY_DEFAULTS = {
 
 
 /* =========================================================
- * 59. FINAL DATABASE SECURITY CONTRACT
+ * 59. INVESTMENT INTELLIGENCE CONTRACT
+ * ======================================================= */
+
+/**
+ * LIFE Invest AI:
+ *
+ * existing owned investment
+ *      ↓
+ * trusted market evidence
+ *      ↓
+ * deterministic technical calculations
+ *      ↓
+ * constrained AI interpretation
+ *      ↓
+ * deterministic LIFE score
+ *      ↓
+ * probabilistic forecast
+ *      ↓
+ * immutable forecast history
+ *      ↓
+ * future actual market observation
+ *      ↓
+ * deterministic grading
+ *      ↓
+ * Track Record
+ *
+ *
+ * Browser cannot supply:
+ *
+ * overall score
+ * recommendation
+ * confidence
+ * market facts
+ * historical accuracy
+ *
+ *
+ * AI cannot:
+ *
+ * buy
+ * sell
+ * transfer money
+ * place broker orders
+ * rewrite historical forecasts
+ */
+
+
+/* =========================================================
+ * 60. MARKET DATA SECRET CONTRACT
+ * ======================================================= */
+
+/**
+ * TWELVE_DATA_API_KEY:
+ *
+ * server-only
+ * never NEXT_PUBLIC_
+ * never audit metadata
+ * never query parameters
+ * never source control
+ */
+
+
+/* =========================================================
+ * 61. FINAL DATABASE SECURITY CONTRACT
  * ======================================================= */
 
 /**
@@ -2016,7 +2170,7 @@ export const APPLICATION_SAFETY_DEFAULTS = {
 
 
 /* =========================================================
- * 60. FINAL LIFE OS V2 RULE
+ * 62. FINAL LIFE OS V2 RULE
  * ======================================================= */
 
 /**
@@ -2030,6 +2184,15 @@ export const APPLICATION_SAFETY_DEFAULTS = {
  * السفر
  * التطوير
  * LIFE AI
+ *
+ *
+ * Investment Intelligence remains optional underneath:
+ *
+ * المال
+ *      ↓
+ * الاستثمارات
+ *      ↓
+ * LIFE Invest AI
  *
  *
  * Simple outside.
