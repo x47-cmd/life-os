@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -13,6 +14,8 @@ import type {
 import {
   useRouter,
 } from "next/navigation";
+
+import Image from "next/image";
 
 import {
   APP_NAME,
@@ -178,8 +181,10 @@ export default function MfaPage() {
    * 6. START ENROLLMENT
    * ===================================================== */
 
-  async function startEnrollment():
-  Promise<void> {
+  const startEnrollment =
+    useCallback(
+      async ():
+      Promise<void> => {
     setFlow(
       "checking",
     );
@@ -240,10 +245,14 @@ export default function MfaPage() {
       "enroll",
     );
 
-    setMessage(
-      "امسح رمز QR بتطبيق المصادقة، ثم أدخل الرمز الظاهر في التطبيق.",
+        setMessage(
+          "امسح رمز QR بتطبيق المصادقة، ثم أدخل الرمز الظاهر في التطبيق.",
+        );
+      },
+      [
+        supabase,
+      ],
     );
-  }
 
 
   /* =======================================================
@@ -413,6 +422,7 @@ export default function MfaPage() {
     },
     [
       router,
+      startEnrollment,
       supabase,
     ],
   );
@@ -639,11 +649,12 @@ export default function MfaPage() {
                 امسح الرمز باستخدام Microsoft Authenticator أو Google Authenticator.
               </p>
 
-              <img
+              <Image
                 src={qrCode}
                 alt="رمز QR لإعداد المصادقة الثنائية"
                 width={220}
                 height={220}
+                unoptimized
                 style={{
                   display:
                     "block",
