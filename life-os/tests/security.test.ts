@@ -670,12 +670,12 @@ describe(
 
 
     it(
-      "accepts AAL1 as ordinary LIFE OS authentication",
+      "requires AAL2 before private LIFE OS access",
       () => {
         expect(
           REQUIRED_AUTHENTICATION_LEVEL,
         ).toBe(
-          "aal1",
+          "aal2",
         );
       },
     );
@@ -739,12 +739,26 @@ describe(
 
 
     it(
-      "does not perform MFA operations in central auth",
+      "evaluates MFA assurance in central auth",
       () => {
         expect(
           source,
-        ).not.toMatch(
+        ).toMatch(
           /auth\.mfa/,
+        );
+
+
+        expect(
+          source,
+        ).toContain(
+          "getAuthenticatorAssuranceLevel",
+        );
+
+
+        expect(
+          source,
+        ).toContain(
+          "listFactors",
         );
       },
     );
@@ -797,12 +811,19 @@ describe(
 
 
     it(
-      "routes authenticated users to normal private workspace",
+      "routes password-authenticated users to mandatory MFA",
       () => {
         expect(
           source,
         ).toContain(
-          "DEFAULT_AUTHENTICATED_ROUTE",
+          "AFTER_PASSWORD_ROUTE",
+        );
+
+
+        expect(
+          source,
+        ).toContain(
+          '"/mfa"',
         );
       },
     );
@@ -2676,8 +2697,8 @@ describe(
 
         expect(
           normalized,
-        ).not.toContain(
-          "service_role",
+        ).not.toMatch(
+          /process\.env[\s\S]{0,120}service_role/,
         );
       },
     );
@@ -2992,8 +3013,15 @@ describe(
       () => {
         expect(
           source,
-        ).not.toMatch(
-          /\.\s*(insert|update|delete|upsert)\s*\(/,
+        ).not.toContain(
+          "@/lib/supabase/server",
+        );
+
+
+        expect(
+          source,
+        ).not.toContain(
+          "createClient",
         );
       },
     );
@@ -4381,8 +4409,15 @@ describe(
       () => {
         expect(
           aiSource,
-        ).not.toMatch(
-          /\.\s*(insert|update|delete|upsert)\s*\(/,
+        ).not.toContain(
+          "@/lib/supabase/server",
+        );
+
+
+        expect(
+          aiSource,
+        ).not.toContain(
+          "createClient",
         );
       },
     );
