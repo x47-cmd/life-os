@@ -26,10 +26,11 @@ import {
 } from "@/components/stat-card";
 
 import {
-  requireAAL2Identity,
+  requireAuthenticatedIdentity,
 } from "@/lib/auth";
 
 import {
+  listCareerItems,
   listLearningItems,
 } from "@/lib/data";
 
@@ -40,17 +41,46 @@ import {
 
 
 /* =========================================================
+ * LIFE OS V2
+ * GROWTH
+ *
+ * One primary development surface:
+ *
+ * Learning
+ * +
+ * Career
+ *
+ *
+ * Learning:
+ *      what am I learning?
+ *
+ * Career:
+ *      where am I professionally and where am I going?
+ *
+ *
+ * Detailed career management remains available at:
+ *
+ * /career
+ *
+ *
+ * Simple outside.
+ * Intelligent underneath.
+ * ======================================================= */
+
+
+/* =========================================================
  * 1. METADATA
  * ======================================================= */
 
-export const metadata: Metadata = {
+export const metadata:
+Metadata = {
   title:
-    "التعلم والتعليم",
+    "التطوير",
 };
 
 
 /* =========================================================
- * 2. INFERRED ROW TYPE
+ * 2. INFERRED DATA TYPES
  * ======================================================= */
 
 type LearningItem =
@@ -61,17 +91,30 @@ type LearningItem =
   >[number];
 
 
+type CareerItem =
+  Awaited<
+    ReturnType<
+      typeof listCareerItems
+    >
+  >[number];
+
+
 /* =========================================================
- * 3. SAFE RECORD READERS
+ * 3. SAFE RECORD HELPERS
  * ======================================================= */
 
 function isRecord(
-  value: unknown,
-): value is Record<string, unknown> {
+  value:
+    unknown,
+): value is Record<
+  string,
+  unknown
+> {
   return (
     typeof value ===
       "object" &&
-    value !== null &&
+    value !==
+      null &&
     !Array.isArray(
       value,
     )
@@ -80,8 +123,11 @@ function isRecord(
 
 
 function readString(
-  value: unknown,
-  key: string,
+  value:
+    unknown,
+
+  key:
+    string,
 ): string | null {
   if (
     !isRecord(
@@ -91,29 +137,38 @@ function readString(
     return null;
   }
 
+
   const field =
-    value[key];
+    value[
+      key
+    ];
+
 
   if (
     typeof field !==
-      "string"
+    "string"
   ) {
     return null;
   }
 
-  const trimmed =
+
+  const normalized =
     field.trim();
 
-  return trimmed.length >
+
+  return normalized.length >
     0
-    ? trimmed
+    ? normalized
     : null;
 }
 
 
 function readNumber(
-  value: unknown,
-  key: string,
+  value:
+    unknown,
+
+  key:
+    string,
 ): number | null {
   if (
     !isRecord(
@@ -123,8 +178,12 @@ function readNumber(
     return null;
   }
 
+
   const field =
-    value[key];
+    value[
+      key
+    ];
+
 
   if (
     typeof field ===
@@ -135,6 +194,7 @@ function readNumber(
   ) {
     return field;
   }
+
 
   if (
     typeof field ===
@@ -147,6 +207,7 @@ function readNumber(
         field,
       );
 
+
     if (
       Number.isFinite(
         parsed,
@@ -155,6 +216,7 @@ function readNumber(
       return parsed;
     }
   }
+
 
   return null;
 }
@@ -165,7 +227,8 @@ function readNumber(
  * ======================================================= */
 
 function normalizeValue(
-  value: string,
+  value:
+    string,
 ): string {
   return value
     .trim()
@@ -178,11 +241,89 @@ function normalizeValue(
 
 
 /* =========================================================
- * 5. ITEM FIELDS
+ * 5. PRIORITY WEIGHT
  * ======================================================= */
 
-function getTitle(
-  item: LearningItem,
+function getPriorityWeight(
+  priority:
+    string |
+    null,
+): number {
+  if (
+    !priority
+  ) {
+    return 0;
+  }
+
+
+  switch (
+    normalizeValue(
+      priority,
+    )
+  ) {
+    case "high":
+      return 3;
+
+    case "medium":
+      return 2;
+
+    case "low":
+      return 1;
+
+    default:
+      return 0;
+  }
+}
+
+
+/* =========================================================
+ * 6. DATE COMPARISON
+ * ======================================================= */
+
+function compareDates(
+  a:
+    string |
+    null,
+
+  b:
+    string |
+    null,
+): number {
+  if (
+    a === null &&
+    b === null
+  ) {
+    return 0;
+  }
+
+
+  if (
+    a === null
+  ) {
+    return 1;
+  }
+
+
+  if (
+    b === null
+  ) {
+    return -1;
+  }
+
+
+  return a.localeCompare(
+    b,
+  );
+}
+
+
+/* =========================================================
+ * 7. LEARNING FIELD READERS
+ * ======================================================= */
+
+function getLearningTitle(
+  item:
+    LearningItem,
 ): string {
   return (
     readString(
@@ -198,8 +339,9 @@ function getTitle(
 }
 
 
-function getProvider(
-  item: LearningItem,
+function getLearningProvider(
+  item:
+    LearningItem,
 ): string | null {
   return (
     readString(
@@ -218,8 +360,9 @@ function getProvider(
 }
 
 
-function getDescription(
-  item: LearningItem,
+function getLearningDescription(
+  item:
+    LearningItem,
 ): string | null {
   return (
     readString(
@@ -234,8 +377,9 @@ function getDescription(
 }
 
 
-function getItemType(
-  item: LearningItem,
+function getLearningType(
+  item:
+    LearningItem,
 ): string {
   return (
     readString(
@@ -246,17 +390,14 @@ function getItemType(
       item,
       "type",
     ) ??
-    readString(
-      item,
-      "category",
-    ) ??
     "other"
   );
 }
 
 
-function getStatus(
-  item: LearningItem,
+function getLearningStatus(
+  item:
+    LearningItem,
 ): string {
   return (
     readString(
@@ -268,8 +409,9 @@ function getStatus(
 }
 
 
-function getPriority(
-  item: LearningItem,
+function getLearningPriority(
+  item:
+    LearningItem,
 ): string | null {
   return readString(
     item,
@@ -278,8 +420,9 @@ function getPriority(
 }
 
 
-function getNextAction(
-  item: LearningItem,
+function getLearningNextAction(
+  item:
+    LearningItem,
 ): string | null {
   return readString(
     item,
@@ -288,8 +431,9 @@ function getNextAction(
 }
 
 
-function getRelevantDate(
-  item: LearningItem,
+function getLearningDate(
+  item:
+    LearningItem,
 ): string | null {
   return (
     readString(
@@ -298,11 +442,7 @@ function getRelevantDate(
     ) ??
     readString(
       item,
-      "end_date",
-    ) ??
-    readString(
-      item,
-      "completed_at",
+      "completed_date",
     ) ??
     readString(
       item,
@@ -312,10 +452,11 @@ function getRelevantDate(
 }
 
 
-function getProgress(
-  item: LearningItem,
+function getLearningProgress(
+  item:
+    LearningItem,
 ): number {
-  const value =
+  const progress =
     readNumber(
       item,
       "progress_percent",
@@ -324,49 +465,47 @@ function getProgress(
       item,
       "progress",
     ) ??
-    readNumber(
-      item,
-      "completion_percent",
-    ) ??
     0;
+
 
   return Math.min(
     100,
     Math.max(
       0,
-      value,
+      progress,
     ),
   );
 }
 
 
 /* =========================================================
- * 6. LEARNING TYPE
+ * 8. LEARNING GROUP
  * ======================================================= */
 
 type LearningGroup =
   | "course"
   | "certification"
-  | "degree"
+  | "academic"
   | "program"
   | "other";
 
 
 function getLearningGroup(
-  item: LearningItem,
+  item:
+    LearningItem,
 ): LearningGroup {
-  const type =
+  switch (
     normalizeValue(
-      getItemType(
+      getLearningType(
         item,
       ),
-    );
-
-  switch (type) {
+    )
+  ) {
     case "course":
     case "learning_path":
     case "training":
       return "course";
+
 
     case "certification":
     case "certificate":
@@ -374,19 +513,20 @@ function getLearningGroup(
     case "exam":
       return "certification";
 
-    case "degree":
+
     case "masters":
     case "master":
-    case "master_degree":
+    case "degree":
+    case "university_program":
     case "university":
-    case "education":
-      return "degree";
+      return "academic";
+
 
     case "program":
-    case "professional_program":
     case "academy":
     case "bootcamp":
       return "program";
+
 
     default:
       return "other";
@@ -395,11 +535,12 @@ function getLearningGroup(
 
 
 /* =========================================================
- * 7. TYPE LABEL
+ * 9. LEARNING TYPE LABEL
  * ======================================================= */
 
-function getTypeLabel(
-  item: LearningItem,
+function getLearningTypeLabel(
+  item:
+    LearningItem,
 ): string {
   switch (
     getLearningGroup(
@@ -412,7 +553,7 @@ function getTypeLabel(
     case "certification":
       return "شهادة";
 
-    case "degree":
+    case "academic":
       return "تعليم أكاديمي";
 
     case "program":
@@ -426,11 +567,12 @@ function getTypeLabel(
 
 
 /* =========================================================
- * 8. TYPE BADGE
+ * 10. LEARNING TYPE BADGE
  * ======================================================= */
 
-function getTypeBadgeClass(
-  item: LearningItem,
+function getLearningTypeBadgeClass(
+  item:
+    LearningItem,
 ): string {
   switch (
     getLearningGroup(
@@ -440,12 +582,14 @@ function getTypeBadgeClass(
     case "certification":
       return "badge badge--positive";
 
-    case "degree":
+    case "academic":
       return "badge badge--accent";
 
     case "program":
       return "badge badge--warning";
 
+    case "course":
+    case "other":
     default:
       return "badge";
   }
@@ -453,11 +597,12 @@ function getTypeBadgeClass(
 
 
 /* =========================================================
- * 9. STATUS HELPERS
+ * 11. LEARNING STATUS
  * ======================================================= */
 
-function getStatusLabel(
-  status: string,
+function getLearningStatusLabel(
+  status:
+    string,
 ): string {
   switch (
     normalizeValue(
@@ -479,8 +624,9 @@ function getStatusLabel(
     case "paused":
       return "متوقف مؤقتًا";
 
+    case "dropped":
     case "cancelled":
-      return "ملغي";
+      return "متوقف";
 
     default:
       return status;
@@ -488,8 +634,9 @@ function getStatusLabel(
 }
 
 
-function getStatusBadgeClass(
-  status: string,
+function getLearningStatusBadgeClass(
+  status:
+    string,
 ): string {
   switch (
     normalizeValue(
@@ -507,6 +654,7 @@ function getStatusBadgeClass(
     case "paused":
       return "badge badge--warning";
 
+    case "dropped":
     case "cancelled":
       return "badge badge--negative";
 
@@ -517,17 +665,669 @@ function getStatusBadgeClass(
 
 
 /* =========================================================
- * 10. PRIORITY
+ * 12. LEARNING STATUS PREDICATES
+ * ======================================================= */
+
+function isLearningActive(
+  item:
+    LearningItem,
+): boolean {
+  const status =
+    normalizeValue(
+      getLearningStatus(
+        item,
+      ),
+    );
+
+
+  return (
+    status ===
+      "active" ||
+    status ===
+      "in_progress"
+  );
+}
+
+
+function isLearningPlanned(
+  item:
+    LearningItem,
+): boolean {
+  const status =
+    normalizeValue(
+      getLearningStatus(
+        item,
+      ),
+    );
+
+
+  return (
+    status ===
+      "planned" ||
+    status ===
+      "not_started"
+  );
+}
+
+
+function isLearningCompleted(
+  item:
+    LearningItem,
+): boolean {
+  const status =
+    normalizeValue(
+      getLearningStatus(
+        item,
+      ),
+    );
+
+
+  return (
+    status ===
+      "completed" ||
+    status ===
+      "passed"
+  );
+}
+
+
+/* =========================================================
+ * 13. SORT LEARNING
+ * ======================================================= */
+
+function getLearningStatusWeight(
+  item:
+    LearningItem,
+): number {
+  const status =
+    normalizeValue(
+      getLearningStatus(
+        item,
+      ),
+    );
+
+
+  switch (
+    status
+  ) {
+    case "active":
+    case "in_progress":
+      return 5;
+
+    case "planned":
+    case "not_started":
+      return 4;
+
+    case "paused":
+      return 3;
+
+    case "completed":
+    case "passed":
+      return 2;
+
+    case "dropped":
+    case "cancelled":
+      return 1;
+
+    default:
+      return 0;
+  }
+}
+
+
+function sortLearningItems(
+  items:
+    LearningItem[],
+): LearningItem[] {
+  return [
+    ...items,
+  ].sort(
+    (
+      a,
+      b,
+    ) => {
+      const statusDifference =
+        getLearningStatusWeight(
+          b,
+        ) -
+        getLearningStatusWeight(
+          a,
+        );
+
+
+      if (
+        statusDifference !==
+        0
+      ) {
+        return statusDifference;
+      }
+
+
+      const priorityDifference =
+        getPriorityWeight(
+          getLearningPriority(
+            b,
+          ),
+        ) -
+        getPriorityWeight(
+          getLearningPriority(
+            a,
+          ),
+        );
+
+
+      if (
+        priorityDifference !==
+        0
+      ) {
+        return priorityDifference;
+      }
+
+
+      return compareDates(
+        getLearningDate(
+          a,
+        ),
+        getLearningDate(
+          b,
+        ),
+      );
+    },
+  );
+}
+
+
+/* =========================================================
+ * 14. CAREER FIELD READERS
+ * ======================================================= */
+
+function getCareerTitle(
+  item:
+    CareerItem,
+): string {
+  return (
+    readString(
+      item,
+      "title",
+    ) ??
+    readString(
+      item,
+      "name",
+    ) ??
+    "عنصر مهني"
+  );
+}
+
+
+function getCareerDescription(
+  item:
+    CareerItem,
+): string | null {
+  return (
+    readString(
+      item,
+      "description",
+    ) ??
+    readString(
+      item,
+      "notes",
+    )
+  );
+}
+
+
+function getCareerType(
+  item:
+    CareerItem,
+): string {
+  return (
+    readString(
+      item,
+      "item_type",
+    ) ??
+    readString(
+      item,
+      "type",
+    ) ??
+    "other"
+  );
+}
+
+
+function getCareerStatus(
+  item:
+    CareerItem,
+): string {
+  return (
+    readString(
+      item,
+      "status",
+    ) ??
+    "active"
+  );
+}
+
+
+function getCareerPriority(
+  item:
+    CareerItem,
+): string | null {
+  return readString(
+    item,
+    "priority",
+  );
+}
+
+
+function getCareerDate(
+  item:
+    CareerItem,
+): string | null {
+  return (
+    readString(
+      item,
+      "target_date",
+    ) ??
+    readString(
+      item,
+      "event_date",
+    ) ??
+    readString(
+      item,
+      "achievement_date",
+    ) ??
+    readString(
+      item,
+      "start_date",
+    )
+  );
+}
+
+
+function getCareerNextAction(
+  item:
+    CareerItem,
+): string | null {
+  return readString(
+    item,
+    "next_action",
+  );
+}
+
+
+/* =========================================================
+ * 15. CAREER GROUP
+ * ======================================================= */
+
+type CareerGroup =
+  | "current"
+  | "target"
+  | "skill"
+  | "achievement"
+  | "milestone"
+  | "gap"
+  | "other";
+
+
+function getCareerGroup(
+  item:
+    CareerItem,
+): CareerGroup {
+  switch (
+    normalizeValue(
+      getCareerType(
+        item,
+      ),
+    )
+  ) {
+    case "current_role":
+    case "current_position":
+    case "role":
+      return "current";
+
+
+    case "target_role":
+    case "target_position":
+    case "career_target":
+      return "target";
+
+
+    case "skill":
+    case "capability":
+    case "competency":
+      return "skill";
+
+
+    case "achievement":
+    case "award":
+      return "achievement";
+
+
+    case "milestone":
+      return "milestone";
+
+
+    case "gap":
+    case "skill_gap":
+    case "development_gap":
+      return "gap";
+
+
+    default:
+      return "other";
+  }
+}
+
+
+/* =========================================================
+ * 16. CAREER TYPE LABEL
+ * ======================================================= */
+
+function getCareerTypeLabel(
+  item:
+    CareerItem,
+): string {
+  switch (
+    getCareerGroup(
+      item,
+    )
+  ) {
+    case "current":
+      return "الوضع الحالي";
+
+    case "target":
+      return "هدف مهني";
+
+    case "skill":
+      return "مهارة";
+
+    case "achievement":
+      return "إنجاز";
+
+    case "milestone":
+      return "مرحلة مهنية";
+
+    case "gap":
+      return "فجوة تطوير";
+
+    case "other":
+    default:
+      return "مهني";
+  }
+}
+
+
+/* =========================================================
+ * 17. CAREER TYPE BADGE
+ * ======================================================= */
+
+function getCareerTypeBadgeClass(
+  item:
+    CareerItem,
+): string {
+  switch (
+    getCareerGroup(
+      item,
+    )
+  ) {
+    case "achievement":
+    case "milestone":
+      return "badge badge--positive";
+
+    case "target":
+      return "badge badge--accent";
+
+    case "gap":
+      return "badge badge--warning";
+
+    case "current":
+    case "skill":
+    case "other":
+    default:
+      return "badge";
+  }
+}
+
+
+/* =========================================================
+ * 18. CAREER STATUS
+ * ======================================================= */
+
+function getCareerStatusLabel(
+  status:
+    string,
+): string {
+  switch (
+    normalizeValue(
+      status,
+    )
+  ) {
+    case "active":
+    case "in_progress":
+      return "نشط";
+
+    case "planned":
+      return "مخطط";
+
+    case "completed":
+    case "achieved":
+      return "مكتمل";
+
+    case "paused":
+      return "متوقف مؤقتًا";
+
+    case "archived":
+      return "مؤرشف";
+
+    case "cancelled":
+      return "ملغي";
+
+    default:
+      return status;
+  }
+}
+
+
+function getCareerStatusBadgeClass(
+  status:
+    string,
+): string {
+  switch (
+    normalizeValue(
+      status,
+    )
+  ) {
+    case "active":
+    case "in_progress":
+      return "badge badge--accent";
+
+    case "completed":
+    case "achieved":
+      return "badge badge--positive";
+
+    case "planned":
+    case "paused":
+      return "badge badge--warning";
+
+    case "cancelled":
+      return "badge badge--negative";
+
+    default:
+      return "badge";
+  }
+}
+
+
+/* =========================================================
+ * 19. ACTIVE CAREER ITEM
+ * ======================================================= */
+
+function isCareerActive(
+  item:
+    CareerItem,
+): boolean {
+  const status =
+    normalizeValue(
+      getCareerStatus(
+        item,
+      ),
+    );
+
+
+  return ![
+    "completed",
+    "achieved",
+    "archived",
+    "cancelled",
+  ].includes(
+    status,
+  );
+}
+
+
+/* =========================================================
+ * 20. CAREER ACHIEVEMENT
+ * ======================================================= */
+
+function isCareerAchievement(
+  item:
+    CareerItem,
+): boolean {
+  const group =
+    getCareerGroup(
+      item,
+    );
+
+
+  return (
+    group ===
+      "achievement" ||
+    group ===
+      "milestone"
+  );
+}
+
+
+/* =========================================================
+ * 21. CAREER SORTING
+ * ======================================================= */
+
+function getCareerStatusWeight(
+  item:
+    CareerItem,
+): number {
+  const status =
+    normalizeValue(
+      getCareerStatus(
+        item,
+      ),
+    );
+
+
+  switch (
+    status
+  ) {
+    case "active":
+    case "in_progress":
+      return 5;
+
+    case "planned":
+      return 4;
+
+    case "paused":
+      return 3;
+
+    case "completed":
+    case "achieved":
+      return 2;
+
+    case "archived":
+    case "cancelled":
+      return 1;
+
+    default:
+      return 0;
+  }
+}
+
+
+function sortCareerItems(
+  items:
+    CareerItem[],
+): CareerItem[] {
+  return [
+    ...items,
+  ].sort(
+    (
+      a,
+      b,
+    ) => {
+      const statusDifference =
+        getCareerStatusWeight(
+          b,
+        ) -
+        getCareerStatusWeight(
+          a,
+        );
+
+
+      if (
+        statusDifference !==
+        0
+      ) {
+        return statusDifference;
+      }
+
+
+      const priorityDifference =
+        getPriorityWeight(
+          getCareerPriority(
+            b,
+          ),
+        ) -
+        getPriorityWeight(
+          getCareerPriority(
+            a,
+          ),
+        );
+
+
+      if (
+        priorityDifference !==
+        0
+      ) {
+        return priorityDifference;
+      }
+
+
+      return compareDates(
+        getCareerDate(
+          a,
+        ),
+        getCareerDate(
+          b,
+        ),
+      );
+    },
+  );
+}
+
+
+/* =========================================================
+ * 22. PRIORITY LABEL
  * ======================================================= */
 
 function getPriorityLabel(
-  priority: string | null,
+  priority:
+    string |
+    null,
 ): string {
   if (
     !priority
   ) {
     return "—";
   }
+
 
   switch (
     normalizeValue(
@@ -550,149 +1350,86 @@ function getPriorityLabel(
 
 
 /* =========================================================
- * 11. STATUS PREDICATES
+ * 23. ACTIVE LEARNING CARD
  * ======================================================= */
 
-function isActive(
-  item: LearningItem,
-): boolean {
-  const status =
-    normalizeValue(
-      getStatus(
-        item,
-      ),
-    );
-
-  return (
-    status ===
-      "active" ||
-    status ===
-      "in_progress"
-  );
-}
-
-
-function isPlanned(
-  item: LearningItem,
-): boolean {
-  const status =
-    normalizeValue(
-      getStatus(
-        item,
-      ),
-    );
-
-  return (
-    status ===
-      "planned" ||
-    status ===
-      "not_started"
-  );
-}
-
-
-function isCompleted(
-  item: LearningItem,
-): boolean {
-  const status =
-    normalizeValue(
-      getStatus(
-        item,
-      ),
-    );
-
-  return (
-    status ===
-      "completed" ||
-    status ===
-      "passed"
-  );
-}
-
-
-function isPaused(
-  item: LearningItem,
-): boolean {
-  return (
-    normalizeValue(
-      getStatus(
-        item,
-      ),
-    ) ===
-    "paused"
-  );
-}
-
-
-/* =========================================================
- * 12. ACTIVE LEARNING CARD
- * ======================================================= */
-
-function ActiveLearningCard({
+function LearningCard({
   item,
 }: {
-  item: LearningItem;
+  item:
+    LearningItem;
 }) {
   const progress =
-    getProgress(
+    getLearningProgress(
       item,
     );
+
 
   const provider =
-    getProvider(
+    getLearningProvider(
       item,
     );
+
 
   const description =
-    getDescription(
+    getLearningDescription(
       item,
     );
+
 
   const nextAction =
-    getNextAction(
+    getLearningNextAction(
       item,
     );
 
+
   const date =
-    getRelevantDate(
+    getLearningDate(
       item,
     );
+
 
   return (
     <article className="card">
-
       <div className="space-between">
         <div>
           <div className="inline">
             <span
               className={
-                getTypeBadgeClass(
+                getLearningTypeBadgeClass(
                   item,
                 )
               }
             >
               {
-                getTypeLabel(
+                getLearningTypeLabel(
                   item,
                 )
               }
             </span>
 
+
             <span
               className={
-                getStatusBadgeClass(
-                  getStatus(
+                getLearningStatusBadgeClass(
+                  getLearningStatus(
                     item,
                   ),
                 )
               }
             >
-              جاري
+              {
+                getLearningStatusLabel(
+                  getLearningStatus(
+                    item,
+                  ),
+                )
+              }
             </span>
           </div>
 
 
-          <h2
+          <h3
             className="card__title"
             style={{
               marginTop:
@@ -700,11 +1437,11 @@ function ActiveLearningCard({
             }}
           >
             {
-              getTitle(
+              getLearningTitle(
                 item,
               )
             }
-          </h2>
+          </h3>
 
 
           {provider ? (
@@ -767,7 +1504,6 @@ function ActiveLearningCard({
               "18px",
           }}
         >
-
           {nextAction ? (
             <div>
               <span className="text-subtle text-small">
@@ -802,7 +1538,6 @@ function ActiveLearningCard({
               </strong>
             </div>
           ) : null}
-
         </div>
       ) : null}
     </article>
@@ -811,240 +1546,561 @@ function ActiveLearningCard({
 
 
 /* =========================================================
- * 13. TABLE COLUMNS
+ * 24. CAREER CARD
  * ======================================================= */
 
-const columns:
-  readonly DataTableColumn<LearningItem>[] = [
-    {
-      key:
-        "title",
+function CareerCard({
+  item,
+}: {
+  item:
+    CareerItem;
+}) {
+  const description =
+    getCareerDescription(
+      item,
+    );
 
-      header:
-        "التعلم",
 
-      render:
-        (item) => (
-          <div>
-            <strong>
-              {
-                getTitle(
-                  item,
-                )
-              }
-            </strong>
+  const nextAction =
+    getCareerNextAction(
+      item,
+    );
 
-            {getProvider(
+
+  const date =
+    getCareerDate(
+      item,
+    );
+
+
+  return (
+    <article className="card">
+      <div className="inline">
+        <span
+          className={
+            getCareerTypeBadgeClass(
               item,
-            ) ? (
-              <div
-                className="text-subtle text-small"
+            )
+          }
+        >
+          {
+            getCareerTypeLabel(
+              item,
+            )
+          }
+        </span>
+
+
+        <span
+          className={
+            getCareerStatusBadgeClass(
+              getCareerStatus(
+                item,
+              ),
+            )
+          }
+        >
+          {
+            getCareerStatusLabel(
+              getCareerStatus(
+                item,
+              ),
+            )
+          }
+        </span>
+      </div>
+
+
+      <h3
+        className="card__title"
+        style={{
+          marginTop:
+            "12px",
+        }}
+      >
+        {
+          getCareerTitle(
+            item,
+          )
+        }
+      </h3>
+
+
+      {description ? (
+        <p className="card__description">
+          {description}
+        </p>
+      ) : null}
+
+
+      {(nextAction ||
+        date) ? (
+        <div
+          className="stack stack--small"
+          style={{
+            marginTop:
+              "18px",
+          }}
+        >
+          {nextAction ? (
+            <div>
+              <span className="text-subtle text-small">
+                الخطوة التالية
+              </span>
+
+              <p
+                className="font-semibold"
                 style={{
-                  marginTop:
-                    "2px",
+                  margin:
+                    "3px 0 0",
                 }}
               >
+                {nextAction}
+              </p>
+            </div>
+          ) : null}
+
+
+          {date ? (
+            <div className="space-between">
+              <span className="text-muted text-small">
+                التاريخ
+              </span>
+
+              <strong>
                 {
-                  getProvider(
-                    item,
+                  formatDate(
+                    date,
                   )
                 }
-              </div>
-            ) : null}
-          </div>
-        ),
-    },
-
-    {
-      key:
-        "type",
-
-      header:
-        "النوع",
-
-      render:
-        (item) => (
-          <span
-            className={
-              getTypeBadgeClass(
-                item,
-              )
-            }
-          >
-            {
-              getTypeLabel(
-                item,
-              )
-            }
-          </span>
-        ),
-    },
-
-    {
-      key:
-        "status",
-
-      header:
-        "الحالة",
-
-      render:
-        (item) => (
-          <span
-            className={
-              getStatusBadgeClass(
-                getStatus(
-                  item,
-                ),
-              )
-            }
-          >
-            {
-              getStatusLabel(
-                getStatus(
-                  item,
-                ),
-              )
-            }
-          </span>
-        ),
-    },
-
-    {
-      key:
-        "priority",
-
-      header:
-        "الأولوية",
-
-      render:
-        (item) =>
-          getPriorityLabel(
-            getPriority(
-              item,
-            ),
-          ),
-    },
-
-    {
-      key:
-        "progress",
-
-      header:
-        "التقدم",
-
-      align:
-        "center",
-
-      render:
-        (item) => (
-          <span className="percentage">
-            {
-              formatProgress(
-                getProgress(
-                  item,
-                ),
-              )
-            }
-          </span>
-        ),
-    },
-
-    {
-      key:
-        "date",
-
-      header:
-        "الموعد",
-
-      render:
-        (item) => {
-          const date =
-            getRelevantDate(
-              item,
-            );
-
-          return date
-            ? formatDate(
-                date,
-              )
-            : "—";
-        },
-    },
-
-    {
-      key:
-        "next_action",
-
-      header:
-        "الخطوة التالية",
-
-      render:
-        (item) =>
-          getNextAction(
-            item,
-          ) ??
-          "—",
-    },
-  ];
+              </strong>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </article>
+  );
+}
 
 
 /* =========================================================
- * 14. LEARNING PAGE
+ * 25. LEARNING TABLE
+ * ======================================================= */
+
+const learningColumns:
+readonly DataTableColumn<LearningItem>[] = [
+  {
+    key:
+      "title",
+
+    header:
+      "التعلم",
+
+    render:
+      (
+        item,
+      ) => (
+        <div>
+          <strong>
+            {
+              getLearningTitle(
+                item,
+              )
+            }
+          </strong>
+
+
+          {getLearningProvider(
+            item,
+          ) ? (
+            <div
+              className="text-subtle text-small"
+              style={{
+                marginTop:
+                  "2px",
+              }}
+            >
+              {
+                getLearningProvider(
+                  item,
+                )
+              }
+            </div>
+          ) : null}
+        </div>
+      ),
+  },
+
+
+  {
+    key:
+      "type",
+
+    header:
+      "النوع",
+
+    render:
+      (
+        item,
+      ) => (
+        <span
+          className={
+            getLearningTypeBadgeClass(
+              item,
+            )
+          }
+        >
+          {
+            getLearningTypeLabel(
+              item,
+            )
+          }
+        </span>
+      ),
+  },
+
+
+  {
+    key:
+      "status",
+
+    header:
+      "الحالة",
+
+    render:
+      (
+        item,
+      ) => (
+        <span
+          className={
+            getLearningStatusBadgeClass(
+              getLearningStatus(
+                item,
+              ),
+            )
+          }
+        >
+          {
+            getLearningStatusLabel(
+              getLearningStatus(
+                item,
+              ),
+            )
+          }
+        </span>
+      ),
+  },
+
+
+  {
+    key:
+      "priority",
+
+    header:
+      "الأولوية",
+
+    render:
+      (
+        item,
+      ) =>
+        getPriorityLabel(
+          getLearningPriority(
+            item,
+          ),
+        ),
+  },
+
+
+  {
+    key:
+      "progress",
+
+    header:
+      "التقدم",
+
+    align:
+      "center",
+
+    render:
+      (
+        item,
+      ) => (
+        <span className="percentage">
+          {
+            formatProgress(
+              getLearningProgress(
+                item,
+              ),
+            )
+          }
+        </span>
+      ),
+  },
+
+
+  {
+    key:
+      "date",
+
+    header:
+      "الموعد",
+
+    render:
+      (
+        item,
+      ) => {
+        const date =
+          getLearningDate(
+            item,
+          );
+
+
+        return date
+          ? formatDate(
+              date,
+            )
+          : "—";
+      },
+  },
+];
+
+
+/* =========================================================
+ * 26. CAREER TABLE
+ * ======================================================= */
+
+const careerColumns:
+readonly DataTableColumn<CareerItem>[] = [
+  {
+    key:
+      "title",
+
+    header:
+      "المسار المهني",
+
+    render:
+      (
+        item,
+      ) => (
+        <strong>
+          {
+            getCareerTitle(
+              item,
+            )
+          }
+        </strong>
+      ),
+  },
+
+
+  {
+    key:
+      "type",
+
+    header:
+      "النوع",
+
+    render:
+      (
+        item,
+      ) => (
+        <span
+          className={
+            getCareerTypeBadgeClass(
+              item,
+            )
+          }
+        >
+          {
+            getCareerTypeLabel(
+              item,
+            )
+          }
+        </span>
+      ),
+  },
+
+
+  {
+    key:
+      "status",
+
+    header:
+      "الحالة",
+
+    render:
+      (
+        item,
+      ) => (
+        <span
+          className={
+            getCareerStatusBadgeClass(
+              getCareerStatus(
+                item,
+              ),
+            )
+          }
+        >
+          {
+            getCareerStatusLabel(
+              getCareerStatus(
+                item,
+              ),
+            )
+          }
+        </span>
+      ),
+  },
+
+
+  {
+    key:
+      "priority",
+
+    header:
+      "الأولوية",
+
+    render:
+      (
+        item,
+      ) =>
+        getPriorityLabel(
+          getCareerPriority(
+            item,
+          ),
+        ),
+  },
+
+
+  {
+    key:
+      "date",
+
+    header:
+      "التاريخ",
+
+    render:
+      (
+        item,
+      ) => {
+        const date =
+          getCareerDate(
+            item,
+          );
+
+
+        return date
+          ? formatDate(
+              date,
+            )
+          : "—";
+      },
+  },
+
+
+  {
+    key:
+      "next",
+
+    header:
+      "الخطوة التالية",
+
+    render:
+      (
+        item,
+      ) =>
+        getCareerNextAction(
+          item,
+        ) ??
+        "—",
+  },
+];
+
+
+/* =========================================================
+ * 27. PAGE
  * ======================================================= */
 
 export default async function LearningPage() {
-  await requireAAL2Identity();
+  await requireAuthenticatedIdentity();
+
+
+  const [
+    learningRows,
+    careerRows,
+  ] =
+    await Promise.all([
+      listLearningItems(),
+
+      listCareerItems(),
+    ]);
+
 
   const learningItems =
-    await listLearningItems();
-
-
-  /* -------------------------------------------------------
-   * Main groups
-   * ---------------------------------------------------- */
-
-  const activeItems =
-    learningItems.filter(
-      isActive,
-    );
-
-  const plannedItems =
-    learningItems.filter(
-      isPlanned,
-    );
-
-  const completedItems =
-    learningItems.filter(
-      isCompleted,
-    );
-
-  const pausedItems =
-    learningItems.filter(
-      isPaused,
+    sortLearningItems(
+      learningRows,
     );
 
 
-  /* -------------------------------------------------------
-   * Learning categories
-   * ---------------------------------------------------- */
+  const careerItems =
+    sortCareerItems(
+      careerRows,
+    );
 
-  const certificationCount =
-    learningItems.filter(
-      (item) =>
-        getLearningGroup(
-          item,
-        ) ===
-        "certification",
-    ).length;
 
-  const academicCount =
+  const activeLearning =
     learningItems.filter(
-      (item) =>
-        getLearningGroup(
-          item,
-        ) ===
-        "degree",
-    ).length;
+      isLearningActive,
+    );
+
+
+  const plannedLearning =
+    learningItems.filter(
+      isLearningPlanned,
+    );
+
+
+  const completedLearning =
+    learningItems.filter(
+      isLearningCompleted,
+    );
+
+
+  const activeCareer =
+    careerItems.filter(
+      isCareerActive,
+    );
+
+
+  const achievements =
+    careerItems.filter(
+      isCareerAchievement,
+    );
+
+
+  const currentCareerFocus =
+    activeCareer.filter(
+      (
+        item,
+      ) => {
+        const group =
+          getCareerGroup(
+            item,
+          );
+
+
+        return (
+          group ===
+            "current" ||
+          group ===
+            "target" ||
+          group ===
+            "gap" ||
+          group ===
+            "skill"
+        );
+      },
+    );
 
 
   return (
@@ -1056,15 +2112,27 @@ export default async function LearningPage() {
          * =============================================== */}
 
         <PageHeader
-          eyebrow="التطوير"
-          title="التعلم والتعليم"
-          description="ما الذي تتعلمه الآن، ماذا أنجزت، وما الذي يستحق أن يأتي بعده."
+          eyebrow="Growth OS"
+          title="التطوير"
+          description="تعليمك، مهاراتك ومسارك المهني في مكان واحد."
+          meta={
+            <span>
+              {
+                activeLearning.length
+              }{" "}
+              تعلم جاري •{" "}
+              {
+                activeCareer.length
+              }{" "}
+              عنصر مهني حالي
+            </span>
+          }
           action={
             <Link
-              href="/assistant"
+              href="/career"
               className="button button--secondary"
             >
-              ابحث عن فرصة تعلم
+              تفاصيل المسار المهني
             </Link>
           }
         />
@@ -1076,89 +2144,92 @@ export default async function LearningPage() {
 
         <section
           className="page-section"
-          aria-labelledby="learning-summary-title"
+          aria-labelledby="growth-summary-title"
         >
           <div className="section-header">
             <div className="section-header__content">
               <h2
-                id="learning-summary-title"
+                id="growth-summary-title"
                 className="section-title"
               >
-                وضع التعلم
+                وضع التطوير
               </h2>
 
+
               <p className="section-description">
-                ركز على ما يجري الآن قبل إضافة شيء جديد.
+                أهم ما تحتاج تعرفه عن تطورك الآن.
               </p>
             </div>
           </div>
 
 
           <div className="stats-grid">
-
             <StatCard
-              label="جاري الآن"
+              label="تعلم جاري"
               value={
                 String(
-                  activeItems.length,
+                  activeLearning.length,
                 )
               }
               tone={
-                activeItems.length >
+                activeLearning.length >
                 0
                   ? "positive"
                   : "neutral"
               }
+              helper="دورات، شهادات أو دراسة نشطة."
               icon="▶"
             />
 
 
             <StatCard
-              label="مخطط"
+              label="تعلم مخطط"
               value={
                 String(
-                  plannedItems.length,
+                  plannedLearning.length,
                 )
               }
               tone="neutral"
+              helper="العناصر القادمة بعد الحالي."
               icon="+"
             />
 
 
             <StatCard
-              label="مكتمل"
+              label="مسار مهني حالي"
               value={
                 String(
-                  completedItems.length,
+                  activeCareer.length,
                 )
               }
-              tone="positive"
-              icon="✓"
+              tone={
+                activeCareer.length >
+                0
+                  ? "positive"
+                  : "neutral"
+              }
+              helper="أدوار، أهداف، مهارات وفجوات تطوير."
+              icon="◇"
             />
 
 
             <StatCard
-              label="متوقف مؤقتًا"
+              label="إنجازات"
               value={
                 String(
-                  pausedItems.length,
+                  achievements.length,
                 )
               }
-              tone={
-                pausedItems.length >
-                0
-                  ? "warning"
-                  : "neutral"
-              }
-              icon="Ⅱ"
+              tone="positive"
+              helper={`${completedLearning.length} عنصر تعلم مكتمل`}
+              icon="✓"
             />
-
           </div>
         </section>
 
 
         {/* =================================================
-         * ACTIVE NOW
+         * ACTIVE LEARNING
          * =============================================== */}
 
         <section
@@ -1171,30 +2242,32 @@ export default async function LearningPage() {
                 id="active-learning-title"
                 className="section-title"
               >
-                ماذا تدرس الآن؟
+                أتعلم الآن
               </h2>
 
+
               <p className="section-description">
-                العناصر التي تحتاج وقتك واهتمامك حاليًا.
+                ركز على الجاري قبل إضافة التزامات تعليمية جديدة.
               </p>
             </div>
           </div>
 
 
-          {activeItems.length > 0 ? (
+          {activeLearning.length >
+          0 ? (
             <div className="grid grid--2">
-              {activeItems.map(
+              {activeLearning.map(
                 (
                   item,
                   index,
                 ) => (
-                  <ActiveLearningCard
+                  <LearningCard
                     key={
                       readString(
                         item,
                         "id",
                       ) ??
-                      `active-learning-${index}`
+                      `learning-${index}`
                     }
                     item={
                       item
@@ -1205,354 +2278,84 @@ export default async function LearningPage() {
             </div>
           ) : (
             <EmptyState
+              compact
               icon="▶"
-              title="لا يوجد تعلم نشط حاليًا"
-              description="عندما تبدأ دورة أو شهادة أو برنامجًا تعليميًا، سيظهر هنا مع التقدم والخطوة التالية."
+              title="لا يوجد تعلم نشط"
+              description="استخدم زر + لإضافة الدورة أو الشهادة أو البرنامج الذي تعمل عليه الآن."
             />
           )}
         </section>
 
 
         {/* =================================================
-         * LEARNING PIPELINE
+         * CAREER FOCUS
          * =============================================== */}
 
         <section
           className="page-section"
-          aria-labelledby="learning-plan-title"
+          aria-labelledby="career-focus-title"
         >
           <div className="section-header">
             <div className="section-header__content">
               <h2
-                id="learning-plan-title"
+                id="career-focus-title"
                 className="section-title"
               >
-                الخطة التعليمية
+                المسار المهني
               </h2>
 
-              <p className="section-description">
-                لا تبدأ كل شيء معًا؛ اعرف ما هو الحالي وما هو التالي.
-              </p>
-            </div>
-          </div>
-
-
-          <div className="grid grid--2">
-
-            <article className="card">
-              <h3 className="card__title">
-                التالي
-              </h3>
-
-              <p className="card__description">
-                أول العناصر المخططة التي تنتظر دورها.
-              </p>
-
-
-              <div
-                className="stack stack--small"
-                style={{
-                  marginTop:
-                    "16px",
-                }}
-              >
-                {plannedItems.length >
-                0 ? (
-                  plannedItems
-                    .slice(
-                      0,
-                      5,
-                    )
-                    .map(
-                      (
-                        item,
-                        index,
-                      ) => (
-                        <div
-                          key={
-                            readString(
-                              item,
-                              "id",
-                            ) ??
-                            `planned-learning-${index}`
-                          }
-                          className="space-between"
-                        >
-                          <div>
-                            <strong className="text-small">
-                              {
-                                getTitle(
-                                  item,
-                                )
-                              }
-                            </strong>
-
-                            <div
-                              className="text-subtle text-small"
-                              style={{
-                                marginTop:
-                                  "2px",
-                              }}
-                            >
-                              {
-                                getTypeLabel(
-                                  item,
-                                )
-                              }
-                            </div>
-                          </div>
-
-                          <span
-                            className={
-                              getTypeBadgeClass(
-                                item,
-                              )
-                            }
-                          >
-                            مخطط
-                          </span>
-                        </div>
-                      ),
-                    )
-                ) : (
-                  <span className="text-muted text-small">
-                    لا توجد عناصر مخططة حاليًا.
-                  </span>
-                )}
-              </div>
-            </article>
-
-
-            <article className="card">
-              <h3 className="card__title">
-                تركيبة التعلم
-              </h3>
-
-              <p className="card__description">
-                صورة سريعة عن نوع التطوير المسجل.
-              </p>
-
-
-              <div
-                className="stack stack--small"
-                style={{
-                  marginTop:
-                    "16px",
-                }}
-              >
-                <div className="space-between">
-                  <span className="text-muted text-small">
-                    شهادات
-                  </span>
-
-                  <strong>
-                    {
-                      certificationCount
-                    }
-                  </strong>
-                </div>
-
-                <div className="space-between">
-                  <span className="text-muted text-small">
-                    تعليم أكاديمي
-                  </span>
-
-                  <strong>
-                    {
-                      academicCount
-                    }
-                  </strong>
-                </div>
-
-                <div className="space-between">
-                  <span className="text-muted text-small">
-                    إجمالي العناصر
-                  </span>
-
-                  <strong>
-                    {
-                      learningItems.length
-                    }
-                  </strong>
-                </div>
-
-                <div className="space-between">
-                  <span className="text-muted text-small">
-                    مكتمل
-                  </span>
-
-                  <strong className="text-positive">
-                    {
-                      completedItems.length
-                    }
-                  </strong>
-                </div>
-              </div>
-            </article>
-
-          </div>
-        </section>
-
-
-        {/* =================================================
-         * COMPLETED
-         * =============================================== */}
-
-        <section
-          className="page-section"
-          aria-labelledby="completed-learning-title"
-        >
-          <div className="section-header">
-            <div className="section-header__content">
-              <h2
-                id="completed-learning-title"
-                className="section-title"
-              >
-                الإنجازات التعليمية
-              </h2>
 
               <p className="section-description">
-                ما أنجزته فعلًا ويستحق البقاء في سجلك المهني.
+                وضعك الحالي، هدفك المهني والمهارات التي تحتاج تطويرها.
               </p>
             </div>
+
+
+            <Link
+              href="/career"
+              className="button button--secondary button--small"
+            >
+              فتح التفاصيل
+            </Link>
           </div>
 
 
-          {completedItems.length > 0 ? (
+          {currentCareerFocus.length >
+          0 ? (
             <div className="grid grid--2">
-              {completedItems
-                .slice(
-                  0,
-                  6,
-                )
-                .map(
-                  (
-                    item,
-                    index,
-                  ) => (
-                    <article
-                      key={
-                        readString(
-                          item,
-                          "id",
-                        ) ??
-                        `completed-learning-${index}`
-                      }
-                      className="card"
-                    >
-                      <div className="inline">
-                        <span className="badge badge--positive">
-                          مكتمل
-                        </span>
-
-                        <span
-                          className={
-                            getTypeBadgeClass(
-                              item,
-                            )
-                          }
-                        >
-                          {
-                            getTypeLabel(
-                              item,
-                            )
-                          }
-                        </span>
-                      </div>
-
-
-                      <h3
-                        className="card__title"
-                        style={{
-                          marginTop:
-                            "12px",
-                        }}
-                      >
-                        {
-                          getTitle(
-                            item,
-                          )
-                        }
-                      </h3>
-
-
-                      {getProvider(
+              {currentCareerFocus.map(
+                (
+                  item,
+                  index,
+                ) => (
+                  <CareerCard
+                    key={
+                      readString(
                         item,
-                      ) ? (
-                        <p className="card__description">
-                          {
-                            getProvider(
-                              item,
-                            )
-                          }
-                        </p>
-                      ) : null}
-
-
-                      {getRelevantDate(
-                        item,
-                      ) ? (
-                        <div
-                          className="text-subtle text-small"
-                          style={{
-                            marginTop:
-                              "14px",
-                          }}
-                        >
-                          {
-                            formatDate(
-                              getRelevantDate(
-                                item,
-                              )!,
-                            )
-                          }
-                        </div>
-                      ) : null}
-                    </article>
-                  ),
-                )}
+                        "id",
+                      ) ??
+                      `career-${index}`
+                    }
+                    item={
+                      item
+                    }
+                  />
+                ),
+              )}
             </div>
           ) : (
             <EmptyState
               compact
-              icon="✓"
-              title="لا توجد إنجازات تعليمية مسجلة بعد"
-              description="عند إكمال دورة أو شهادة أو برنامج، سيظهر هنا ضمن سجلك التعليمي."
+              icon="◇"
+              title="لا توجد أولويات مهنية حالية"
+              description="أضف دورك الحالي، هدفك المهني أو مهارة تريد تطويرها من زر +."
             />
           )}
         </section>
 
 
         {/* =================================================
-         * OPPORTUNITY SEARCH
-         * =============================================== */}
-
-        <section className="page-section">
-          <article className="card">
-            <div className="space-between">
-              <div>
-                <h2 className="card__title">
-                  قبل إضافة دورة جديدة
-                </h2>
-
-                <p className="card__description">
-                  خل LIFE OS يقارنها بمسارك المهني، أهدافك، وما تدرسه حاليًا قبل ما تضيف التزام جديد.
-                </p>
-              </div>
-
-              <Link
-                href="/assistant"
-                className="button button--primary button--small"
-              >
-                قيّم فرصة جديدة
-              </Link>
-            </div>
-          </article>
-        </section>
-
-
-        {/* =================================================
-         * ALL LEARNING ITEMS
+         * ALL LEARNING
          * =============================================== */}
 
         <section
@@ -1568,34 +2371,116 @@ export default async function LearningPage() {
                 كل التعلم
               </h2>
 
+
               <p className="section-description">
-                السجل الكامل للدورات والشهادات والبرامج والتعليم الأكاديمي.
+                الجاري والمخطط والمكتمل في قائمة واحدة.
               </p>
             </div>
           </div>
 
 
-          <DataTable
-            rows={
-              learningItems
-            }
-            columns={
-              columns
-            }
-            getRowKey={
-              (
-                item,
-                index,
-              ) =>
-                readString(
+          {learningItems.length >
+          0 ? (
+            <DataTable
+              rows={
+                learningItems
+              }
+              columns={
+                learningColumns
+              }
+              getRowKey={
+                (
                   item,
-                  "id",
-                ) ??
-                `learning-${index}`
-            }
-            caption="سجل التعلم والتعليم في LIFE OS"
-            emptyMessage="لا توجد عناصر تعليمية مسجلة حاليًا."
-          />
+                  index,
+                ) =>
+                  readString(
+                    item,
+                    "id",
+                  ) ??
+                  `learning-row-${index}`
+              }
+              caption="عناصر التعلم والتطوير"
+            />
+          ) : (
+            <EmptyState
+              compact
+              icon="◉"
+              title="لا توجد عناصر تعلم"
+              description="الدورات، الشهادات والبرامج التعليمية بتظهر هنا."
+            />
+          )}
+        </section>
+
+
+        {/* =================================================
+         * ALL CAREER
+         * =============================================== */}
+
+        <section
+          className="page-section"
+          aria-labelledby="all-career-title"
+        >
+          <div className="section-header">
+            <div className="section-header__content">
+              <h2
+                id="all-career-title"
+                className="section-title"
+              >
+                كل المسار المهني
+              </h2>
+
+
+              <p className="section-description">
+                الأدوار، الأهداف المهنية، المهارات والإنجازات.
+              </p>
+            </div>
+          </div>
+
+
+          {careerItems.length >
+          0 ? (
+            <DataTable
+              rows={
+                careerItems
+              }
+              columns={
+                careerColumns
+              }
+              getRowKey={
+                (
+                  item,
+                  index,
+                ) =>
+                  readString(
+                    item,
+                    "id",
+                  ) ??
+                  `career-row-${index}`
+              }
+              caption="عناصر المسار المهني"
+            />
+          ) : (
+            <EmptyState
+              compact
+              icon="◇"
+              title="لا توجد بيانات مهنية"
+              description="أضف دورك، هدفك المهني، مهارة أو إنجاز من زر +."
+            />
+          )}
+        </section>
+
+
+        {/* =================================================
+         * PRINCIPLE
+         * =============================================== */}
+
+        <section className="page-section">
+          <div
+            className="alert"
+            role="note"
+          >
+            LIFE OS يجمع التعليم والمسار المهني تحت «التطوير»، لكن يحتفظ بكل نوع منفصل تحت النظام حتى تكون البيانات دقيقة.
+          </div>
         </section>
 
       </div>
@@ -1605,125 +2490,99 @@ export default async function LearningPage() {
 
 
 /* =========================================================
- * 15. LEARNING PRINCIPLE
+ * 28. FINAL GROWTH CONTRACT
  * ======================================================= */
 
 /**
- * LIFE OS does not optimize for:
+ * /learning is the primary V2 Growth page.
  *
- * more certificates
  *
- * It optimizes for:
+ * It combines:
  *
- * useful learning
- *      ↓
- * stronger capability
- *      ↓
- * progress toward real goals
+ * Learning
+ * +
+ * Career
  */
 
 
 /* =========================================================
- * 16. CURRENT-FIRST RULE
+ * 29. LEARNING CONTRACT
  * ======================================================= */
 
 /**
- * Active learning appears before future learning.
- *
- * The interface should encourage finishing useful work before
- * continuously adding new courses and certifications.
- */
-
-
-/* =========================================================
- * 17. CAREER ALIGNMENT RULE
- * ======================================================= */
-
-/**
- * Learning and Career are separate domains but are meant to
- * reinforce each other.
- *
- * Future AI analysis may compare:
- *
- * career target
- *      ↓
- * skills required
- *      ↓
- * current learning
- *      ↓
- * remaining gaps
- *
- * without altering records autonomously.
- */
-
-
-/* =========================================================
- * 18. OPPORTUNITY RULE
- * ======================================================= */
-
-/**
- * Opportunity Search may research:
+ * Learning includes:
  *
  * courses
  * certifications
- * education
- * professional programs
- *
- * It may:
- *
- * search ✅
- * compare ✅
- * score ✅
- * recommend ✅
- *
- * It may not automatically enroll or purchase anything.
+ * learning paths
+ * master's
+ * university programs
+ * other structured learning
  */
 
 
 /* =========================================================
- * 19. AI RULE
+ * 30. CAREER CONTRACT
  * ======================================================= */
 
 /**
- * Simply opening Learning does not send educational records
- * to OpenAI.
+ * Career includes:
  *
- * AI receives minimized learning context only when an
- * explicit AI workflow requires it.
+ * current role
+ * target role
+ * skill
+ * achievement
+ * milestone
+ * development gap
  */
 
 
 /* =========================================================
- * 20. SECURITY RULE
+ * 31. DETAILED CAREER PAGE
  * ======================================================= */
 
 /**
- * Server request
- *      ↓
- * requireAAL2Identity()
- *      ↓
- * listLearningItems()
- *      ↓
- * authenticated ownership
- *      ↓
- * PostgreSQL RLS
+ * /career remains available as a secondary detailed page.
  *
- * No user_id is accepted from browser input.
+ *
+ * It is not a seventh top-level navigation destination.
  */
 
 
 /* =========================================================
- * 21. FINAL LEARNING RULE
+ * 32. DATA TRUTH
  * ======================================================= */
 
 /**
- * Learning page should answer:
+ * LIFE OS does not silently modify:
  *
- * What am I studying now?
- * How far have I progressed?
- * What comes next?
- * What have I completed?
- * Is my learning focused or scattered?
+ * course progress
+ * career status
+ * career goals
+ * skill ratings
+ * completion dates
+ *
+ *
+ * All displayed state comes from stored records.
+ */
+
+
+/* =========================================================
+ * 33. FINAL LIFE OS V2 RULE
+ * ======================================================= */
+
+/**
+ * User thinks:
+ *
+ * "تطوري"
+ *
+ *
+ * LIFE OS handles the internal distinction between:
+ *
+ * learning
+ * and
+ * career
+ *
  *
  * Simple outside.
  * Intelligent underneath.
