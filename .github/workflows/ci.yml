@@ -35,10 +35,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "24.x"
+          cache: npm
+          cache-dependency-path: life-os/package-lock.json
 
       - name: Install dependencies
         working-directory: life-os
-        run: npm install --no-audit --no-fund
+        run: npm ci --no-audit --no-fund
 
       - name: Typecheck
         working-directory: life-os
