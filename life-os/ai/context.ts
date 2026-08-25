@@ -424,11 +424,6 @@ function containsAnyKeyword(
  * 13. DETECT REQUIRED SCOPES
  * ======================================================= */
 
-/**
- * Scope selection is deterministic.
- *
- * AI does not decide which private LIFE OS datasets it gets.
- */
 export function detectContextScopes(
   message:
     string,
@@ -439,9 +434,6 @@ export function detectContextScopes(
     >();
 
 
-  /*
-   * Minimal Home snapshot is always available.
-   */
   scopes.add(
     "dashboard",
   );
@@ -631,10 +623,6 @@ function isMemoryRelevantToScopes(
   scopes:
     AIContextScope[],
 ): boolean {
-  /*
-   * Stable preferences and constraints may affect many
-   * recommendations.
-   */
   if (
     item.category ===
       "preference" ||
@@ -714,15 +702,6 @@ function isMemoryRelevantToScopes(
   }
 
 
-  /*
-   * Travel currently has its own structured Travel OS tables.
-   *
-   * We intentionally do not guess a MemoryItem category here
-   * if the frozen MemoryItem enum does not define travel.
-   *
-   * General preference / constraint memory above can still
-   * influence travel advice safely.
-   */
   return false;
 }
 
@@ -900,18 +879,6 @@ function buildTravelSummaryContext(
  * 22. FULL TRAVEL CONTEXT
  * ======================================================= */
 
-/**
- * Still deliberately minimal.
- *
- * We do not send:
- *
- * document file names
- * Storage paths
- * signed URLs
- * PDF binaries
- * document IDs
- * trip IDs
- */
 function buildTravelContext(
   travel:
     TravelSnapshot,
@@ -1226,7 +1193,7 @@ function buildFinanceContext(
               item.amount,
 
             currency:
-              item.currency,
+              finance.currency,
 
             frequency:
               item.frequency,
@@ -1266,7 +1233,7 @@ function buildFinanceContext(
               item.amount,
 
             currency:
-              item.currency,
+              finance.currency,
 
             frequency:
               item.frequency,
@@ -1945,19 +1912,6 @@ export async function buildChiefOfStaffContext(
  * 33. DECISION CONTEXT
  * ======================================================= */
 
-/**
- * Decision Simulator gets a broader but still controlled
- * snapshot because a decision may affect several life areas.
- *
- *
- * It still receives no:
- *
- * credentials
- * document binaries
- * Storage paths
- * audit history
- * public/private file URLs
- */
 export async function buildDecisionContext():
 Promise<JsonObject> {
   try {
@@ -2067,24 +2021,6 @@ Promise<JsonObject> {
  * 34. OPPORTUNITY CONTEXT
  * ======================================================= */
 
-/**
- * Opportunity Search primarily needs:
- *
- * - current goals
- * - learning direction
- * - career direction
- * - relevant preferences / constraints
- *
- *
- * It intentionally does not receive:
- *
- * detailed financial information
- * investment positions
- * Travel OS
- *
- *
- * unless that feature is explicitly expanded later.
- */
 export async function buildOpportunityContext():
 Promise<JsonObject> {
   try {
