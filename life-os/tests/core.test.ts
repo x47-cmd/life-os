@@ -535,12 +535,12 @@ describe(
   "LIFE OS V2 authentication contract",
   () => {
     it(
-      "requires AAL2 for private authenticated use",
+      "requires AAL1 for private authenticated use",
       () => {
         expect(
           REQUIRED_AUTHENTICATION_LEVEL,
         ).toBe(
-          "aal2",
+          "aal1",
         );
       },
     );
@@ -3387,3 +3387,4 @@ describe(
  * Measurable by default.
  * Private by default.
  */
+
